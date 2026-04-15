@@ -748,18 +748,24 @@ namespace SPUtil.Services
                 {
                     // Маппинг ID списка
                     var targetLookupList = ctx.Web.Lists.GetByTitle(field.LookupListName);
-                    ctx.Load(targetLookupList, l => l.Id);
+                    ctx.Load(targetLookupList, l => l.Id, l => l.Title);
                     ctx.ExecuteQuery();
                     field.LookupListId = targetLookupList.Id.ToString();
                     field.LookupWebId = string.Empty;
 
                     string xml = _cloneService.GenerateFieldXml(field);
+                    System.Diagnostics.Debug.WriteLine($"XML Lookup {xml} ");
                     var createdField = newList.Fields.AddFieldAsXml(xml, true, AddFieldOptions.AddFieldInternalNameHint);
                     ctx.Load(createdField, f => f.Id);
                     ctx.ExecuteQuery();
 
+
                     // Запоминаем ID созданного поля (используем ID источника как ключ)
-                    if (!string.IsNullOrEmpty(field.Id)) fieldGuidMap[field.Id] = createdField.Id.ToString();
+                    // ЗАПОМИНАЕМ: Ключ = "ИмяСписка:ИмяПоля"
+                    string key = $"{field.LookupListName}:{field.Name}";
+                    fieldGuidMap[key] = createdField.Id.ToString();
+
+                    System.Diagnostics.Debug.WriteLine($"[MAP] Сохранили ID для {key} -> {createdField.Id}");
                 }
 
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Lookup Error {field.Name}: {ex.Message}"); }
@@ -770,23 +776,161 @@ namespace SPUtil.Services
             {
                 if (existingFields.Contains(field.Name, StringComparer.OrdinalIgnoreCase)) continue;
 
-                try
-                {
-                    // Подменяем FieldRef на новый ID родителя с этого сайта
-                    if (fieldGuidMap.TryGetValue(field.PrimaryFieldId, out string newParentId))
-                    {
-                        field.PrimaryFieldId = newParentId;
-                        string xml = _cloneService.GenerateFieldXml(field);
-                        newList.Fields.AddFieldAsXml(xml, true, AddFieldOptions.AddFieldInternalNameHint);
-                    }
-                }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Dep-Lookup Error {field.Name}: {ex.Message}"); }
+                string decodedName = field.Name.Replace("_x003a_", ":");
+
+                string parentFieldName = string.Empty;
+                string showField = string.Empty;
+
+                
+                //string lookupShowField = "Title"; // по умолчанию
+
+				if (decodedName.Contains(':'))
+				{
+                    var parts = decodedName.Split(':');
+                    parentFieldName = parts[0]; // "Country"
+                    showField = parts[1];       // "Title"
+
+
+
+                    // Теперь формируем ключ для поиска в словаре, который наполнили в Этапе А
+                    string parentKey = $"{field.LookupListName}:{parentFieldName}";
+
+					if (fieldGuidMap.TryGetValue(parentKey, out string newParentId))
+					{
+						try
+						{
+							// Нашли родителя по составному ключу!
+							field.FieldRef = newParentId;
+
+							// Получаем ID списка для атрибута List
+							var targetLookupList = ctx.Web.Lists.GetByTitle(field.LookupListName);
+							ctx.Load(targetLookupList, l => l.Id);
+							ctx.ExecuteQuery();
+							field.LookupListId = targetLookupList.Id.ToString();
+
+							string xml = _cloneService.GenerateFieldXml(field);
+                            System.Diagnostics.Debug.WriteLine($"XML Dependency Lookup {xml} ");
+
+                            newList.Fields.AddFieldAsXml(xml, true, AddFieldOptions.AddFieldInternalNameHint);
+						}
+						catch (Exception ex)
+						{
+							System.Diagnostics.Debug.WriteLine($"Dep-Lookup Error {field.Name}: {ex.Message}");
+						}
+					}
+				}
             }
 
             newList.Update();
             ctx.ExecuteQuery();
         }
-		public async Task<Guid> GetListIdByTitleAsync(string siteUrl, string listTitle)
+        private async Task CreateListViewsAsync(ClientContext ctx, Microsoft.SharePoint.Client.List newList, List<SPViewData> sourceViews)
+        {
+            foreach (var viewData in sourceViews)
+            {
+                try
+                {
+                    Microsoft.SharePoint.Client.View targetView;
+                    // Проверяем, существует ли уже вьюха
+                    var existingViews = ctx.LoadQuery(newList.Views.Where(v => v.Title == viewData.Title));
+                    ctx.ExecuteQuery();
+                    var existingView = existingViews.FirstOrDefault();
+
+                    if (existingView != null)
+                    {
+                        targetView = existingView;
+                    }
+                    else
+                    {
+                        ViewCreationInformation vInfo = new ViewCreationInformation
+                        {
+                            Title = viewData.Title,
+                            PersonalView = false
+                        };
+                        targetView = newList.Views.Add(vInfo);
+                    }
+
+                    targetView.ViewQuery = viewData.ViewQuery;
+                    targetView.DefaultView = viewData.DefaultView;
+
+                    if (!string.IsNullOrEmpty(viewData.Aggregations))
+                    {
+                        targetView.Aggregations = viewData.Aggregations;
+                    }
+
+                    // Настройка полей во вьюхе
+                    ctx.Load(targetView.ViewFields);
+                    ctx.ExecuteQuery();
+
+                    // Очищаем старые поля (кроме первого, чтобы не упало)
+                    string firstField = viewData.ViewFields?.FirstOrDefault() ?? "LinkTitle";
+                    var currentFields = targetView.ViewFields.ToArray();
+                    foreach (var fName in currentFields)
+                    {
+                        if (!fName.Equals(firstField, StringComparison.OrdinalIgnoreCase))
+                        {
+                            targetView.ViewFields.Remove(fName);
+                        }
+                    }
+                    targetView.Update();
+
+                    // Добавляем нужные поля
+                    if (viewData.ViewFields != null && viewData.ViewFields.Length > 0)
+                    {
+                        foreach (var fName in viewData.ViewFields)
+                        {
+                            if (fName.Equals(firstField, StringComparison.OrdinalIgnoreCase)) continue;
+                            targetView.ViewFields.Add(fName);
+                        }
+                    }
+
+                    targetView.Update();
+                    ctx.ExecuteQuery();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] Error creating view '{viewData.Title}': {ex.Message}");
+                }
+            }
+        }
+        private async Task CreateCalculatedFieldsAsync(ClientContext ctx, Microsoft.SharePoint.Client.List newList, List<FieldInfo> calculatedFields)
+        {
+            int maxAttempts = 5;
+            int attempt = 0;
+
+            while (calculatedFields.Count > 0 && attempt < maxAttempts)
+            {
+                var succeeded = new List<FieldInfo>();
+                foreach (var calcField in calculatedFields)
+                {
+                    try
+                    {
+                        // Генерируем XML для вычисляемого поля
+                        string calcXML = _cloneService.GenerateFieldXml(calcField);
+
+                        System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] Attempting Calc Field: {calcField.DisplayName}");
+
+                        newList.Fields.AddFieldAsXml(calcXML, true, AddFieldOptions.DefaultValue);
+                        newList.Update();
+                        ctx.ExecuteQuery();
+
+                        succeeded.Add(calcField);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] Attempt {attempt} failed for {calcField.DisplayName}: {ex.Message}");
+                    }
+                }
+
+                // Удаляем те, что удалось создать
+                foreach (var item in succeeded)
+                {
+                    calculatedFields.Remove(item);
+                }
+                attempt++;
+            }
+        }
+        public async Task<Guid> GetListIdByTitleAsync(string siteUrl, string listTitle)
 		{
 			using (var ctx = await GetContextAsync(siteUrl))
 			{

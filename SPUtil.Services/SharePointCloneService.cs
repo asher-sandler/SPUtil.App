@@ -93,7 +93,27 @@ namespace SPUtil.Services
 						string formattedListId = field.LookupListId.StartsWith("{") ? field.LookupListId : $"{{{field.LookupListId}}}";
 						fieldXml.Add(new XAttribute("List", formattedListId));
 					}
-					if (!string.IsNullOrEmpty(field.LookupFieldName))
+                    // ДОБАВЛЯЕМ ЭТО: FieldRef для зависимых полей
+                    if (field.IsDependentLookup && !string.IsNullOrEmpty(field.PrimaryFieldId))
+                    {
+                        
+                        
+						
+						if (!string.IsNullOrEmpty(field.FieldRef))
+						{
+							string fRef = field.FieldRef.StartsWith("{") ? field.FieldRef : $"{{{field.FieldRef}}}";
+                            fieldXml.Add(new XAttribute("FieldRef", fRef));
+						}
+						else
+						{
+                            string formattedFieldRef = field.PrimaryFieldId.StartsWith("{") ? field.PrimaryFieldId : $"{{{field.PrimaryFieldId}}}";
+                            fieldXml.Add(new XAttribute("FieldRef", formattedFieldRef));
+                        }
+                        fieldXml.Add(new XAttribute("ReadOnly", "TRUE"));
+                    }
+
+                   
+                    if (!string.IsNullOrEmpty(field.LookupFieldName))
 					{
 						fieldXml.Add(new XAttribute("ShowField", field.LookupFieldName));
 					}

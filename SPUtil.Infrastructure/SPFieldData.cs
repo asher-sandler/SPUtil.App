@@ -56,8 +56,9 @@ namespace SPUtil.Infrastructure
 		public string LookupListName { get; set; } = string.Empty;
 		public string LookupWebId { get; set; } = string.Empty;
 		public string LookupFieldName { get; set; } = string.Empty;
-        public string PrimaryFieldId { get; set; } = string.Empty;
-        public bool IsDependentLookup { get; set; } = false;
+		public string PrimaryFieldId { get; set; } = string.Empty; // Это ID родителя со старого сайта
+		public string FieldRef { get; set; } = string.Empty;       // А это будет новый ID для XML
+		public bool IsDependentLookup { get; set; } = false;
 
         // Для Choice
         public string Format { get; set; } = string.Empty;
