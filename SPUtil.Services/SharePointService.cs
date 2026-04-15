@@ -761,6 +761,7 @@ namespace SPUtil.Services
                     // Запоминаем ID созданного поля (используем ID источника как ключ)
                     if (!string.IsNullOrEmpty(field.Id)) fieldGuidMap[field.Id] = createdField.Id.ToString();
                 }
+
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Lookup Error {field.Name}: {ex.Message}"); }
             }
 
