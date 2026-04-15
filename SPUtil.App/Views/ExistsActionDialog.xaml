@@ -1,0 +1,52 @@
+﻿<Window x:Class="SPUtil.Views.ExistsActionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="List Conflict" 
+        Height="280" Width="420" 
+        WindowStartupLocation="CenterOwner" 
+        ResizeMode="NoResize" 
+        ShowInTaskbar="False"
+        Background="#F0F0F0">
+
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="20,20,20,10">
+            <TextBlock Text="Target list already exists:" 
+                       FontSize="14" FontWeight="SemiBold" Foreground="#333"/>
+            
+            <TextBlock x:Name="TxtListName" 
+                       Text="ListName" 
+                       FontSize="14" FontWeight="Bold" Foreground="#0066CC" 
+                       Margin="0,2,0,15" TextTrimming="CharacterEllipsis"/>
+            
+            <TextBlock Text="What would you like to do?" 
+                       Margin="0,0,0,12" Foreground="#555"/>
+
+            <UniformGrid Columns="2" Rows="2">
+                <Button Content="Overwrite (Clear)" Margin="4" Click="Action_Click" Tag="Overwrite" />
+                <Button Content="Append (Keep old)" Margin="4" Click="Action_Click" Tag="Append" />
+                <Button Content="Rename Target..." Margin="4" Click="Action_Click" Tag="Rename" />
+                <Button Content="Skip This List" Margin="4" Click="Action_Click" Tag="Skip" />
+            </UniformGrid>
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="#E1E1E1" BorderBrush="#CCCCCC" BorderThickness="0,1,0,0" Padding="15,10">
+            <Button Content="Cancel Operation" 
+                    Width="120" HorizontalAlignment="Right"
+                    Click="Action_Click" Tag="Cancel" />
+        </Border>
+    </Grid>
+</Window>

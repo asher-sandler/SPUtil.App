@@ -1,0 +1,269 @@
+﻿<Window x:Class="SPUtil.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:prism="http://prismlibrary.com/"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        xmlns:viewmodels="clr-namespace:SPUtil.App.ViewModels"
+        xmlns:views="clr-namespace:SPUtil.App.Views"
+        prism:ViewModelLocator.AutoWireViewModel="True"
+        Title="SPUtil - SharePoint Manager (Dual Pane)" 
+		Height="800" Width="1500"
+		MinHeight="600" MinWidth="1100"
+		Closing="Window_Closing">
+    
+    
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type viewmodels:List100ViewModel}"><views:List100View /></DataTemplate>
+        <DataTemplate DataType="{x:Type viewmodels:Library101ViewModel}"><views:Library101View /></DataTemplate>	
+        <DataTemplate DataType="{x:Type viewmodels:PagesViewModel}"><views:PagesView /></DataTemplate>	
+        <DataTemplate DataType="{x:Type viewmodels:InfoViewModel}"><views:InfoView /></DataTemplate>
+		<BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="*"/>
+		</Grid.RowDefinitions>
+
+        <StatusBar Grid.Row="0" Background="#F3F3F3" BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" Height="30">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+							<ColumnDefinition Width="Auto" /> 
+							<ColumnDefinition Width="250" />  
+							<ColumnDefinition Width="Auto" /> 
+							<ColumnDefinition Width="*" />    
+							<ColumnDefinition Width="Auto" /> 
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+
+		   <StatusBarItem Grid.Column="0">
+				<TextBlock Text="Status: " FontWeight="Bold" Foreground="#555" Margin="5,0,0,0"/>
+			</StatusBarItem>
+			
+			<StatusBarItem Grid.Column="1">
+				<TextBlock Text="{Binding ConnectionStatus}" Foreground="#2B579A"/> 
+			</StatusBarItem>
+
+			<StatusBarItem Grid.Column="2">
+				<StackPanel Orientation="Horizontal">
+					<TextBlock Text="User: " FontWeight="Bold" Foreground="#555"/>
+					<TextBlock Text="{Binding CurrentUserName}"/>
+				</StackPanel>
+			</StatusBarItem>
+
+			<StatusBarItem Grid.Column="4">
+				<Image Source="https://new.huji.ac.il/profiles/openscholar/themes/os_bootstrap/images/logo.png" 
+					   Height="20" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+			</StatusBarItem>
+
+        </StatusBar>
+
+        <Menu Grid.Row="1" Background="White" BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" Padding="2">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Connect As..." 
+                  Command="{Binding ConnectAsCommand}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE77B;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+
+                <Separator />
+                <MenuItem Header="_Exit" Command="{Binding ExitCommand}" />
+            </MenuItem>
+        </Menu>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="300" />
+            </Grid.ColumnDefinitions>
+
+            <GroupBox Header="Source" Grid.Column="0" Margin="5">
+				<Grid>
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="0.25*"/>
+						<ColumnDefinition Width="0.75*"/>
+					</Grid.ColumnDefinitions>
+					<StackPanel Grid.Column="0" Background="#F0F0F0" Margin="0,0,5,0"
+					Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+					
+						<StackPanel.Resources>
+							<Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+								<Setter Property="Margin" Value="2"/>
+								<Setter Property="HorizontalAlignment" Value="Stretch"/>
+								<Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+							</Style>
+						</StackPanel.Resources>
+						<Border Height="100" Background="Transparent"/>
+
+						<Button Command="{Binding Tag.CopyEmptyListCommand, RelativeSource={RelativeSource AncestorType=StackPanel}}"
+								ToolTipService.ToolTip="Copy List (No Data)">
+							<TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
+							<!--TextBlock Text="&#xE7BC;" Style="{StaticResource IconText}" Foreground="#2B579A"/-->
+						</Button>
+
+						<Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,10"/>
+
+
+						<Button Command="{Binding Tag.CopyListWithDataCommand, RelativeSource={RelativeSource AncestorType=StackPanel}}"
+								ToolTipService.ToolTip="Copy List (With Data)">
+							<TextBlock Text="&#xE81E;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
+							<!--TextBlock Text="&#xE7BC;" Style="{StaticResource IconText}" Foreground="#2B579A"/-->
+						</Button>
+
+						<Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,10"/>
+
+						<Button Command="{Binding Tag.DeleteListCommand, RelativeSource={RelativeSource AncestorType=StackPanel}}" 
+								ToolTipService.ToolTip="Delete List">
+							<TextBlock Text="&#xE74D;" Style="{StaticResource IconText}" Foreground="#D13438"/>
+						</Button>
+
+						<Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,10"/>
+
+						<Button Command="{Binding Tag.CompareListsCommand, RelativeSource={RelativeSource AncestorType=StackPanel}}" 
+								ToolTipService.ToolTip="Compare Lists">
+							<TextBlock Text="&#xE835;" Style="{StaticResource IconText}" Foreground="#484644"/>
+						</Button>
+
+						<Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,10"/>
+
+						<Button Command="{Binding Tag.ExportListCommand, RelativeSource={RelativeSource AncestorType=StackPanel}}" 
+								ToolTipService.ToolTip="Export data">
+							<TextBlock Text="&#xEDE2;" Style="{StaticResource IconText}" Foreground="#107C10"/>
+						</Button>
+
+						<Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,10"/>
+
+						<Button Command="{Binding Tag.ShowSchemaCommand , RelativeSource={RelativeSource AncestorType=StackPanel}}" 
+								ToolTipService.ToolTip="Show Schema">
+							<TextBlock Text="&#xE71D;" Style="{StaticResource IconText}" Foreground="#0078D4"/>
+						</Button>
+					</StackPanel>
+					
+					<DockPanel Grid.Column="1">
+						<StackPanel DockPanel.Dock="Top" Margin="5">
+							<Label Content="Source URL:"/>
+							<TextBox Text="{Binding LeftSiteUrl, UpdateSourceTrigger=PropertyChanged}" Height="25"/>
+							<StackPanel Orientation="Horizontal" Margin="0,3">
+                                
+                                <TextBlock Margin="0,3">
+									<TextBlock.Style>
+										<Style TargetType="TextBlock">
+											<Setter Property="Opacity" Value="0"/>
+											<Style.Triggers>
+												<DataTrigger Binding="{Binding IsLeftConnected}" Value="True">
+													<Setter Property="Opacity" Value="1"/>
+												</DataTrigger>
+											</Style.Triggers>
+										</Style>
+									</TextBlock.Style>
+									<Hyperlink NavigateUri="{Binding LeftSiteFullLink}" 
+											   RequestNavigate="Hyperlink_RequestNavigate"
+											   >
+										<TextBlock Text="Open Site" FontSize="10" Foreground="#2B579A"/>
+									</Hyperlink>
+                                </TextBlock>
+							</StackPanel>							
+							
+							<Button Content="Connect" Command="{Binding ConnectLeftCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
+						</StackPanel>
+						<TreeView ItemsSource="{Binding LeftSiteNodes}">
+							<TreeView.ItemContainerStyle>
+								<Style TargetType="TreeViewItem">
+									<!--Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" /-->
+									
+									<Setter Property="Tag" Value="{Binding RelativeSource={RelativeSource AncestorType=TreeView}}" />       <Setter Property="ContextMenu">
+										<Setter.Value>
+										 <ContextMenu>
+											<MenuItem Header="{Binding Title}" IsEnabled="False" FontWeight="Bold" Background="#F0F0F0"/>
+											<Separator />
+											
+											<MenuItem Header="Скопировать структуру (пустой)" 
+													  Command="{Binding PlacementTarget.Tag.DataContext.CopyEmptyListCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+											
+											<MenuItem Header="Скопировать с данными" 
+													  Command="{Binding PlacementTarget.Tag.DataContext.CopyListWithDataCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+										</ContextMenu>           </Setter.Value>
+									</Setter>
+									
+									<!--Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" / -->
+								</Style>
+							</TreeView.ItemContainerStyle>					
+							<i:Interaction.Triggers>
+								<i:EventTrigger EventName="SelectedItemChanged">
+									<i:InvokeCommandAction Command="{Binding LeftNodeSelectedCommand}" 
+														 CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+								</i:EventTrigger>
+							</i:Interaction.Triggers>
+							<TreeView.ItemTemplate>
+								<HierarchicalDataTemplate ItemsSource="{Binding Children}">
+									<TextBlock Text="{Binding Title}"/>
+								</HierarchicalDataTemplate>
+							</TreeView.ItemTemplate>
+						</TreeView>
+					</DockPanel>
+				</Grid>
+            </GroupBox>
+
+            <GroupBox Header="Source details" Grid.Column="1" Margin="5">
+                <ContentControl Content="{Binding LeftDetailsView}" />
+            </GroupBox>
+
+            <GroupBox Header="Destination details" Grid.Column="2" Margin="5">
+                <ContentControl Content="{Binding RightDetailsView}" />
+            </GroupBox>
+
+            <GroupBox Header="Destination" Grid.Column="3" Margin="5">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="5">
+                        <Label Content="Destination URL:"/>
+                        <TextBox Text="{Binding RightSiteUrl, UpdateSourceTrigger=PropertyChanged}" Height="25"/>
+						<StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Margin="0,3">
+									<TextBlock.Style>
+										<Style TargetType="TextBlock">
+											<Setter Property="Opacity" Value="0"/>
+											<Style.Triggers>
+												<DataTrigger Binding="{Binding IsRightConnected}" Value="True">
+													<Setter Property="Opacity" Value="1"/>
+												</DataTrigger>
+											</Style.Triggers>
+										</Style>
+									</TextBlock.Style>
+
+								<Hyperlink NavigateUri="{Binding RightSiteFullLink}" 
+										   RequestNavigate="Hyperlink_RequestNavigate" 
+										   >
+									<TextBlock Text="Open Site" FontSize="10" Foreground="#2B579A"/>
+								</Hyperlink>
+							</TextBlock>
+						</StackPanel>							
+
+                        <Button Content="Connect" Command="{Binding ConnectRightCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
+                    </StackPanel>
+                    <TreeView ItemsSource="{Binding RightSiteNodes}">
+                        <i:Interaction.Triggers>
+                            <i:EventTrigger EventName="SelectedItemChanged">
+                                <i:InvokeCommandAction Command="{Binding RightNodeSelectedCommand}" 
+                                                     CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+                            </i:EventTrigger>
+                        </i:Interaction.Triggers>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <TextBlock Text="{Binding Title}"/>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </DockPanel>
+            </GroupBox>
+        </Grid>
+    </Grid>
+</Window>

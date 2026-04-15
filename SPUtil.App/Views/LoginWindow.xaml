@@ -1,0 +1,30 @@
+﻿<Window x:Class="SPUtil.App.Views.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SharePoint Credentials" 
+        SizeToContent="Height" 
+        Width="350" 
+        WindowStartupLocation="CenterOwner" 
+        ResizeMode="NoResize">
+    <Grid Margin="20">
+        <StackPanel>
+            <TextBlock Text="UserName :" Margin="0,0,0,5" FontWeight="SemiBold"/>
+            <TextBox x:Name="TxtUser" Height="28" VerticalContentAlignment="Center" Margin="0,0,0,10"/>
+            
+            <TextBlock Text="Password:" Margin="0,0,0,5" FontWeight="SemiBold"/>
+            <PasswordBox x:Name="TxtPass" Height="28" VerticalContentAlignment="Center" Margin="0,0,0,20"/>
+            
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Save &amp; Connect" 
+                        Click="BtnSave_Click" 
+                        IsDefault="True" 
+                        Width="120" Height="30" 
+                        Background="#0078D7" Foreground="White" BorderThickness="0"/>
+                <Button Content="Cancel" 
+                        IsCancel="True" 
+                        Margin="10,0,0,0" 
+                        Width="80" Height="30"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,57 @@
+│   SPUtil.App.slnx
+│   
+├───SPUtil.App
+│   │   App.xaml
+│   │   App.xaml.cs
+│   │   AssemblyInfo.cs
+│   │   SPUtil.App.csproj
+│   │   SPUtil.App.csproj.user
+│   │   UniversalPreviewWindow.xaml
+│   │   UniversalPreviewWindow.xaml.cs
+│   ├───ViewModels
+│   │       InfoViewModel.cs
+│   │       Library101ViewModel.cs
+│   │       List100ViewModel.cs
+│   │       MainWindowViewModel.cs
+│   │       PagesViewModel.cs
+│   │       
+│   └───Views
+│           CopyListDialog.xaml
+│           CopyListDialog.xaml.cs
+│           ExistsActionDialog.xaml
+│           ExistsActionDialog.xaml.cs
+│           InfoView.xaml
+│           InfoView.xaml.cs
+│           Library101View.xaml
+│           Library101View.xaml.cs
+│           List100View.xaml
+│           List100View.xaml.cs
+│           MainWindow.xaml
+│           MainWindow.xaml.cs
+│           OperationInfoWindow.xaml
+│           OperationInfoWindow.xaml.cs
+│           PagesView.xaml
+│           PagesView.xaml.cs
+│           ProgressWindow.xaml
+│           ProgressWindow.xaml.cs
+│           SchemaViewerWindow.xaml
+│           SchemaViewerWindow.xaml.cs
+│           
+├───SPUtil.Infrastructure
+│   │   CopyProgressArgs.cs
+│   │   DialogButton.cs
+│   │   ISharePointService.cs
+│   │   SPFieldData.cs
+│   │   SPListItemData.cs
+│   │   SPNode.cs
+│   │   SPUsingUtils.cs
+│   │   SPUtil.Infrastructure.csproj
+│   │   SPViewData.cs
+
+│                       
+└───SPUtil.Services
+    │   SharePointCloneService.cs
+    │   SharePointService.cs
+    │   SPUtil.Services.csproj
+    │   
+ 

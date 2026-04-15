@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SPUtil.App/SPUtil.App.csproj" />
+  <Project Path="SPUtil.Infrastructure/SPUtil.Infrastructure.csproj" />
+  <Project Path="SPUtil.Services/SPUtil.Services.csproj" />
+</Solution>
