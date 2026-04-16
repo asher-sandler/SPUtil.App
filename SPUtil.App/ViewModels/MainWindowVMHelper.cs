@@ -43,6 +43,9 @@ namespace SPUtil.App.ViewModels
                 await ProcessDocLibCopyAsync(info, targetUrl, withData, templateId);
 
             }
+            RaisePropertyChanged(nameof(IsLeftConnected));
+            RaisePropertyChanged(nameof(LeftSiteFullLink));
+
         }
         private async Task ProcessListCopyAsync(SPListInfo info, string targetUrl,  bool withData, int templateId)
         {
@@ -188,6 +191,18 @@ namespace SPUtil.App.ViewModels
                 if (!created) return;
             }
 
+            var folderInfoWin = new SPUtil.Views.OperationInfoWindow { Owner = Application.Current.MainWindow };
+            folderInfoWin.Show();
+            var folderProgress = new Progress<string>(msg =>
+                Application.Current.Dispatcher.Invoke(() => folderInfoWin.UpdateMessage(msg)));
+            try
+            {
+                await _spService.CopyFolderStructureAsync(info.URL, targetUrl, sourceTitle, targetLibName, folderProgress);
+            }
+            finally
+            {
+                folderInfoWin.Close();
+            }
             // Шаг 2: Заглушка для прав (Permissions)
             StatusMessage = "Setting up permissions (stub)...";
             // Тут будет вызов Change-PermissionsX (позже)

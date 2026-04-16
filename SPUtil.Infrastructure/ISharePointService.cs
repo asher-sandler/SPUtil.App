@@ -30,6 +30,13 @@ namespace SPUtil.Services
 			string listTitle, 
 			IProgress<int> progress, 
 			CancellationToken ct);
+			
+		Task CopyFolderStructureAsync(
+					string sourceUrl,
+					string targetUrl,
+					string sourceLibraryTitle,
+					string targetLibraryTitle,
+					IProgress<string> progress = null);			
 
         Task<bool> ListExistsAsync(string siteUrl, string listTitle);
 		Task<List<FieldInfo>> GetFieldInfosFromSiteAsync(string siteUrl, string listTitle);
