@@ -68,7 +68,7 @@ namespace SPUtil.Services
                     // Список системных исключений
                     string[] systemExclusions =
                     {
-                "ContentType", "Attachments", "FolderChildCount", "ItemChildCount",
+                "ContentType", "Attachments", "FolderChildCount", "ItemChildCount","ParentLeafName","ParentVersionString",
                 "Edit", "LinkTitle", "Order", "GUID", "AppAuthor", "AppEditor", "DocIcon", "FileLeafRef","Title"
             };
                     if (systemExclusions.Contains(field.InternalName)) continue;

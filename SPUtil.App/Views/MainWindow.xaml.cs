@@ -23,10 +23,13 @@ namespace SPUtil.App.Views
         }
 		private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
 		{
-			// Открывает системный браузер по умолчанию
+			// e.Uri can be null if NavigateUri was empty string on first render
+			string url = e.Uri?.AbsoluteUri;
+			if (string.IsNullOrEmpty(url)) return;
+
 			System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
 			{
-				FileName = e.Uri.AbsoluteUri,
+				FileName = url,
 				UseShellExecute = true
 			});
 			e.Handled = true;

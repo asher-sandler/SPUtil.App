@@ -43,8 +43,12 @@ namespace SPUtil.App.ViewModels
                 await ProcessDocLibCopyAsync(info, targetUrl, withData, templateId);
 
             }
-            RaisePropertyChanged(nameof(IsLeftConnected));
-            RaisePropertyChanged(nameof(LeftSiteFullLink));
+            IsRightConnected = false;
+            IsRightConnected = true;
+            RaisePropertyChanged(nameof(RightSiteFullLink));
+            RaisePropertyChanged(nameof(IsRightConnected));
+            
+           
 
         }
         private async Task ProcessListCopyAsync(SPListInfo info, string targetUrl,  bool withData, int templateId)
@@ -159,20 +163,22 @@ namespace SPUtil.App.ViewModels
             "WorkflowTasks"          // Системные задачи рабочих процессов
         };
 
-        private async Task ProcessDocLibCopyAsync(SPListInfo info, string targetUrl,  bool withData,int templateId)
+        private async Task ProcessDocLibCopyAsync(SPListInfo info, string targetUrl, bool withData, int templateId)
         {
-            // Шаг 1: Диалог выбора имени (тот же, что и для списка)
+            // Step 1: Name selection dialog
             var copyDialog = new SPUtil.Views.CopyListDialog(info.Title, targetUrl, info.ToString()) { Owner = Application.Current.MainWindow };
             if (copyDialog.ShowDialog() != true) return;
 
             string targetLibName = copyDialog.TargetListTitle;
             string sourceTitle = info.Title;
+            string action = "Append"; // default — safe for both new and existing
 
             bool exists = await _spService.ListExistsAsync(targetUrl, targetLibName);
             var infoWin = new SPUtil.Views.OperationInfoWindow { Owner = Application.Current.MainWindow };
 
             if (!exists)
             {
+                // New library — check for reserved names first
                 if (ReservedLibNames.Contains(info.InternalName) || ReservedLibNames.Contains(sourceTitle))
                 {
                     string errorMsg = $"The library '{sourceTitle}' is a system-reserved library (Internal Name: {info.InternalName}).\n\n" +
@@ -183,14 +189,34 @@ namespace SPUtil.App.ViewModels
                     ConnectionStatus = "Error: Reserved library name detected.";
                     return;
                 }
+
                 infoWin.Show();
                 infoWin.UpdateMessage($"Creating Library structure: {targetLibName}...");
-                // Используем общую функцию создания структуры!
                 bool created = await CreateListStructureAsync(info, targetUrl, targetLibName, templateId);
                 infoWin.Close();
                 if (!created) return;
             }
+            else
+            {
+                // Library exists — ask user what to do
+                var existsDialog = new SPUtil.Views.DocLibExistsActionDialog(targetLibName) { Owner = Application.Current.MainWindow };
+                if (existsDialog.ShowDialog() != true) return;
 
+                action = existsDialog.SelectedAction; // "Append", "Overwrite", or "Mirror"
+                if (action == "Mirror")
+                {
+                    infoWin.Show();
+                    infoWin.UpdateMessage($"Deleting library: {targetLibName}...");
+                    await _spService.DeleteListAsync(targetUrl, targetLibName);
+
+                    infoWin.UpdateMessage($"Creating Library structure: {targetLibName}...");
+                    bool created = await CreateListStructureAsync(info, targetUrl, targetLibName, templateId);
+                    infoWin.Close();
+                    if (!created) return;
+                }
+            }
+
+            // Step 2: Copy folder structure (always, regardless of action)
             var folderInfoWin = new SPUtil.Views.OperationInfoWindow { Owner = Application.Current.MainWindow };
             folderInfoWin.Show();
             var folderProgress = new Progress<string>(msg =>
@@ -203,15 +229,15 @@ namespace SPUtil.App.ViewModels
             {
                 folderInfoWin.Close();
             }
-            // Шаг 2: Заглушка для прав (Permissions)
-            StatusMessage = "Setting up permissions (stub)...";
-            // Тут будет вызов Change-PermissionsX (позже)
 
-            // Шаг 3: Копирование ФАЙЛОВ (а не просто данных списка)
+            // Step 3: Permissions stub
+            StatusMessage = "Setting up permissions (stub)...";
+            // TODO: Call Change-PermissionsX here later
+
+            // Step 4: Copy files (action determines behavior: Append / Overwrite / Mirror)
             if (withData)
             {
-                // Вызываем новый метод для файлов, который мы обсудили ранее
-                //await ExecuteDocLibDataCopyAsync(sourceUrl, targetUrl, sourceTitle, targetLibName);
+                // TODO: await ExecuteDocLibDataCopyAsync(info.URL, targetUrl, sourceTitle, targetLibName, action);
             }
 
             RightSiteNodes = await _spService.GetSiteStructureAsync(targetUrl);
@@ -221,25 +247,29 @@ namespace SPUtil.App.ViewModels
         {
             try
             {
-                StatusMessage = "Анализ структуры и зависимостей...";
-                var fieldInfos = await _spService.GetFieldInfosFromSiteAsync(info.URL, info.Title);
-                var sourceViews = await _spService.GetListViewsAsync(info.URL, info.Title);
+                
+                 StatusMessage = "Анализ структуры и зависимостей...";
+                 var fieldInfos = await _spService.GetFieldInfosFromSiteAsync(info.URL, info.Title);
+                 var sourceViews = await _spService.GetListViewsAsync(info.URL, info.Title);
+                
+                //if (templateId == 100)
+                //{
+                    // Проверка Lookup
+                    var missingLists = new List<string>();
+                    foreach (var field in fieldInfos.Where(f => f.FieldType == "Lookup"))
+                    {
+                        bool targetExists = await _spService.ListExistsAsync(targetUrl, field.LookupListName);
+                        if (!targetExists && !missingLists.Contains(field.LookupListName))
+                            missingLists.Add(field.LookupListName);
+                    }
 
-                // Проверка Lookup
-                var missingLists = new List<string>();
-                foreach (var field in fieldInfos.Where(f => f.FieldType == "Lookup"))
-                {
-                    bool targetExists = await _spService.ListExistsAsync(targetUrl, field.LookupListName);
-                    if (!targetExists && !missingLists.Contains(field.LookupListName))
-                        missingLists.Add(field.LookupListName);
-                }
-
-                if (missingLists.Count > 0)
-                {
-                    string allMissing = string.Join("\n - ", missingLists);
-                    System.Windows.MessageBox.Show($"Необходимы списки-зависимости:\n - {allMissing}", "Ошибка зависимостей");
-                    return false;
-                }
+                    if (missingLists.Count > 0)
+                    {
+                        string allMissing = string.Join("\n - ", missingLists);
+                        System.Windows.MessageBox.Show($"Необходимы списки-зависимости:\n - {allMissing}", "Ошибка зависимостей");
+                        return false;
+                    }
+                //}
 
                 StatusMessage = "Создание списка на целевом сайте...";
                 await _spService.CreateListFromSchemaAsync(targetUrl, info.InternalName, targetListName, fieldInfos, sourceViews, templateId);
