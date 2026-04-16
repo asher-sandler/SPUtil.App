@@ -1242,40 +1242,40 @@ namespace SPUtil.Services
 				await Task.Run(() => ctx.ExecuteQuery());
 			}
 		}
-		/// <summary>
-		/// Copies the entire empty folder structure (any depth) from source doc library to target.
-		/// Files are NOT copied — only folder hierarchy is recreated.
-		/// </summary>
-		public async Task CopyFolderStructureAsync(
-			string sourceUrl,
-			string targetUrl,
-			string sourceLibraryTitle,
-			string targetLibraryTitle,
-			IProgress<string> progress = null)
-		{
-			await Task.Run(async () =>
-			{
-				using var sourceCtx = await GetContextAsync(sourceUrl);
-				using var targetCtx = await GetContextAsync(targetUrl);
+        /// <summary>
+        /// Copies the entire empty folder structure (any depth) from source doc library to target.
+        /// Files are NOT copied — only folder hierarchy is recreated.
+        /// </summary>
+        public async Task CopyFolderStructureAsync(
+            string sourceUrl,
+            string targetUrl,
+            string sourceLibraryTitle,
+            string targetLibraryTitle,
+            IProgress<string> progress = null)
+        {
+            await Task.Run(async () =>
+            {
+                using var sourceCtx = await GetContextAsync(sourceUrl);
+                using var targetCtx = await GetContextAsync(targetUrl);
 
-				// --- Step 1: Load source library root folder server-relative URL ---
-				var sourceList = sourceCtx.Web.Lists.GetByTitle(sourceLibraryTitle);
-				sourceCtx.Load(sourceList.RootFolder, r => r.ServerRelativeUrl);
-				await Task.Run(() => sourceCtx.ExecuteQuery());
+                // --- Step 1: Load source library root folder server-relative URL ---
+                var sourceList = sourceCtx.Web.Lists.GetByTitle(sourceLibraryTitle);
+                sourceCtx.Load(sourceList.RootFolder, r => r.ServerRelativeUrl);
+                await Task.Run(() => sourceCtx.ExecuteQuery());
 
-				string sourceRootUrl = sourceList.RootFolder.ServerRelativeUrl; // e.g. /sites/hr/Shared Documents
+                string sourceRootUrl = sourceList.RootFolder.ServerRelativeUrl; // e.g. /sites/hr/Shared Documents
 
-				// --- Step 2: Load target library root folder server-relative URL ---
-				var targetList = targetCtx.Web.Lists.GetByTitle(targetLibraryTitle);
-				targetCtx.Load(targetList.RootFolder, r => r.ServerRelativeUrl);
-				await Task.Run(() => targetCtx.ExecuteQuery());
+                // --- Step 2: Load target library root folder server-relative URL ---
+                var targetList = targetCtx.Web.Lists.GetByTitle(targetLibraryTitle);
+                targetCtx.Load(targetList.RootFolder, r => r.ServerRelativeUrl);
+                await Task.Run(() => targetCtx.ExecuteQuery());
 
-				string targetRootUrl = targetList.RootFolder.ServerRelativeUrl; // e.g. /sites/hr2/Shared Documents
+                string targetRootUrl = targetList.RootFolder.ServerRelativeUrl; // e.g. /sites/hr2/Shared Documents
 
-				// --- Step 3: Fetch ALL folders from source (recursive, sorted by depth) ---
-				var caml = new CamlQuery
-				{
-					ViewXml = @"<View Scope='RecursiveAll'>
+                // --- Step 3: Fetch ALL folders from source (recursive, sorted by depth) ---
+                var caml = new CamlQuery
+                {
+                    ViewXml = @"<View Scope='RecursiveAll'>
 									<Query>
 										<Where>
 											<Eq>
@@ -1288,61 +1288,80 @@ namespace SPUtil.Services
 										</OrderBy>
 									</Query>
 								</View>"
-				};
+                };
 
-				var folderItems = sourceList.GetItems(caml);
-				sourceCtx.Load(folderItems, items => items.Include(
-					i => i["FileRef"],      // full server-relative path
-					i => i["FileLeafRef"]   // folder name only
-				));
-				await Task.Run(() => sourceCtx.ExecuteQuery());
+                var folderItems = sourceList.GetItems(caml);
+                sourceCtx.Load(folderItems, items => items.Include(
+                    i => i["FileRef"],      // full server-relative path
+                    i => i["FileLeafRef"]   // folder name only
+                ));
+                await Task.Run(() => sourceCtx.ExecuteQuery());
 
-				// Collect folder paths and sort by depth (parent before child)
-				var folderPaths = folderItems
-					.Cast<ListItem>()
-					.Select(i => i["FileRef"]?.ToString() ?? "")
-					.Where(p => !string.IsNullOrEmpty(p))
-					.OrderBy(p => p.Count(c => c == '/')) // shallow folders first
-					.ToList();
+                // Collect folder paths and sort by depth (parent before child)
+                // Note: avoid ?. inside expression trees — use explicit null check instead
+                var folderPaths = folderItems
+                    .Cast<ListItem>()
+                    .Select(i => i["FileRef"] != null ? i["FileRef"].ToString() : "")
+                    .Where(p => !string.IsNullOrEmpty(p))
+                    .OrderBy(p => p.Count(c => c == '/')) // shallow folders first
+                    .ToList();
 
-				System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Found {folderPaths.Count} folders in '{sourceLibraryTitle}'");
+                System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Found {folderPaths.Count} folders in '{sourceLibraryTitle}'");
 
-				// --- Step 4: Recreate each folder on target ---
-				foreach (var sourceFolderPath in folderPaths)
-				{
-					// Build target path by replacing source root prefix with target root
-					if (!sourceFolderPath.StartsWith(sourceRootUrl, StringComparison.OrdinalIgnoreCase))
-					{
-						System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Skipping unexpected path: {sourceFolderPath}");
-						continue;
-					}
+                // --- Step 4: Recreate each folder on target ---
+                foreach (var sourceFolderPath in folderPaths)
+                {
+                    // Build target path by replacing source root prefix with target root
+                    if (!sourceFolderPath.StartsWith(sourceRootUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Skipping unexpected path: {sourceFolderPath}");
+                        continue;
+                    }
 
-					// e.g. sourceFolderPath = /sites/hr/Shared Documents/2024/Q1
-					// relativePart         = /2024/Q1
-					// targetFolderPath     = /sites/hr2/Shared Documents/2024/Q1
-					string relativePart = sourceFolderPath.Substring(sourceRootUrl.Length);
-					string targetFolderPath = targetRootUrl + relativePart;
+                    // e.g. sourceFolderPath = /sites/hr/Shared Documents/2024/Q1
+                    // relativePart         = /2024/Q1
+                    // targetFolderPath     = /sites/hr2/Shared Documents/2024/Q1
+                    string relativePart = sourceFolderPath.Substring(sourceRootUrl.Length);
+                    string targetFolderPath = targetRootUrl + relativePart;
 
-					progress?.Report($"Creating folder: {relativePart}");
-					System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Ensuring folder: {targetFolderPath}");
+                    progress?.Report($"Creating folder: {relativePart}");
+                    System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Ensuring folder: {targetFolderPath}");
 
-					try
-					{
-						// EnsureFolderPath creates the folder and all missing parents
-						targetCtx.Web.EnsureFolderPath(targetFolderPath);
-						await Task.Run(() => targetCtx.ExecuteQuery());
-					}
-					catch (Exception ex)
-					{
-						// Log and continue — one failed folder shouldn't abort the whole operation
-						System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Error creating '{targetFolderPath}': {ex.Message}");
-					}
-				}
+                    try
+                    {
+                        // Get the parent folder path and new folder name
+                        // e.g. targetFolderPath = /sites/hr2/Shared Documents/2024/Q1
+                        // parentPath            = /sites/hr2/Shared Documents/2024
+                        // folderName            = Q1
+                        string folderName = targetFolderPath.Substring(targetFolderPath.LastIndexOf('/') + 1);
+                        string parentPath = targetFolderPath.Substring(0, targetFolderPath.LastIndexOf('/'));
 
-				System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Done. Processed {folderPaths.Count} folders.");
-			});
-		}		
-		public async Task CopyListItemsAsync(
+                        // Folder.Exists is not available in this CSOM version —
+                        // use try/catch: if parent not found SharePoint throws ServerException
+                        Folder parentFolder = targetCtx.Web.GetFolderByServerRelativeUrl(parentPath);
+                        targetCtx.Load(parentFolder, f => f.Name); // load any property to verify folder exists
+                        await Task.Run(() => targetCtx.ExecuteQuery());
+
+                        // If we reach here, parent folder exists — create the child
+                        parentFolder.Folders.Add(folderName);
+                        await Task.Run(() => targetCtx.ExecuteQuery());
+                    }
+                    catch (ServerException ex) when (ex.ServerErrorTypeName == "System.IO.FileNotFoundException")
+                    {
+                        // Parent folder doesn't exist — should not happen due to depth ordering, log and skip
+                        System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Parent not found, skipping: {targetFolderPath} | {ex.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Folder may already exist or other non-critical error — log and continue
+                        System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Note for '{targetFolderPath}': {ex.Message}");
+                    }
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Done. Processed {folderPaths.Count} folders.");
+            });
+        }
+        public async Task CopyListItemsAsync(
 			string sourceUrl, 
 			string targetUrl, 
 			string sourceTitle, 
