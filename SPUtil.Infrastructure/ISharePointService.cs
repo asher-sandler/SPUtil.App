@@ -36,7 +36,16 @@ namespace SPUtil.Services
 					string targetUrl,
 					string sourceLibraryTitle,
 					string targetLibraryTitle,
-					IProgress<string> progress = null);			
+					IProgress<string> progress = null);
+
+        Task CopyDocLibFilesAsync(
+    string sourceUrl,
+    string targetUrl,
+    string sourceLibraryTitle,
+    string targetLibraryTitle,
+    string action,                       // "Append" | "Overwrite" | "Mirror"
+    IProgress<CopyProgressArgs> progress,
+    CancellationToken ct);
 
         Task<bool> ListExistsAsync(string siteUrl, string listTitle);
 		Task<List<FieldInfo>> GetFieldInfosFromSiteAsync(string siteUrl, string listTitle);

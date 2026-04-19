@@ -237,11 +237,45 @@ namespace SPUtil.App.ViewModels
             // Step 4: Copy files (action determines behavior: Append / Overwrite / Mirror)
             if (withData)
             {
+                await ExecuteDocLibDataCopyAsync(info.URL, targetUrl, sourceTitle, targetLibName, action);
                 // TODO: await ExecuteDocLibDataCopyAsync(info.URL, targetUrl, sourceTitle, targetLibName, action);
             }
 
             RightSiteNodes = await _spService.GetSiteStructureAsync(targetUrl);
             StatusMessage = "Finished copying library.";
+        }
+        private async Task ExecuteDocLibDataCopyAsync(
+                    string sourceUrl, string targetUrl,
+                    string sourceTitle, string targetLibName, string action)
+        {
+            var cts = new CancellationTokenSource();
+            var progressWin = new SPUtil.Views.ProgressWindow(cts) { Owner = Application.Current.MainWindow };
+
+            var progressIndicator = new Progress<CopyProgressArgs>(e =>
+            {
+                progressWin.UpdateStatus(e.Processed, e.Total, e.Message);
+            });
+
+            try
+            {
+                progressWin.Show();
+                await _spService.CopyDocLibFilesAsync(
+                    sourceUrl, targetUrl,
+                    sourceTitle, targetLibName,
+                    action, progressIndicator, cts.Token);
+                progressWin.Close();
+                StatusMessage = $"Files copied: {targetLibName}";
+            }
+            catch (OperationCanceledException)
+            {
+                progressWin.Close();
+                MessageBox.Show("File copy cancelled.", "Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                progressWin.Close();
+                MessageBox.Show($"Error copying files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
         private async Task<bool> CreateListStructureAsync(SPListInfo info, string targetUrl, string targetListName, int templateId)
         {

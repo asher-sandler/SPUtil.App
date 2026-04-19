@@ -1361,6 +1361,257 @@ namespace SPUtil.Services
                 System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Done. Processed {folderPaths.Count} folders.");
             });
         }
+		// ─────────────────────────────────────────────────────────────────────────
+		//  CopyDocLibFilesAsync
+		//  Copies binary files from a source Document Library to a target one.
+		//  Preserves: folder paths, file content, Author, Editor, Created, Modified.
+		//  action: "Append"    — skip existing files on the target.
+		//          "Overwrite" — replace existing files on the target.
+		//          "Mirror"    — library was already wiped by the caller; behaves as Append.
+		// ─────────────────────────────────────────────────────────────────────────
+        public async Task CopyDocLibFilesAsync(
+            string sourceUrl,
+            string targetUrl,
+            string sourceLibraryTitle,
+            string targetLibraryTitle,
+            string action,
+            IProgress<CopyProgressArgs> progress,
+            CancellationToken ct)
+        {
+            await Task.Run(async () =>
+            {
+                using var sourceCtx = await GetContextAsync(sourceUrl);
+                using var targetCtx = await GetContextAsync(targetUrl);
+
+                // ── Step 1: Resolve root server-relative URLs for both libraries ──
+                var sourceList = sourceCtx.Web.Lists.GetByTitle(sourceLibraryTitle);
+                var targetList = targetCtx.Web.Lists.GetByTitle(targetLibraryTitle);
+
+                sourceCtx.Load(sourceList.RootFolder, r => r.ServerRelativeUrl);
+                targetCtx.Load(targetList.RootFolder, r => r.ServerRelativeUrl);
+
+                await Task.Run(() => sourceCtx.ExecuteQuery());
+                await Task.Run(() => targetCtx.ExecuteQuery());
+
+                string sourceRoot = sourceList.RootFolder.ServerRelativeUrl;
+                string targetRoot = targetList.RootFolder.ServerRelativeUrl;
+
+                // ── Step 2: Count files first for accurate progress reporting ──
+                var countQuery = new CamlQuery
+                {
+                    ViewXml = @"<View Scope='RecursiveAll'>
+                                    <Query>
+                                        <Where>
+                                            <Eq>
+                                                <FieldRef Name='FSObjType'/>
+                                                <Value Type='Integer'>0</Value>
+                                            </Eq>
+                                        </Where>
+                                    </Query>
+                                </View>"
+                };
+                var countItems = sourceList.GetItems(countQuery);
+                sourceCtx.Load(countItems, c => c.Include(i => i["FileRef"]));
+                await Task.Run(() => sourceCtx.ExecuteQuery());
+                int totalFiles = countItems.Count;
+                int processed  = 0;
+
+                System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] {sourceUrl} Starting. Total files: {totalFiles}, action: {action}");
+
+                // ── Step 3: Page through files in batches of 500 ──
+                var caml = new CamlQuery
+                {
+                    ViewXml = @"<View Scope='RecursiveAll'>
+                                    <Query>
+                                        <Where>
+                                            <Eq>
+                                                <FieldRef Name='FSObjType'/>
+                                                <Value Type='Integer'>0</Value>
+                                            </Eq>
+                                        </Where>
+                                        <OrderBy>
+                                            <FieldRef Name='FileRef' Ascending='TRUE'/>
+                                        </OrderBy>
+                                    </Query>
+                                    <RowLimit>500</RowLimit>
+                                </View>"
+                };
+
+                do
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    var batch = sourceList.GetItems(caml);
+                    sourceCtx.Load(batch, items => items.Include(
+                        i => i["FileRef"],
+                        i => i["FileLeafRef"],
+                        i => i["FileDirRef"],
+                        i => i["Author"],
+                        i => i["Editor"],
+                        i => i["Created"],
+                        i => i["Modified"]
+                    ));
+                    await Task.Run(() => sourceCtx.ExecuteQuery());
+
+                    caml.ListItemCollectionPosition = batch.ListItemCollectionPosition;
+
+                    foreach (ListItem item in batch)
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        string fileRef  = item["FileRef"]?.ToString()     ?? "";
+                        string leafRef  = item["FileLeafRef"]?.ToString() ?? "";
+                        string dirRef   = item["FileDirRef"]?.ToString()  ?? "";
+
+                        if (string.IsNullOrEmpty(fileRef) || string.IsNullOrEmpty(leafRef))
+                            continue;
+
+                        // Build target server-relative path by replacing source root prefix
+                        // e.g. /sites/hr/Shared Documents/2024/Q1/report.docx
+                        //   -> /sites/hr2/MyLib/2024/Q1/report.docx
+                        if (!fileRef.StartsWith(sourceRoot, StringComparison.OrdinalIgnoreCase))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Unexpected path, skipping: {fileRef}");
+                            processed++;
+                            continue;
+                        }
+
+                        string relPath       = fileRef.Substring(sourceRoot.Length);
+                        string targetPath    = targetRoot + relPath;
+                        string targetDirPath = dirRef.Replace(sourceRoot, targetRoot, StringComparison.OrdinalIgnoreCase);
+
+                        // ── Step 3a: Skip existing files in Append mode ──
+                        if (action == "Append")
+                        {
+                            bool exists = false;
+                            try
+                            {
+                                var check = targetCtx.Web.GetFileByServerRelativeUrl(targetPath);
+                                targetCtx.Load(check, f => f.Exists);
+                                await Task.Run(() => targetCtx.ExecuteQuery());
+                                exists = check.Exists;
+                            }
+                            catch { exists = false; }
+
+                            if (exists)
+                            {
+                                processed++;
+                                progress?.Report(new CopyProgressArgs
+                                {
+                                    Processed = processed,
+                                    Total     = totalFiles,
+                                    Message   = $"Skipped (exists): {leafRef} ({processed}/{totalFiles})"
+                                });
+                                System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Skipped (exists): {targetPath}");
+                                continue;
+                            }
+                        }
+
+                        // ── Step 3b: Download binary content from source ──
+                        byte[] fileBytes;
+                        try
+                        {
+                            var fileInfo = File.OpenBinaryDirect(sourceCtx, fileRef);
+                            using var ms = new System.IO.MemoryStream();
+                            await fileInfo.Stream.CopyToAsync(ms, ct);
+                            fileBytes = ms.ToArray();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Download failed for '{fileRef}': {ex.Message}");
+                            processed++;
+                            progress?.Report(new CopyProgressArgs
+                            {
+                                Processed = processed,
+                                Total     = totalFiles,
+                                Message   = $"ERROR downloading: {leafRef} — {ex.Message}"
+                            });
+                            continue;
+                        }
+
+                        // ── Step 3c: Upload to target folder ──
+                        try
+                        {
+                            var targetFolder = targetCtx.Web.GetFolderByServerRelativeUrl(targetDirPath);
+                            using var uploadStream = new System.IO.MemoryStream(fileBytes);
+
+                            var fileCreationInfo = new FileCreationInformation
+                            {
+                                ContentStream = uploadStream,
+                                Url           = targetPath,
+                                Overwrite     = (action == "Overwrite")
+                            };
+
+                            var uploadedFile = targetFolder.Files.Add(fileCreationInfo);
+                            targetCtx.Load(uploadedFile, f => f.ListItemAllFields);
+                            await Task.Run(() => targetCtx.ExecuteQuery());
+
+                            // ── Step 3d: Preserve Author, Editor, Created, Modified ──
+                            // In CSOM there is no UpdateOverwriteVersion(). The correct way to write
+                            // read-only / system fields is ValidateUpdateListItem() with bNewDocumentUpdate=true,
+                            // which bypasses the "field is read-only" guard on the server side.
+                            // This still requires the account to have at least Manage Lists permission.
+                            // Falls back to plain Update() (dates become "now") if the server rejects it.
+                            var listItem = uploadedFile.ListItemAllFields;
+
+                            // Build the list of field values to push
+                            var formValues = new List<ListItemFormUpdateValue>();
+
+                            if (item["Author"] is FieldUserValue authorVal)
+                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Author", FieldValue = authorVal.LookupId.ToString() });
+
+                            if (item["Editor"] is FieldUserValue editorVal)
+                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Editor", FieldValue = editorVal.LookupId.ToString() });
+
+                            if (item["Created"] is DateTime createdDt)
+                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Created", FieldValue = createdDt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") });
+
+                            if (item["Modified"] is DateTime modifiedDt)
+                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Modified", FieldValue = modifiedDt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") });
+
+                            try
+                            {
+                                // bNewDocumentUpdate=true tells SharePoint to treat this as a
+                                // document-upload update and allow writing system fields.
+                                listItem.ValidateUpdateListItem(formValues, true, string.Empty);
+                                await Task.Run(() => targetCtx.ExecuteQuery());
+                            }
+                            catch
+                            {
+                                // Insufficient permissions — fall back to a plain metadata update.
+                                // Author/Editor/Created/Modified will reflect the current user/time.
+                                listItem.Update();
+                                await Task.Run(() => targetCtx.ExecuteQuery());
+                            }
+
+                            processed++;
+                            progress?.Report(new CopyProgressArgs
+                            {
+                                Processed = processed,
+                                Total     = totalFiles,
+                                Message   = $"Copied: {leafRef} ({processed}/{totalFiles})"
+                            });
+                            System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] OK: {targetPath}");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Upload failed for '{targetPath}': {ex.Message}");
+                            processed++;
+                            progress?.Report(new CopyProgressArgs
+                            {
+                                Processed = processed,
+                                Total     = totalFiles,
+                                Message   = $"ERROR uploading: {leafRef} — {ex.Message}"
+                            });
+                        }
+                    }
+
+                } while (caml.ListItemCollectionPosition != null);
+
+                System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Done. {processed}/{totalFiles} files processed.");
+
+            }, ct);
+        }		
         public async Task CopyListItemsAsync(
 			string sourceUrl, 
 			string targetUrl, 
