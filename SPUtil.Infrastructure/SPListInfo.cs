@@ -14,6 +14,7 @@ namespace SPUtil.Infrastructure
         public string ServerRelativeUrl { get; set; } = string.Empty;
         public int ItemCount { get; set; }
         public DateTime Created { get; set; }
+        public DateTime Modified { get; set; }
         public int BaseTemplate { get; set; } // Важно для логики копирования (100 или 101)
 
         // Переопределим ToString, чтобы старый код (где выводилась строка) не сломался сразу
@@ -27,7 +28,8 @@ namespace SPUtil.Infrastructure
                    $"ParentWebUrl: {ParentWebUrl}\n" +
                    $"ServerRelativeUrl: {ServerRelativeUrl}\n" +
                    $"Items: {ItemCount}\n" +
-                   $"Created: {Created.ToShortDateString()}";
+                   $"Created: {Created.ToShortDateString()}\n"+
+                   $"Modified: {Modified.ToShortDateString()}";
         }
     }
 }

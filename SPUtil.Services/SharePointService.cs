@@ -826,66 +826,74 @@ namespace SPUtil.Services
         }
         private async Task CreateListViewsAsync(ClientContext ctx, Microsoft.SharePoint.Client.List newList, List<SPViewData> sourceViews)
         {
+            // Load ALL existing views once — CSOM does not support .Where() inside LoadQuery
+            // (server-side LINQ on view collections throws "member cannot be used in expression").
+            // Filter client-side after the single ExecuteQuery().
+            ctx.Load(newList.Views, vs => vs.Include(v => v.Title, v => v.Id, v => v.Hidden));
+            await Task.Run(() => ctx.ExecuteQuery());
+            var allExistingViews = newList.Views.ToList();
+
             foreach (var viewData in sourceViews)
             {
+               
                 try
                 {
                     Microsoft.SharePoint.Client.View targetView;
-                    // Проверяем, существует ли уже вьюха
-                    var existingViews = ctx.LoadQuery(newList.Views.Where(v => v.Title == viewData.Title));
-                    ctx.ExecuteQuery();
-                    var existingView = existingViews.FirstOrDefault();
+
+                    // Client-side title match
+                    var existingView = allExistingViews
+                        .FirstOrDefault(v => v.Title.Equals(viewData.Title, StringComparison.OrdinalIgnoreCase));
 
                     if (existingView != null)
                     {
-                        targetView = existingView;
+                        // Re-load the full view object so we can write to its properties
+                        targetView = newList.Views.GetById(existingView.Id);
+                        ctx.Load(targetView);
+                        await Task.Run(() => ctx.ExecuteQuery());
                     }
                     else
                     {
-                        ViewCreationInformation vInfo = new ViewCreationInformation
+                        var vInfo = new ViewCreationInformation
                         {
                             Title = viewData.Title,
                             PersonalView = false
                         };
                         targetView = newList.Views.Add(vInfo);
+                        ctx.Load(targetView);
+                        await Task.Run(() => ctx.ExecuteQuery());
+
+                        // Add to local cache so later iterations can see it
+                        allExistingViews.Add(targetView);
                     }
 
-                    targetView.ViewQuery = viewData.ViewQuery;
+                    targetView.ViewQuery = viewData.ViewQuery ?? "";
                     targetView.DefaultView = viewData.DefaultView;
 
                     if (!string.IsNullOrEmpty(viewData.Aggregations))
-                    {
                         targetView.Aggregations = viewData.Aggregations;
-                    }
 
-                    // Настройка полей во вьюхе
+                    // ── Rebuild ViewFields ──────────────────────────────────────
+                    // Load current fields on the view
                     ctx.Load(targetView.ViewFields);
-                    ctx.ExecuteQuery();
+                    await Task.Run(() => ctx.ExecuteQuery());
 
-                    // Очищаем старые поля (кроме первого, чтобы не упало)
-                    string firstField = viewData.ViewFields?.FirstOrDefault() ?? "LinkTitle";
-                    var currentFields = targetView.ViewFields.ToArray();
-                    foreach (var fName in currentFields)
-                    {
-                        if (!fName.Equals(firstField, StringComparison.OrdinalIgnoreCase))
-                        {
-                            targetView.ViewFields.Remove(fName);
-                        }
-                    }
-                    targetView.Update();
+                    // RemoveAll() clears the entire field list in one server call
+                    targetView.ViewFields.RemoveAll();
 
-                    // Добавляем нужные поля
-                    if (viewData.ViewFields != null && viewData.ViewFields.Length > 0)
+                    // Add fields in source order
+                    if (viewData.ViewFields != null)
                     {
                         foreach (var fName in viewData.ViewFields)
                         {
-                            if (fName.Equals(firstField, StringComparison.OrdinalIgnoreCase)) continue;
-                            targetView.ViewFields.Add(fName);
+                            if (!string.IsNullOrWhiteSpace(fName))
+                                targetView.ViewFields.Add(fName);
                         }
                     }
 
                     targetView.Update();
-                    ctx.ExecuteQuery();
+                    await Task.Run(() => ctx.ExecuteQuery());
+
+                    System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] View created/updated: '{viewData.Title}'");
                 }
                 catch (Exception ex)
                 {
@@ -1211,7 +1219,8 @@ namespace SPUtil.Services
                     l => l.BaseType,
                     l => l.BaseTemplate, // Добавили шаблон
                     l => l.ItemCount,
-                    l => l.Created);
+                    l => l.Created,
+                    l => l.LastItemModifiedDate);
 				ctx.Load(list.RootFolder, r => r.ServerRelativeUrl,r => r.Name);
 
                 ctx.ExecuteQuery();
@@ -1229,6 +1238,7 @@ namespace SPUtil.Services
 					ServerRelativeUrl = list.RootFolder.ServerRelativeUrl,
 					ParentWebUrl = list.ParentWebUrl,
                     Created = list.Created,
+                    Modified = list.LastItemModifiedDate,
                     BaseTemplate = list.BaseTemplate
                 };
             }
@@ -1361,14 +1371,14 @@ namespace SPUtil.Services
                 System.Diagnostics.Debug.WriteLine($"[FOLDER_COPY] Done. Processed {folderPaths.Count} folders.");
             });
         }
-		// ─────────────────────────────────────────────────────────────────────────
-		//  CopyDocLibFilesAsync
-		//  Copies binary files from a source Document Library to a target one.
-		//  Preserves: folder paths, file content, Author, Editor, Created, Modified.
-		//  action: "Append"    — skip existing files on the target.
-		//          "Overwrite" — replace existing files on the target.
-		//          "Mirror"    — library was already wiped by the caller; behaves as Append.
-		// ─────────────────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────────
+        //  CopyDocLibFilesAsync
+        //  Copies binary files from a source Document Library to a target one.
+        //  Preserves: folder paths, file content, Author, Editor, Created, Modified.
+        //  action: "Append"    — skip existing files on the target.
+        //          "Overwrite" — replace existing files on the target.
+        //          "Mirror"    — library was already wiped by the caller; behaves as Append.
+        // ─────────────────────────────────────────────────────────────────────────
         public async Task CopyDocLibFilesAsync(
             string sourceUrl,
             string targetUrl,
@@ -1414,9 +1424,9 @@ namespace SPUtil.Services
                 sourceCtx.Load(countItems, c => c.Include(i => i["FileRef"]));
                 await Task.Run(() => sourceCtx.ExecuteQuery());
                 int totalFiles = countItems.Count;
-                int processed  = 0;
+                int processed = 0;
 
-                System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] {sourceUrl} Starting. Total files: {totalFiles}, action: {action}");
+                System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Starting. Total files: {totalFiles}, action: {action}");
 
                 // ── Step 3: Page through files in batches of 500 ──
                 var caml = new CamlQuery
@@ -1442,6 +1452,9 @@ namespace SPUtil.Services
                     ct.ThrowIfCancellationRequested();
 
                     var batch = sourceList.GetItems(caml);
+                    // Load item fields AND the paging token on the collection itself.
+                    // Without the second Load(), ListItemCollectionPosition throws
+                    // PropertyOrFieldNotInitializedException after ExecuteQuery().
                     sourceCtx.Load(batch, items => items.Include(
                         i => i["FileRef"],
                         i => i["FileLeafRef"],
@@ -1451,6 +1464,7 @@ namespace SPUtil.Services
                         i => i["Created"],
                         i => i["Modified"]
                     ));
+                    sourceCtx.Load(batch, items => items.ListItemCollectionPosition);
                     await Task.Run(() => sourceCtx.ExecuteQuery());
 
                     caml.ListItemCollectionPosition = batch.ListItemCollectionPosition;
@@ -1459,9 +1473,9 @@ namespace SPUtil.Services
                     {
                         ct.ThrowIfCancellationRequested();
 
-                        string fileRef  = item["FileRef"]?.ToString()     ?? "";
-                        string leafRef  = item["FileLeafRef"]?.ToString() ?? "";
-                        string dirRef   = item["FileDirRef"]?.ToString()  ?? "";
+                        string fileRef = item["FileRef"]?.ToString() ?? "";
+                        string leafRef = item["FileLeafRef"]?.ToString() ?? "";
+                        string dirRef = item["FileDirRef"]?.ToString() ?? "";
 
                         if (string.IsNullOrEmpty(fileRef) || string.IsNullOrEmpty(leafRef))
                             continue;
@@ -1476,8 +1490,8 @@ namespace SPUtil.Services
                             continue;
                         }
 
-                        string relPath       = fileRef.Substring(sourceRoot.Length);
-                        string targetPath    = targetRoot + relPath;
+                        string relPath = fileRef.Substring(sourceRoot.Length);
+                        string targetPath = targetRoot + relPath;
                         string targetDirPath = dirRef.Replace(sourceRoot, targetRoot, StringComparison.OrdinalIgnoreCase);
 
                         // ── Step 3a: Skip existing files in Append mode ──
@@ -1499,8 +1513,8 @@ namespace SPUtil.Services
                                 progress?.Report(new CopyProgressArgs
                                 {
                                     Processed = processed,
-                                    Total     = totalFiles,
-                                    Message   = $"Skipped (exists): {leafRef} ({processed}/{totalFiles})"
+                                    Total = totalFiles,
+                                    Message = $"Skipped (exists): {leafRef} ({processed}/{totalFiles})"
                                 });
                                 System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Skipped (exists): {targetPath}");
                                 continue;
@@ -1508,12 +1522,19 @@ namespace SPUtil.Services
                         }
 
                         // ── Step 3b: Download binary content from source ──
+                        // File.OpenBinaryDirect() is broken on some CSOM builds — it tries to send
+                        // a request body with a GET verb, which servers reject.
+                        // The correct CSOM way is file.OpenBinaryStream(): it uses a proper GET,
+                        // returns a ClientResult<Stream>, and is executed via ExecuteQuery().
                         byte[] fileBytes;
                         try
                         {
-                            var fileInfo = File.OpenBinaryDirect(sourceCtx, fileRef);
+                            var sourceFile = sourceCtx.Web.GetFileByServerRelativeUrl(fileRef);
+                            var streamResult = sourceFile.OpenBinaryStream();
+                            await Task.Run(() => sourceCtx.ExecuteQuery());
+
                             using var ms = new System.IO.MemoryStream();
-                            await fileInfo.Stream.CopyToAsync(ms, ct);
+                            await streamResult.Value.CopyToAsync(ms, ct);
                             fileBytes = ms.ToArray();
                         }
                         catch (Exception ex)
@@ -1523,8 +1544,8 @@ namespace SPUtil.Services
                             progress?.Report(new CopyProgressArgs
                             {
                                 Processed = processed,
-                                Total     = totalFiles,
-                                Message   = $"ERROR downloading: {leafRef} — {ex.Message}"
+                                Total = totalFiles,
+                                Message = $"ERROR downloading: {leafRef} — {ex.Message}"
                             });
                             continue;
                         }
@@ -1538,8 +1559,8 @@ namespace SPUtil.Services
                             var fileCreationInfo = new FileCreationInformation
                             {
                                 ContentStream = uploadStream,
-                                Url           = targetPath,
-                                Overwrite     = (action == "Overwrite")
+                                Url = targetPath,
+                                Overwrite = (action == "Overwrite")
                             };
 
                             var uploadedFile = targetFolder.Files.Add(fileCreationInfo);
@@ -1552,34 +1573,64 @@ namespace SPUtil.Services
                             // which bypasses the "field is read-only" guard on the server side.
                             // This still requires the account to have at least Manage Lists permission.
                             // Falls back to plain Update() (dates become "now") if the server rejects it.
+                            // ── Step 3d: Preserve Author, Editor, Created, Modified ──
                             var listItem = uploadedFile.ListItemAllFields;
 
-                            // Build the list of field values to push
+                            // Используем список ListItemFormUpdateValue для обхода системных ограничений
                             var formValues = new List<ListItemFormUpdateValue>();
+                            listItem["Created"] = item["Created"];
+                            listItem["Modified"] = item["Modified"];
+                            listItem["Author"] = item["Author"];
+                            listItem["Editor"] = item["Editor"];
+                            
 
+                            // 1. Обработка дат (обязательно в формате ISO с Z в конце)
+                            /*
+                            if (item["Created"] is DateTime createdDt)
+                            {
+                                formValues.Add(new ListItemFormUpdateValue
+                                {
+                                    FieldName = "Created",
+                                    FieldValue = createdDt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                                });
+                            }
+                            
+                            if (item["Modified"] is DateTime modifiedDt)
+                            {
+                                formValues.Add(new ListItemFormUpdateValue
+                                {
+                                    FieldName = "Modified",
+                                    FieldValue = modifiedDt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                                });
+                            }
+
+                            // 2. Обработка Автора и Редактора
+                            // ВНИМАНИЕ: На целевом сайте ID пользователей другие! 
+                            // Лучше всего использовать Email для поиска через EnsureUser, как мы обсуждали ранее.
                             if (item["Author"] is FieldUserValue authorVal)
-                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Author", FieldValue = authorVal.LookupId.ToString() });
+                            {
+                                // Упрощенный вариант (если домены совпадают):
+                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Author", FieldValue = authorVal.LookupValue });
+                            }
 
                             if (item["Editor"] is FieldUserValue editorVal)
-                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Editor", FieldValue = editorVal.LookupId.ToString() });
-
-                            if (item["Created"] is DateTime createdDt)
-                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Created", FieldValue = createdDt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") });
-
-                            if (item["Modified"] is DateTime modifiedDt)
-                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Modified", FieldValue = modifiedDt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") });
-
+                            {
+                                formValues.Add(new ListItemFormUpdateValue { FieldName = "Editor", FieldValue = editorVal.LookupValue });
+                            }
+                            */
                             try
                             {
-                                // bNewDocumentUpdate=true tells SharePoint to treat this as a
-                                // document-upload update and allow writing system fields.
-                                listItem.ValidateUpdateListItem(formValues, true, string.Empty);
+                                // КЛЮЧЕВОЙ МОМЕНТ:
+                                // bNewDocumentUpdate = true позволяет записывать в Read-Only поля (Created/Modified)
+                                //listItem.ValidateUpdateListItem(formValues, true, "Preserving metadata");
+                                listItem.Update();
                                 await Task.Run(() => targetCtx.ExecuteQuery());
+                                
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                // Insufficient permissions — fall back to a plain metadata update.
-                                // Author/Editor/Created/Modified will reflect the current user/time.
+                                System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Failed to preserve dates: {ex.Message}");
+                                // Fallback: просто обновляем метаданные (даты будут текущими)
                                 listItem.Update();
                                 await Task.Run(() => targetCtx.ExecuteQuery());
                             }
@@ -1588,8 +1639,8 @@ namespace SPUtil.Services
                             progress?.Report(new CopyProgressArgs
                             {
                                 Processed = processed,
-                                Total     = totalFiles,
-                                Message   = $"Copied: {leafRef} ({processed}/{totalFiles})"
+                                Total = totalFiles,
+                                Message = $"Copied: {leafRef} ({processed}/{totalFiles})"
                             });
                             System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] OK: {targetPath}");
                         }
@@ -1600,8 +1651,8 @@ namespace SPUtil.Services
                             progress?.Report(new CopyProgressArgs
                             {
                                 Processed = processed,
-                                Total     = totalFiles,
-                                Message   = $"ERROR uploading: {leafRef} — {ex.Message}"
+                                Total = totalFiles,
+                                Message = $"ERROR uploading: {leafRef} — {ex.Message}"
                             });
                         }
                     }
@@ -1611,7 +1662,8 @@ namespace SPUtil.Services
                 System.Diagnostics.Debug.WriteLine($"[DOCLIB_COPY] Done. {processed}/{totalFiles} files processed.");
 
             }, ct);
-        }		
+        }
+
         public async Task CopyListItemsAsync(
 			string sourceUrl, 
 			string targetUrl, 
