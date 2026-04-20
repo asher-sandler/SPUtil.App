@@ -311,28 +311,57 @@ namespace SPUtil.Services
 			return await Task.Run(async () =>
 			{
 				using var context = await GetContextAsync(siteUrl);
-				// Получаем файл и его WebPartManager
-				var file = context.Web.GetFileByServerRelativeUrl(fileRelativeUrl);
-				var wpm = file.GetLimitedWebPartManager(PersonalizationScope.Shared);
 
+				var file = context.Web.GetFileByServerRelativeUrl(fileRelativeUrl);
+				var wpm  = file.GetLimitedWebPartManager(PersonalizationScope.Shared);
+
+				// Load both definition-level fields (Id = StorageKey, ZoneId)
+				// and WebPart-level fields (Title, Properties, Hidden type name).
 				context.Load(wpm.WebParts, wps => wps.Include(
-					wp => wp.WebPart.Title,
-					wp => wp.WebPart.Properties,
-					wp => wp.Id));
+					d => d.Id,                  // StorageKey — matches div_GUID in page HTML
+					d => d.ZoneId,              // zone where the WebPart physically lives
+					d => d.WebPart.Title,
+					d => d.WebPart.Hidden,
+					d => d.WebPart.Properties   // all configurable properties
+				));
 				context.ExecuteQuery();
 
 				var result = new List<SPWebPartData>();
-				foreach (var wpDefinition in wpm.WebParts)
+
+				foreach (var definition in wpm.WebParts)
 				{
+					// Resolve the concrete .NET type name from the Properties bag.
+					// SharePoint stores it under the key "_webPartType" or as the
+					// class name in the underlying XML — Properties["_type"] is the
+					// most reliable key available via CSOM without server-side access.
+					string typeName = string.Empty;
+					if (definition.WebPart.Properties.FieldValues
+							.TryGetValue("_webPartType", out var t) && t != null)
+						typeName = t.ToString()!;
+
+					var props = definition.WebPart.Properties.FieldValues
+						.ToDictionary(
+							kv => kv.Key,
+							kv => kv.Value?.ToString() ?? "");
+
 					var wp = new SPWebPartData
 					{
-						Title = wpDefinition.WebPart.Title,
-						Id = wpDefinition.Id.ToString(),
-						Properties = wpDefinition.WebPart.Properties.FieldValues
-									 .ToDictionary(k => k.Key, v => v.Value?.ToString() ?? "null")
+						// StorageKey = definition.Id  ← GUID used in ms-rte-wpbox divs
+						StorageKey = definition.Id.ToString("D"),
+
+						// Id = the WebPart object's own instance identifier
+						Id      = props.TryGetValue("ID", out var id) ? id : definition.Id.ToString("D"),
+
+						Title   = definition.WebPart.Title,
+						Type    = typeName,
+						ZoneId  = definition.ZoneId,
+
+						Properties = props
 					};
+
 					result.Add(wp);
 				}
+
 				return result;
 			});
 		}

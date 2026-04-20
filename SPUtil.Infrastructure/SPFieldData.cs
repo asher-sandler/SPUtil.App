@@ -27,12 +27,25 @@ namespace SPUtil.Infrastructure
 
     public class SPWebPartData
     {
-        public string Title { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty;
+        /// <summary>
+        /// WebPart instance object ID — internal identifier within the WebPart object model.
+        /// Comes from WebPart.Id (not the same as StorageKey).
+        /// </summary>
         public string Id { get; set; } = string.Empty;
+
+        /// <summary>
+        /// StorageKey — the GUID that SharePoint writes into the ms-rte-wpbox placeholder
+        /// inside PublishingPageContent. This is WebPartDefinition.Id, NOT WebPart.Id.
+        /// Use this to match a WebPart in Properties output to a div in the page HTML.
+        /// </summary>
+        public string StorageKey { get; set; } = string.Empty;
+
+        public string Title { get; set; } = string.Empty;
+        public string Type  { get; set; } = string.Empty;
+        public string ZoneId { get; set; } = string.Empty;
+
         public Dictionary<string, string> Properties { get; set; } = new();
     }
-
 	public class FieldInfo
 	{
 		public string Id { get; set; } = string.Empty;

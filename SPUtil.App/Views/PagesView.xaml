@@ -1,53 +1,114 @@
 ﻿<UserControl x:Class="SPUtil.App.Views.PagesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d" d:DesignHeight="600" d:DesignWidth="800">
+
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" /> <RowDefinition Height="Auto" /> <RowDefinition Height="*" />    <RowDefinition Height="5" />    <RowDefinition Height="*" />    <RowDefinition Height="Auto" /> </Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />  <!-- Row 0: toolbar -->
+            <RowDefinition Height="Auto" />  <!-- Row 1: status -->
+            <RowDefinition Height="*"    />  <!-- Row 2: pages grid -->
+            <RowDefinition Height="5"    />  <!-- Row 3: splitter -->
+            <RowDefinition Height="*"    />  <!-- Row 4: webparts grid -->
+            <RowDefinition Height="Auto" />  <!-- Row 5: (reserved) -->
+        </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" 
-                Background="#F5F5F5" 
-                BorderBrush="#CCCCCC" 
-                BorderThickness="0,0,0,1" 
+        <!-- ═══════════════════════════════════════════════════════════════════
+             Row 0 — Toolbar  (visible in Source mode only)
+        ════════════════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0"
+                Background="#F5F5F5"
+                BorderBrush="#CCCCCC"
+                BorderThickness="0,0,0,1"
                 Visibility="{Binding IsSourceMode, Converter={StaticResource BooleanToVisibilityConverter}}"
                 Padding="5"
                 Margin="0,0,0,10">
+
             <StackPanel Orientation="Horizontal">
-                <Button  Command="{Binding GetAllPropertiesCommand}" 
-                        Background="Transparent" 
-                        BorderBrush="Transparent" 
+
+                <!-- Existing: dump all properties to Output window -->
+                <Button Command="{Binding GetAllPropertiesCommand}"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
                         Cursor="Hand">
                     <Button.ToolTip>
-                        <ToolTip  Content="Вывести все Properties в лог (Output)" />
+                        <ToolTip Content="Вывести все Properties в лог (Output)" />
                     </Button.ToolTip>
- 						
-					<TextBlock Text="&#xE8FD;" Style="{StaticResource IconText}" Foreground="#107C10"/>
-						
+                    <TextBlock Text="&#xE8FD;"
+                               Style="{StaticResource IconText}"
+                               Foreground="#107C10"/>
                 </Button>
+
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- NEW: open UniversalPreviewWindow with all WebPart properties -->
+                <Button Command="{Binding ShowWebPartsPreviewCommand}"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        Cursor="Hand">
+                    <Button.ToolTip>
+                        <ToolTip Content="Открыть все свойства WebParts в окне предпросмотра (с копированием в буфер)" />
+                    </Button.ToolTip>
+                    <!-- Segoe MDL2: E7C3 = Preview / RedEye -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE7C3;"
+                                   Style="{StaticResource IconText}"
+                                   Foreground="#2B579A"/>
+                        <TextBlock Text=" Preview"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="#2B579A"
+                                   Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
             </StackPanel>
         </Border>
 
-        <TextBlock Grid.Row="1" Text="{Binding StatusMessage}" Foreground="DarkBlue" Margin="0,0,0,5" FontWeight="Bold"/>
+        <!-- Row 1 — Status -->
+        <TextBlock Grid.Row="1"
+                   Text="{Binding StatusMessage}"
+                   Foreground="DarkBlue"
+                   Margin="0,0,0,5"
+                   FontWeight="Bold"/>
 
-        <DataGrid Grid.Row="2" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}" 
-                  AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Background="White">
+        <!-- Row 2 — Pages list -->
+        <DataGrid Grid.Row="2"
+                  ItemsSource="{Binding Pages}"
+                  SelectedItem="{Binding SelectedPage}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  IsReadOnly="True"
+                  Background="White">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Имя" Binding="{Binding Name}" Width="250" />
-                <DataGridTextColumn Header="Путь" Binding="{Binding RelativeUrl}" Width="*" />
+                <DataGridTextColumn Header="Имя"  Binding="{Binding Name}"        Width="250" />
+                <DataGridTextColumn Header="Путь" Binding="{Binding RelativeUrl}"  Width="*"   />
             </DataGrid.Columns>
         </DataGrid>
 
-        <GroupBox Header="Веб-части выбранной страницы" Grid.Row="4">
-            <DataGrid ItemsSource="{Binding WebParts}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Background="White">
+        <!-- Row 3 — Splitter -->
+        <GridSplitter Grid.Row="3"
+                      Height="5"
+                      HorizontalAlignment="Stretch"
+                      Background="#EEE"
+                      Cursor="SizeNS"/>
+
+        <!-- Row 4 — WebParts for the selected page -->
+        <GroupBox Grid.Row="4" Header="Веб-части выбранной страницы">
+            <DataGrid ItemsSource="{Binding WebParts}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      IsReadOnly="True"
+                      Background="White">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Заголовок" Binding="{Binding Title}" Width="200" />
+                    <DataGridTextColumn Header="Тип"       Binding="{Binding Type}"  Width="180" />
                     <DataGridTemplateColumn Header="Свойства (Key: Value)" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
@@ -56,9 +117,13 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal" Margin="2">
-                                                    <TextBlock Text="{Binding Key}" FontWeight="Bold" Foreground="#333" />
-                                                    <TextBlock Text=": " />
-                                                    <TextBlock Text="{Binding Value}" TextWrapping="Wrap" Foreground="#666" />
+                                                    <TextBlock Text="{Binding Key}"
+                                                               FontWeight="Bold"
+                                                               Foreground="#333"/>
+                                                    <TextBlock Text=": "/>
+                                                    <TextBlock Text="{Binding Value}"
+                                                               TextWrapping="Wrap"
+                                                               Foreground="#666"/>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -70,5 +135,6 @@
                 </DataGrid.Columns>
             </DataGrid>
         </GroupBox>
+
     </Grid>
 </UserControl>
