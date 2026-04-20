@@ -564,10 +564,22 @@ namespace SPUtil.App.ViewModels
                     }
                     else if (templateId == 850 || templateId == 119) // Страницы (Site Pages / Wiki)
                     {
-                        var vm = _container.Resolve<PagesViewModel>();
+
+						var vm = _container.Resolve<PagesViewModel>();
 						vm.IsSourceMode = isLeftPane;
-                        await vm.LoadDataAsync(siteUrl, node.Path);
-                        newView = vm;
+
+						// Give the VM access to the target site URL so CopyPageCommand knows
+						// where to copy. Source (left) pane targets the right site, and vice-versa.
+						// isLeftPane=true  → source is left  → target is RightSiteUrl
+						// isLeftPane=false → source is right → target is LeftSiteUrl  (less common)
+						vm.SetTargetSiteUrl(isLeftPane
+							? SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl)
+							: SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(LeftSiteUrl));
+
+						await vm.LoadDataAsync(siteUrl, node.Path);
+						newView = vm;
+
+
                     }
                     else 
                     {

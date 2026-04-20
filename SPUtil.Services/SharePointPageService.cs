@@ -31,12 +31,15 @@ namespace SPUtil.Services
             string hostRoot = "https://" + new Uri(siteUrl).Host;
             string fullUrl  = hostRoot + pageRelativeUrl;
 
+            // NormalizeUrl removes the trailing "2" from the host (portals2 → portals)
+            // so the request goes through the correct network path instead of the proxy.
+            fullUrl = SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(fullUrl);
+
             var handler = new System.Net.Http.HttpClientHandler
             {
                 Credentials = GetCredentials()
             };
             using var http = new System.Net.Http.HttpClient(handler);
-            // Request the page in display mode (no edit toolbar noise)
             http.DefaultRequestHeaders.Add("Accept", "text/html");
 
             var response = await http.GetAsync(fullUrl);
@@ -138,6 +141,37 @@ namespace SPUtil.Services
             {
                 // Already checked out by us — continue
             }
+            catch (ServerException ex) when (
+                ex.Message.Contains("checked out for editing") ||
+                ex.Message.Contains("is checked out"))
+            {
+                // Checked out by another user — load file to get checkout info,
+                // then take over by discarding their checkout (requires Manage Lists permission)
+                System.Diagnostics.Debug.WriteLine(
+                    $"[SafeCheckOut] File checked out by another user: {ex.Message}");
+                try
+                {
+                    ctx.Load(file, f => f.CheckOutType);
+                    await Task.Run(() => ctx.ExecuteQuery());
+
+                    if (file.CheckOutType != CheckOutType.None)
+                    {
+                        file.UndoCheckOut();
+                        await Task.Run(() => ctx.ExecuteQuery());
+                    }
+
+                    // Now check out for ourselves
+                    file.CheckOut();
+                    await Task.Run(() => ctx.ExecuteQuery());
+                }
+                catch (Exception innerEx)
+                {
+                    throw new InvalidOperationException(
+                        $"File is checked out by another user and cannot be taken over automatically.\n" +
+                        $"Please ask the user to check it in, or check it in manually via SharePoint UI.\n" +
+                        $"Details: {innerEx.Message}", innerEx);
+                }
+            }
         }
 
         /// <summary>
@@ -215,6 +249,11 @@ namespace SPUtil.Services
                 // ── C: Fetch rendered HTML to get webpartid / webpartid2 mapping ──
                 string renderedHtml = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
                 var zoneKeyToStorageKey = ParseZoneKeyToStorageKey(renderedHtml);
+
+                // ── DIAGNOSTICS ──────────────────────────────────────────────
+                System.Diagnostics.Debug.WriteLine($"[SNAPSHOT] RenderedHtml length: {renderedHtml.Length}");
+                System.Diagnostics.Debug.WriteLine($"[SNAPSHOT] HTML first 500 chars:\n{renderedHtml.Substring(0, Math.Min(500, renderedHtml.Length))}");
+                System.Diagnostics.Debug.WriteLine($"[SNAPSHOT] zoneKeyToStorageKey count: {zoneKeyToStorageKey.Count}");
 
                 // ── D: Extract visual order from PublishingContent ──
                 var zoneKeysInOrder = ParseZoneKeysInOrder(snapshot.PublishingHtml);
@@ -296,12 +335,18 @@ namespace SPUtil.Services
             string pageRelativeUrl,
             string storageKey)
         {
-            // exportwp.aspx endpoint — returns .webpart XML for a specific WebPart
             string hostRoot  = "https://" + new Uri(siteUrl).Host;
+            string pageUrl   = hostRoot + pageRelativeUrl;
+
+            // Normalize both URLs before building the export endpoint
+            string normalizedSiteUrl = SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(siteUrl);
+            string normalizedPageUrl = SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(pageUrl);
+
             string exportUrl =
-                $"{hostRoot}{new Uri(siteUrl).AbsolutePath.TrimEnd('/')}/" +
+                $"{new Uri(normalizedSiteUrl).GetLeftPart(UriPartial.Authority)}" +
+                $"{new Uri(normalizedSiteUrl).AbsolutePath.TrimEnd('/')}/" +
                 $"_vti_bin/exportwp.aspx" +
-                $"?pageurl={Uri.EscapeDataString(hostRoot + pageRelativeUrl)}" +
+                $"?pageurl={Uri.EscapeDataString(normalizedPageUrl)}" +
                 $"&guidstring={Uri.EscapeDataString(storageKey)}";
 
             var handler = new System.Net.Http.HttpClientHandler
@@ -858,6 +903,14 @@ namespace SPUtil.Services
                 listItem.Update();
                 await Task.Run(() => ctx.ExecuteQuery());
 
+                // AddPublishingPage leaves the page in auto-checkout state.
+                // CheckIn immediately to release the lock cleanly.
+                var freshFile = ctx.Web.GetFileByServerRelativeUrl(newPageRelUrl);
+                ctx.Load(freshFile);
+                await Task.Run(() => ctx.ExecuteQuery());
+                freshFile.CheckIn("Initial creation", CheckinType.MajorCheckIn);
+                await Task.Run(() => ctx.ExecuteQuery());
+
                 System.Diagnostics.Debug.WriteLine(
                     $"[CreatePage] Page created: {newPageRelUrl}");
 
@@ -899,19 +952,25 @@ namespace SPUtil.Services
                 foreach (var kv in oldZoneKeyToNew)
                     newHtml = newHtml.Replace(kv.Key, kv.Value, StringComparison.OrdinalIgnoreCase);
 
-                using var ctx2 = await GetContextAsync(targetSiteUrl);
-                var pageFile2  = ctx2.Web.GetFileByServerRelativeUrl(newPageRelUrl);
+                using var ctx2    = await GetContextAsync(targetSiteUrl);
+                var pageFile2     = ctx2.Web.GetFileByServerRelativeUrl(newPageRelUrl);
                 ctx2.Load(pageFile2, f => f.ListItemAllFields);
                 await Task.Run(() => ctx2.ExecuteQuery());
 
-                await SafeCheckOutAsync(ctx2, pageFile2);
+                // Page was checked in above — now check it out cleanly for editing
+                pageFile2.CheckOut();
+                await Task.Run(() => ctx2.ExecuteQuery());
+
+                ctx2.Load(pageFile2.ListItemAllFields);
+                await Task.Run(() => ctx2.ExecuteQuery());
 
                 var fields2 = pageFile2.ListItemAllFields;
                 fields2["PublishingPageContent"] = newHtml;
                 fields2.Update();
                 await Task.Run(() => ctx2.ExecuteQuery());
 
-                await CheckInAndPublishAsync(ctx2, pageFile2, $"Created from snapshot of {snapshot.PageRelativeUrl}");
+                await CheckInAndPublishAsync(ctx2, pageFile2,
+                    $"Created from snapshot of {snapshot.PageRelativeUrl}");
 
                 System.Diagnostics.Debug.WriteLine(
                     $"[CreatePage] Done. {inContent.Count} WebParts placed.");

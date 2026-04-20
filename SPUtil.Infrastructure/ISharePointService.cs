@@ -83,7 +83,6 @@ namespace SPUtil.Services
 
 		// ═══════════════════════════════════════════════════════════════════════════════
 		//  ISharePointService — расширение для операций со страницами и WebParts
-		//  Добавить эти методы в существующий интерфейс ISharePointService.cs
 		// ═══════════════════════════════════════════════════════════════════════════════
 
 		// ── 1. Чтение ────────────────────────────────────────────────────────────────
@@ -250,6 +249,16 @@ namespace SPUtil.Services
 		/// Используется для массового клонирования или аудита.
 		/// </summary>
 		Task<List<PageSnapshot>> GetAllPagesSnapshotsAsync(string siteUrl);
+        Task<bool> PageExistsAsync(string siteUrl, string pageName);
+
+        /// <summary>Deletes a Publishing page by name. Discards checkout before deletion.</summary>
+        Task DeletePageAsync(string siteUrl, string pageName);
+
+        /// <summary>
+        /// Renames a Publishing page by changing its FileLeafRef (filename).
+        /// The Title field is left unchanged.
+        /// </summary>
+        Task RenamePageAsync(string siteUrl, string currentName, string newName);
 
 
     }

@@ -11,105 +11,96 @@
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />  <!-- Row 0: toolbar -->
-            <RowDefinition Height="Auto" />  <!-- Row 1: status -->
-            <RowDefinition Height="*"    />  <!-- Row 2: pages grid -->
-            <RowDefinition Height="5"    />  <!-- Row 3: splitter -->
-            <RowDefinition Height="*"    />  <!-- Row 4: webparts grid -->
-            <RowDefinition Height="Auto" />  <!-- Row 5: (reserved) -->
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*"    />
+            <RowDefinition Height="5"    />
+            <RowDefinition Height="*"    />
         </Grid.RowDefinitions>
 
-        <!-- ═══════════════════════════════════════════════════════════════════
-             Row 0 — Toolbar  (visible in Source mode only)
-        ════════════════════════════════════════════════════════════════════════ -->
         <Border Grid.Row="0"
-                Background="#F5F5F5"
-                BorderBrush="#CCCCCC"
-                BorderThickness="0,0,0,1"
+                Background="#F5F5F5" BorderBrush="#CCCCCC" BorderThickness="0,0,0,1"
                 Visibility="{Binding IsSourceMode, Converter={StaticResource BooleanToVisibilityConverter}}"
-                Padding="5"
-                Margin="0,0,0,10">
-
+                Padding="5" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal">
 
-                <!-- Existing: dump all properties to Output window -->
                 <Button Command="{Binding GetAllPropertiesCommand}"
-                        Background="Transparent"
-                        BorderBrush="Transparent"
-                        Cursor="Hand">
-                    <Button.ToolTip>
-                        <ToolTip Content="Вывести все Properties в лог (Output)" />
-                    </Button.ToolTip>
-                    <TextBlock Text="&#xE8FD;"
-                               Style="{StaticResource IconText}"
-                               Foreground="#107C10"/>
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Вывести все Properties в лог (Output)">
+                    <TextBlock Text="&#xE8FD;" Style="{StaticResource IconText}" Foreground="#107C10"/>
                 </Button>
 
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
-                <!-- NEW: open UniversalPreviewWindow with all WebPart properties -->
                 <Button Command="{Binding ShowWebPartsPreviewCommand}"
-                        Background="Transparent"
-                        BorderBrush="Transparent"
-                        Cursor="Hand">
-                    <Button.ToolTip>
-                        <ToolTip Content="Открыть все свойства WebParts в окне предпросмотра (с копированием в буфер)" />
-                    </Button.ToolTip>
-                    <!-- Segoe MDL2: E7C3 = Preview / RedEye -->
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Открыть все свойства WebParts в окне предпросмотра">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE7C3;"
-                                   Style="{StaticResource IconText}"
-                                   Foreground="#2B579A"/>
-                        <TextBlock Text=" Preview"
-                                   VerticalAlignment="Center"
-                                   FontSize="12"
-                                   Foreground="#2B579A"
-                                   Margin="3,0,0,0"/>
+                        <TextBlock Text="&#xE7C3;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
+                        <TextBlock Text=" Preview" VerticalAlignment="Center" FontSize="12" Foreground="#2B579A" Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- Copy Page to target site -->
+                <Button Command="{Binding CopyPageCommand}"
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Copy selected page to target site (right pane)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}" Foreground="#0066CC"/>
+                        <TextBlock Text=" Copy Page" VerticalAlignment="Center" FontSize="12" Foreground="#0066CC" Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- Rename Page -->
+                <Button Command="{Binding RenamePageCommand}"
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Rename selected page (changes filename, not Title)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8AC;" Style="{StaticResource IconText}" Foreground="#6B2D8B"/>
+                        <TextBlock Text=" Rename" VerticalAlignment="Center" FontSize="12" Foreground="#6B2D8B" Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- Delete Page -->
+                <Button Command="{Binding DeletePageCommand}"
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Delete selected page permanently">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE74D;" Style="{StaticResource IconText}" Foreground="#A80000"/>
+                        <TextBlock Text=" Delete" VerticalAlignment="Center" FontSize="12" Foreground="#A80000" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>
 
             </StackPanel>
         </Border>
 
-        <!-- Row 1 — Status -->
-        <TextBlock Grid.Row="1"
-                   Text="{Binding StatusMessage}"
-                   Foreground="DarkBlue"
-                   Margin="0,0,0,5"
-                   FontWeight="Bold"/>
+        <TextBlock Grid.Row="1" Text="{Binding StatusMessage}"
+                   Foreground="DarkBlue" Margin="0,0,0,5" FontWeight="Bold"/>
 
-        <!-- Row 2 — Pages list -->
-        <DataGrid Grid.Row="2"
-                  ItemsSource="{Binding Pages}"
-                  SelectedItem="{Binding SelectedPage}"
-                  AutoGenerateColumns="False"
-                  CanUserAddRows="False"
-                  IsReadOnly="True"
-                  Background="White">
+        <DataGrid Grid.Row="2" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}"
+                  AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Background="White">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Имя"  Binding="{Binding Name}"        Width="250" />
-                <DataGridTextColumn Header="Путь" Binding="{Binding RelativeUrl}"  Width="*"   />
+                <DataGridTextColumn Header="Имя"  Binding="{Binding Name}"       Width="250" />
+                <DataGridTextColumn Header="Путь" Binding="{Binding RelativeUrl}" Width="*"   />
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Row 3 — Splitter -->
-        <GridSplitter Grid.Row="3"
-                      Height="5"
-                      HorizontalAlignment="Stretch"
-                      Background="#EEE"
-                      Cursor="SizeNS"/>
+        <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch" Background="#EEE" Cursor="SizeNS"/>
 
-        <!-- Row 4 — WebParts for the selected page -->
         <GroupBox Grid.Row="4" Header="Веб-части выбранной страницы">
-            <DataGrid ItemsSource="{Binding WebParts}"
-                      AutoGenerateColumns="False"
-                      CanUserAddRows="False"
-                      IsReadOnly="True"
-                      Background="White">
+            <DataGrid ItemsSource="{Binding WebParts}" AutoGenerateColumns="False"
+                      CanUserAddRows="False" IsReadOnly="True" Background="White">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Заголовок" Binding="{Binding Title}" Width="200" />
-                    <DataGridTextColumn Header="Тип"       Binding="{Binding Type}"  Width="180" />
-                    <DataGridTemplateColumn Header="Свойства (Key: Value)" Width="*">
+                    <DataGridTextColumn Header="Заголовок"  Binding="{Binding Title}"      Width="200" />
+                    <DataGridTextColumn Header="Тип"        Binding="{Binding Type}"       Width="150" />
+                    <DataGridTextColumn Header="StorageKey" Binding="{Binding StorageKey}" Width="270" />
+                    <DataGridTemplateColumn Header="Свойства" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
@@ -117,13 +108,9 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal" Margin="2">
-                                                    <TextBlock Text="{Binding Key}"
-                                                               FontWeight="Bold"
-                                                               Foreground="#333"/>
+                                                    <TextBlock Text="{Binding Key}" FontWeight="Bold" Foreground="#333"/>
                                                     <TextBlock Text=": "/>
-                                                    <TextBlock Text="{Binding Value}"
-                                                               TextWrapping="Wrap"
-                                                               Foreground="#666"/>
+                                                    <TextBlock Text="{Binding Value}" TextWrapping="Wrap" Foreground="#666"/>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -135,6 +122,5 @@
                 </DataGrid.Columns>
             </DataGrid>
         </GroupBox>
-
     </Grid>
 </UserControl>

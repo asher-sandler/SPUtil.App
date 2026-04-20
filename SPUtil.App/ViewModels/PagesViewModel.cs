@@ -14,8 +14,9 @@ namespace SPUtil.App.ViewModels
     public class PagesViewModel : BindableBase
     {
         private readonly ISharePointService _spService;
-        private string _siteUrl      = string.Empty;
-        private string _statusMessage = "Готов";
+        private string  _siteUrl       = string.Empty;
+        private string  _targetSiteUrl = string.Empty;
+        private string  _statusMessage = "Готов";
         private ObservableCollection<SPFileData>    _pages    = new();
         private ObservableCollection<SPWebPartData> _webParts = new();
         private SPFileData? _selectedPage;
@@ -63,59 +64,43 @@ namespace SPUtil.App.ViewModels
             }
         }
 
-        // ── Commands ─────────────────────────────────────────────────────────
+        // ── Commands ──────────────────────────────────────────────────────────
         public DelegateCommand GetAllPropertiesCommand    { get; }
-
-        /// <summary>
-        /// Opens UniversalPreviewWindow with all WebPart properties for the
-        /// currently selected page. The window also has a "Copy all" button
-        /// that copies the formatted text to the clipboard.
-        /// </summary>
         public DelegateCommand ShowWebPartsPreviewCommand { get; }
+        public DelegateCommand CopyPageCommand            { get; }
+        public DelegateCommand DeletePageCommand          { get; }
+        public DelegateCommand RenamePageCommand          { get; }
 
         public PagesViewModel(ISharePointService spService)
         {
             _spService = spService;
 
-            // Original command — keeps writing to Output window
             GetAllPropertiesCommand = new DelegateCommand(() =>
             {
                 Debug.WriteLine($">>> [Pages] {WebParts.Count} web parts for '{SelectedPage?.Name}'");
                 foreach (var wp in WebParts)
                 {
-                    Debug.WriteLine($"WebPart: {wp.Title} ({wp.Id})  Type: {wp.Type}");
+                    Debug.WriteLine($"WebPart: {wp.Title} ({wp.StorageKey})");
                     foreach (var prop in wp.Properties)
                         Debug.WriteLine($"   {prop.Key}: {prop.Value}");
                 }
                 StatusMessage = "Данные свойств выведены в Output";
             });
 
-            // New command — opens UniversalPreviewWindow
             ShowWebPartsPreviewCommand = new DelegateCommand(() =>
             {
                 if (SelectedPage == null)
                 {
-                    MessageBox.Show(
-                        "Выберите страницу в списке сверху.",
-                        "Нет выбранной страницы",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    MessageBox.Show("Выберите страницу в списке сверху.",
+                        "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
-
                 if (!WebParts.Any())
                 {
-                    MessageBox.Show(
-                        "На выбранной странице нет веб-частей или они ещё не загружены.",
-                        "Нет веб-частей",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    MessageBox.Show("На выбранной странице нет веб-частей или они ещё не загружены.",
+                        "Нет веб-частей", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
-
-                // Create the preview window and its own ViewModel.
-                // We pass the window reference into the VM so the "Close" button
-                // can close exactly this instance without searching Application.Windows.
                 var win = new SPUtil.App.Views.UniversalPreviewWindow
                 {
                     Title  = $"WebParts — {SelectedPage.Name}",
@@ -123,18 +108,252 @@ namespace SPUtil.App.ViewModels
                     Width  = 1000,
                     Height = 680
                 };
-
-                var vm = new WebPartsPreviewViewModel(
-                    webParts:    WebParts,
-                    pageTitle:   SelectedPage.Name,
-                    ownerWindow: win);
-
+                var vm = new WebPartsPreviewViewModel(WebParts, SelectedPage.Name, win);
                 win.DataContext = vm;
                 win.ShowDialog();
             });
+
+            CopyPageCommand   = new DelegateCommand(async () => await ExecuteCopyPageAsync());
+            DeletePageCommand = new DelegateCommand(async () => await ExecuteDeletePageAsync());
+            RenamePageCommand = new DelegateCommand(async () => await ExecuteRenamePageAsync());
         }
 
-        // ── Data loading ─────────────────────────────────────────────────────
+        // ── Called by MainWindowViewModel after creating this VM ──────────────
+        public void SetTargetSiteUrl(string url) => _targetSiteUrl = url;
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Copy Page
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task ExecuteCopyPageAsync()
+        {
+            if (SelectedPage == null)
+            {
+                MessageBox.Show("Выберите страницу для копирования.",
+                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (string.IsNullOrEmpty(_targetSiteUrl))
+            {
+                MessageBox.Show("Подключитесь к целевому сайту (правая панель).",
+                    "Нет целевого сайта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string sourceName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
+            string sourceInfo = $"Page : {SelectedPage.Name}\nPath : {SelectedPage.FullPath}\nSite : {_siteUrl}";
+
+            // ── Step 1: Name + conflict resolution dialog ─────────────────────
+            var dialog = new SPUtil.Views.CopyPageDialog(sourceName, _targetSiteUrl, sourceInfo)
+            {
+                Owner = Application.Current.MainWindow
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            string targetName   = dialog.TargetPageName;
+            string existsAction = dialog.ExistsAction;   // "Replace" | "Rename"
+
+            // ── Step 2: Check existence ───────────────────────────────────────
+            var infoWin = new SPUtil.Views.OperationInfoWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            infoWin.Show();
+            infoWin.UpdateMessage("Checking target site...");
+
+            bool exists = await _spService.PageExistsAsync(_targetSiteUrl, targetName);
+
+            if (exists)
+            {
+                if (existsAction == "Rename")
+                {
+                    string oldName = targetName + "_old";
+                    infoWin.UpdateMessage($"Renaming existing '{targetName}' → '{oldName}'...");
+                    try
+                    {
+                        await _spService.RenamePageAsync(_targetSiteUrl, targetName, oldName);
+                    }
+                    catch (Exception ex)
+                    {
+                        infoWin.Close();
+                        MessageBox.Show($"Error renaming existing page:\n{ex.Message}",
+                            "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+                else  // Replace
+                {
+                    infoWin.UpdateMessage($"Deleting existing page '{targetName}'...");
+                    try
+                    {
+                        await _spService.DeletePageAsync(_targetSiteUrl, targetName);
+                    }
+                    catch (Exception ex)
+                    {
+                        infoWin.Close();
+                        MessageBox.Show($"Error deleting existing page:\n{ex.Message}",
+                            "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+            }
+
+            // ── Step 3: Read snapshot from source ─────────────────────────────
+            infoWin.UpdateMessage("Reading source page (layout + WebParts)...");
+            PageSnapshot snapshot;
+            try
+            {
+                snapshot = await _spService.GetPageSnapshotAsync(_siteUrl, SelectedPage.FullPath);
+            }
+            catch (Exception ex)
+            {
+                infoWin.Close();
+                MessageBox.Show($"Error reading source page:\n{ex.Message}",
+                    "Snapshot Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // ── Step 4: Create page on target ─────────────────────────────────
+            int wpCount = snapshot.WebParts.Count(w => w.VisualPosition > 0);
+            infoWin.UpdateMessage(
+                $"Creating '{targetName}' with {wpCount} WebPart(s)...");
+            try
+            {
+                await _spService.CreatePageFromSnapshotAsync(
+                    _targetSiteUrl, targetName, snapshot);
+            }
+            catch (Exception ex)
+            {
+                infoWin.Close();
+                MessageBox.Show($"Error creating target page:\n{ex.Message}",
+                    "Create Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            infoWin.Close();
+            StatusMessage = $"✔ '{targetName}' copied → {_targetSiteUrl}";
+
+            MessageBox.Show(
+                $"Page '{targetName}' created successfully on:\n{_targetSiteUrl}\n\n" +
+                $"WebParts copied: {wpCount}\n\n" +
+                $"⚠ Page permissions must be configured manually on the target site.",
+                "Copy Complete",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Delete Page
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task ExecuteDeletePageAsync()
+        {
+            if (SelectedPage == null)
+            {
+                MessageBox.Show("Выберите страницу для удаления.",
+                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"Delete page '{SelectedPage.Name}'?\n\nThis cannot be undone.",
+                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            var infoWin = new SPUtil.Views.OperationInfoWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            infoWin.Show();
+            infoWin.UpdateMessage($"Deleting '{SelectedPage.Name}'...");
+
+            try
+            {
+                await _spService.DeletePageAsync(_siteUrl, SelectedPage.Name);
+
+                var removed = Pages.FirstOrDefault(p => p.FullPath == SelectedPage.FullPath);
+                if (removed != null) Pages.Remove(removed);
+
+                SelectedPage  = null;
+                StatusMessage = "Page deleted.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Delete error: {ex.Message}";
+                MessageBox.Show($"Error deleting page:\n{ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally { infoWin.Close(); }
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Rename Page
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task ExecuteRenamePageAsync()
+        {
+            if (SelectedPage == null)
+            {
+                MessageBox.Show("Выберите страницу для переименования.",
+                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string currentName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
+
+            var dialog = new SPUtil.Views.CopyPageDialog(
+                currentName, _siteUrl,
+                $"Rename page: {SelectedPage.Name}\nSite: {_siteUrl}")
+            {
+                Title = "Rename Page",
+                Owner = Application.Current.MainWindow
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            string newName = dialog.TargetPageName;
+            if (newName.Equals(currentName, StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show("New name is the same as current.",
+                    "No Change", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var infoWin = new SPUtil.Views.OperationInfoWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            infoWin.Show();
+            infoWin.UpdateMessage($"Renaming '{currentName}' → '{newName}'...");
+
+            try
+            {
+                await _spService.RenamePageAsync(_siteUrl, currentName, newName);
+
+                // Update local collection
+                if (SelectedPage != null)
+                {
+                    SelectedPage.Name     = newName + ".aspx";
+                    SelectedPage.FullPath = SelectedPage.FullPath.Replace(
+                        currentName + ".aspx", newName + ".aspx",
+                        StringComparison.OrdinalIgnoreCase);
+                    // Force grid refresh
+                    var tmp = new ObservableCollection<SPFileData>(Pages);
+                    Pages = tmp;
+                }
+
+                StatusMessage = $"Renamed: {currentName} → {newName}";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Rename error: {ex.Message}";
+                MessageBox.Show($"Error renaming page:\n{ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally { infoWin.Close(); }
+        }
+
+
+        // ── Data loading ──────────────────────────────────────────────────────
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
             _siteUrl = siteUrl;

@@ -1,0 +1,107 @@
+<Window x:Class="SPUtil.Views.CopyPageDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Copy Page — Options"
+        Height="450" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="#F0F0F0">
+
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding" Value="10,2"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,0,0,3"/>
+            <Setter Property="Foreground" Value="#444"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="15,10,15,15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- 0: source info -->
+            <RowDefinition Height="Auto"/>   <!-- 1: target site -->
+            <RowDefinition Height="Auto"/>   <!-- 2: target name -->
+            <RowDefinition Height="Auto"/>   <!-- 3: exists options -->
+            <RowDefinition Height="Auto"/>   <!-- 4: footer -->
+        </Grid.RowDefinitions>
+
+        <!-- Source info -->
+        <GroupBox Grid.Row="0" Header="Source Page" Margin="0,0,0,12" Background="White">
+            <ScrollViewer MaxHeight="80" VerticalScrollBarVisibility="Auto">
+                <TextBox x:Name="TxtInfo"
+                         Margin="8"
+                         TextWrapping="Wrap"
+                         Foreground="#555"
+                         IsReadOnly="True"
+                         BorderThickness="0"
+                         Background="Transparent"/>
+            </ScrollViewer>
+        </GroupBox>
+
+        <!-- Target site URL (read-only) -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <TextBlock Text="Target Site URL:"/>
+            <TextBox x:Name="TxtTargetUrl"
+                     IsReadOnly="True"
+                     Background="#E9E9E9"
+                     BorderBrush="#CCC"
+                     Height="26"
+                     VerticalContentAlignment="Center"
+                     Padding="5,0"/>
+        </StackPanel>
+
+        <!-- Target page name -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,10">
+            <TextBlock Text="Target Page Name (without .aspx):"
+                       FontWeight="SemiBold" Foreground="Black"/>
+            <TextBox x:Name="TxtTargetPageName"
+                     Height="28"
+                     VerticalContentAlignment="Center"
+                     BorderBrush="#0078D7"
+                     Padding="5,0"/>
+        </StackPanel>
+
+        <!-- If page exists options -->
+        <GroupBox Grid.Row="3" Header="If page already exists on target" Margin="0,0,0,16">
+            <StackPanel Margin="8,6,8,6">
+                <RadioButton x:Name="RadioReplace"
+                             Content="Replace — delete existing and create from source"
+                             IsChecked="True"
+                             GroupName="ExistsAction"
+                             Margin="0,0,0,6"
+                             Foreground="#CC4400"
+                             FontSize="12"/>
+                <RadioButton x:Name="RadioRename"
+                             Content="Rename existing first (adds _old suffix), then create"
+                             GroupName="ExistsAction"
+                             FontSize="12"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Footer buttons -->
+        <Border Grid.Row="4"
+                Padding="0,12,0,0"
+                BorderBrush="#DDD"
+                BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Copy Page"
+                        Width="110"
+                        Margin="5,0"
+                        Click="BtnCopy_Click"
+                        IsDefault="True"
+                        Background="#E1F5FE"
+                        BorderBrush="#039BE5"
+                        FontWeight="SemiBold"/>
+                <Button Content="Cancel"
+                        Width="100"
+                        Margin="5,0"
+                        IsCancel="True"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
