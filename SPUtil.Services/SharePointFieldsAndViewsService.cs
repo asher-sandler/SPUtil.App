@@ -1,3 +1,4 @@
+using Microsoft.SharePoint.ApplicationPages.MetaWeblog;
 using Microsoft.SharePoint.Client;
 using Microsoft.SharePoint.Client.WebParts;
 using Microsoft.Win32;
@@ -358,8 +359,17 @@ namespace SPUtil.Services
 					// Здесь должна быть ваша настройка Credentials (Credentials = ...)
 					
 					Microsoft.SharePoint.Client.Web web = ctx.Web;
-					Microsoft.SharePoint.Client.List list =
-                    web.Lists.GetByTitle(listPath);
+
+                    Microsoft.SharePoint.Client.List list;
+
+                    if (Guid.TryParse(listPath, out Guid guid))
+                    {
+                        list = web.Lists.GetById(new Guid(listPath));
+                    }
+                    else
+                    {
+                        list = web.Lists.GetByTitle(listPath);
+                    }
                     //(listPath.Length > 30) 
 					//	? web.Lists.GetById(new Guid(listPath)) 
 					//	: 

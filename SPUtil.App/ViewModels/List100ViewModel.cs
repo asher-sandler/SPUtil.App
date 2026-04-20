@@ -1,125 +1,192 @@
-﻿using Prism.Commands;
+using Prism.Commands;
 using Prism.Mvvm;
 using SPUtil.Services;
-using SPUtil.Infrastructure; 
+using SPUtil.Infrastructure;
 using System.Collections.ObjectModel;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
-using System.Diagnostics; // Добавлено для Debug.WriteLine
+using System.Diagnostics;
 using System;
 
 namespace SPUtil.App.ViewModels
 {
+    /// <summary>
+    /// Tabs available in List100View.
+    /// Passed as CommandParameter to toolbar buttons so each handler
+    /// knows which tab is active at the moment of the click.
+    /// </summary>
+    public enum ListTab
+    {
+        Items,
+        Fields,
+        Views
+    }
+
     public class List100ViewModel : BindableBase
     {
         private readonly ISharePointService _spService;
-        private string _listTitle = string.Empty;
-        private string _statusMessage = "Готов"; // Новое свойство для статуса
-        private ObservableCollection<SPViewData> _views = new();
-        private ObservableCollection<SPFieldData> _fields = new();
 
-        public string ListTitle { get => _listTitle; set => SetProperty(ref _listTitle, value); }
-        
-        // Свойство для отображения статуса в UI
-        public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
+        // ── Data collections ─────────────────────────────────────────────────
+        private ObservableCollection<SPListItemData> _items  = new();
+        private ObservableCollection<SPFieldData>    _fields = new();
+        private ObservableCollection<SPViewData>     _views  = new();
 
-		private ObservableCollection<SPListItemData> _items = new();
-		public ObservableCollection<SPListItemData> Items 
-		{ 
-			get => _items; 
-			set => SetProperty(ref _items, value); 
-		}		
-		// признак что это source
-		private bool _isSourceMode;
-		public bool IsSourceMode 
-		{ 
-			get => _isSourceMode; 
-			set => SetProperty(ref _isSourceMode, value); 
-		}
-        public ObservableCollection<SPFieldData> Fields 
-        { 
-            get => _fields; 
-            set => SetProperty(ref _fields, value); 
+        public ObservableCollection<SPListItemData> Items  { get => _items;  set => SetProperty(ref _items,  value); }
+        public ObservableCollection<SPFieldData>    Fields { get => _fields; set => SetProperty(ref _fields, value); }
+        public ObservableCollection<SPViewData>     Views  { get => _views;  set => SetProperty(ref _views,  value); }
+
+        // ── Scalar state ─────────────────────────────────────────────────────
+        private string     _listTitle     = string.Empty;
+        private string     _statusMessage = "Готов";
+        private bool       _isSourceMode;
+        private SPViewData _selectedView;
+
+        public string     ListTitle     { get => _listTitle;     set => SetProperty(ref _listTitle,     value); }
+        public string     StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
+        public bool       IsSourceMode  { get => _isSourceMode;  set => SetProperty(ref _isSourceMode,  value); }
+        public SPViewData SelectedView  { get => _selectedView;  set => SetProperty(ref _selectedView,  value); }
+
+        // ── Active tab ───────────────────────────────────────────────────────
+        // ActiveTab (enum) is the source of truth.
+        // ActiveTabIndex (int) is what TabControl.SelectedIndex binds to —
+        // changing the tab updates the enum automatically and vice-versa.
+        private ListTab _activeTab = ListTab.Items;
+        public ListTab ActiveTab
+        {
+            get => _activeTab;
+            set
+            {
+                if (SetProperty(ref _activeTab, value))
+                    RaisePropertyChanged(nameof(ActiveTabIndex));
+            }
         }
 
-        public ObservableCollection<SPViewData> Views 
-        { 
-            get => _views; 
-            set => SetProperty(ref _views, value); 
+        public int ActiveTabIndex
+        {
+            get => (int)_activeTab;
+            set => ActiveTab = (ListTab)value;
         }
 
-		private SPViewData _selectedView;
-		public SPViewData SelectedView
-		{
-			get => _selectedView;
-			set => SetProperty(ref _selectedView, value);
-		}
-        // КОМАНДЫ
-        public DelegateCommand CreateOnTargetCommand { get; }
-        public DelegateCommand CopyWithDataCommand { get; }
-        public DelegateCommand CopyViewsCommand { get; }
-        public DelegateCommand CompareCommand { get; }
+        // ── Stored context for Refresh ────────────────────────────────────────
+        private string _lastSiteUrl  = string.Empty;
+        private string _lastListPath = string.Empty;
+
+        // ── Commands ─────────────────────────────────────────────────────────
+        // DelegateCommand<object> — XAML passes CommandParameter="{Binding ActiveTab}"
+        // so the handler receives the ListTab enum value at the moment of the click.
+
+        public DelegateCommand<object> CreateOnTargetCommand { get; }
+        public DelegateCommand<object> CopyWithDataCommand   { get; }
+        public DelegateCommand<object> CopyViewsCommand      { get; }
+        public DelegateCommand<object> CompareCommand        { get; }
+        public DelegateCommand         RefreshCommand        { get; }
 
         public List100ViewModel(ISharePointService spService)
         {
             _spService = spService;
 
-            // Инициализация команд с логированием
-            CreateOnTargetCommand = new DelegateCommand(() => 
+            CreateOnTargetCommand = new DelegateCommand<object>(param =>
             {
-                LogAndStatus("Нажата кнопка: Создать структуру на целевом сайте");
+                var tab = ToTab(param);
+                switch (tab)
+                {
+                    case ListTab.Items:
+                        LogAndStatus("Создать структуру списка на целевом сайте [вкладка: Items]");
+                        break;
+                    case ListTab.Fields:
+                        LogAndStatus("Создать структуру списка на целевом сайте [вкладка: Fields]");
+                        break;
+                    case ListTab.Views:
+                        LogAndStatus("Создать структуру списка на целевом сайте [вкладка: Views]");
+                        break;
+                }
             });
 
-            CopyWithDataCommand = new DelegateCommand(() => 
+            CopyWithDataCommand = new DelegateCommand<object>(param =>
             {
-                LogAndStatus("Нажата кнопка: Копировать вместе с данными");
+                var tab = ToTab(param);
+                switch (tab)
+                {
+                    case ListTab.Items:
+                        LogAndStatus("Копировать структуру + данные [вкладка: Items]");
+                        break;
+                    case ListTab.Fields:
+                        LogAndStatus("Копировать поля на целевой сайт [вкладка: Fields]");
+                        break;
+                    case ListTab.Views:
+                        LogAndStatus("Копировать представления на целевой сайт [вкладка: Views]");
+                        break;
+                }
             });
 
-            CopyViewsCommand = new DelegateCommand(() => 
+            CopyViewsCommand = new DelegateCommand<object>(param =>
             {
-                LogAndStatus("Нажата кнопка: Копировать представления (Views)");
+                var tab = ToTab(param);
+                LogAndStatus($"Копировать представления (Views) [активный таб: {tab}]");
             });
 
-            CompareCommand = new DelegateCommand(() => 
+            CompareCommand = new DelegateCommand<object>(param =>
             {
-                LogAndStatus("Нажата кнопка: Сравнить списки");
+                var tab = ToTab(param);
+                switch (tab)
+                {
+                    case ListTab.Items:
+                        LogAndStatus("Сравнить элементы [вкладка: Items]");
+                        break;
+                    case ListTab.Fields:
+                        LogAndStatus("Сравнить поля [вкладка: Fields]");
+                        break;
+                    case ListTab.Views:
+                        LogAndStatus("Сравнить представления [вкладка: Views]");
+                        break;
+                }
+            });
+
+            RefreshCommand = new DelegateCommand(async () =>
+            {
+                if (!string.IsNullOrEmpty(_lastSiteUrl) && !string.IsNullOrEmpty(_lastListPath))
+                    await LoadDataAsync(_lastSiteUrl, _lastListPath);
             });
         }
 
-        // Вспомогательный метод для лога и статуса
+        // ── Helpers ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Safely converts a CommandParameter (arrives as boxed enum or null) to ListTab.
+        /// Falls back to the current ActiveTab if the cast fails.
+        /// </summary>
+        private ListTab ToTab(object param) =>
+            param is ListTab t ? t : ActiveTab;
+
         private void LogAndStatus(string message)
         {
             StatusMessage = message;
-            Debug.WriteLine($">>> [List100] {DateTime.Now:HH:mm:ss} - {message}");
+            Debug.WriteLine($">>> [List100] {DateTime.Now:HH:mm:ss} — {message}");
         }
 
+        // ── Data loading ─────────────────────────────────────────────────────
         public async Task LoadDataAsync(string siteUrl, string listPath)
         {
+            _lastSiteUrl  = siteUrl;
+            _lastListPath = listPath;
+
             LogAndStatus($"Загрузка данных для списка: {listPath}...");
-            
             Fields.Clear();
             Views.Clear();
 
             string cleanId = listPath.StartsWith("id:") ? listPath.Substring(3) : listPath;
 
+            // ── Fields ──
             try
             {
                 var fieldsData = await _spService.GetListFieldsAsync(siteUrl, cleanId);
                 var result = fieldsData
-                     .Where(f =>
-                         // 1. Разрешаем поля на иврите (начинаются с _x) 
-                         // ИЛИ разрешаем те, что НЕ начинаются с подчеркивания
-                         (f.InternalName.StartsWith("_x") || !f.InternalName.StartsWith("_")) &&
-
-                         // 2. Исключаем технические поля
-                         f.TypeAsString != "Computed" &&
-
-                         // 3. Исключаем конкретные системные ID
-                         f.InternalName != "ContentTypeId" &&
-                         f.InternalName != "Attachments"
-                     )
-                     .ToList();
+                    .Where(f =>
+                        (f.InternalName.StartsWith("_x") || !f.InternalName.StartsWith("_")) &&
+                        f.TypeAsString != "Computed" &&
+                        f.InternalName != "ContentTypeId" &&
+                        f.InternalName != "Attachments")
+                    .ToList();
                 Fields = new ObservableCollection<SPFieldData>(result);
                 LogAndStatus($"Загружено полей: {Fields.Count}");
             }
@@ -128,6 +195,7 @@ namespace SPUtil.App.ViewModels
                 LogAndStatus($"Ошибка загрузки полей: {ex.Message}");
             }
 
+            // ── Views ──
             try
             {
                 var viewsData = await _spService.GetListViewsAsync(siteUrl, cleanId);
@@ -138,28 +206,25 @@ namespace SPUtil.App.ViewModels
                 Debug.WriteLine($"Ошибка вью: {ex.Message}");
             }
 
-
-
-			try
-			{
-				var allItems = await _spService.GetListItemsByIDAsync(siteUrl, cleanId);
-
-				if (allItems.Count > 250)
-				{
-					LogAndStatus($"Внимание: в списке {allItems.Count} элементов. Показаны первые 250.");
-						Items = new ObservableCollection<SPListItemData>(allItems.Take(250));
-				}
-				else
-				{
-					LogAndStatus($"Загружено элементов: {allItems.Count}");
-					Items = new ObservableCollection<SPListItemData>(allItems);
-				}				
-			}
-			catch(Exception ex)
-			{
-               LogAndStatus($"Ошибка загрузки элементов списка: {ex.Message}");
-				
-			}
+            // ── Items ──
+            try
+            {
+                var allItems = await _spService.GetListItemsByIDAsync(siteUrl, cleanId);
+                if (allItems.Count > 250)
+                {
+                    LogAndStatus($"Внимание: в списке {allItems.Count} элементов. Показаны первые 250.");
+                    Items = new ObservableCollection<SPListItemData>(allItems.Take(250));
+                }
+                else
+                {
+                    LogAndStatus($"Элементов: {allItems.Count}  |  Полей: {Fields.Count}  |  Представлений: {Views.Count}");
+                    Items = new ObservableCollection<SPListItemData>(allItems);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAndStatus($"Ошибка загрузки элементов: {ex.Message}");
+            }
         }
     }
 }
