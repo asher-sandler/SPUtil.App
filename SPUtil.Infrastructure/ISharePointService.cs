@@ -58,6 +58,13 @@ namespace SPUtil.Services
         Task<List<SPFileData>> GetLibraryItemsAsync(string siteUrl, string listId);
         Task<List<SPFileData>> GetPageItemsAsync(string siteUrl, string listId);
         Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl);
+
+        /// <summary>
+        /// Same as GetWebPartsAsync but also resolves VisualPosition for each WebPart
+        /// by reading PublishingPageContent and the rendered HTML.
+        /// Use this in PagesViewModel for the bottom WebParts grid.
+        /// </summary>
+        Task<List<SPWebPartData>> GetWebPartsWithPositionAsync(string siteUrl, string fileRelativeUrl);
 		
 		Task<List<string>> GetListSchemaAsync(string siteUrl, string listTitle);
 

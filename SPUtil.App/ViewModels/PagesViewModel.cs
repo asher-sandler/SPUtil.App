@@ -19,7 +19,8 @@ namespace SPUtil.App.ViewModels
         private string  _statusMessage = "Готов";
         private ObservableCollection<SPFileData>    _pages    = new();
         private ObservableCollection<SPWebPartData> _webParts = new();
-        private SPFileData? _selectedPage;
+        private SPFileData?    _selectedPage;
+        private SPWebPartData? _selectedWebPart;
 
         public string StatusMessage
         {
@@ -37,6 +38,13 @@ namespace SPUtil.App.ViewModels
         {
             get => _webParts;
             set => SetProperty(ref _webParts, value);
+        }
+
+        /// <summary>Currently selected WebPart in the bottom grid</summary>
+        public SPWebPartData? SelectedWebPart
+        {
+            get => _selectedWebPart;
+            set => SetProperty(ref _selectedWebPart, value);
         }
 
         private bool _isSourceMode;
@@ -72,6 +80,12 @@ namespace SPUtil.App.ViewModels
         public DelegateCommand RenamePageCommand          { get; }
         public DelegateCommand ComparePageCommand         { get; }
         public DelegateCommand SyncPropertiesCommand      { get; }
+
+        // ── Per-WebPart commands (operate on SelectedWebPart) ─────────────────
+        /// <summary>Compare selected WebPart properties with the same-titled WP on target page</summary>
+        public DelegateCommand CompareWebPartCommand      { get; }
+        /// <summary>Copy properties of selected WebPart to the same-titled WP on target page</summary>
+        public DelegateCommand CopyWebPartPropertiesCommand { get; }
 
         public PagesViewModel(ISharePointService spService)
         {
@@ -120,6 +134,16 @@ namespace SPUtil.App.ViewModels
             RenamePageCommand = new DelegateCommand(async () => await ExecuteRenamePageAsync());
             ComparePageCommand    = new DelegateCommand(async () => await ExecuteComparePageAsync());
             SyncPropertiesCommand = new DelegateCommand(async () => await ExecuteSyncPropertiesAsync());
+
+            CompareWebPartCommand = new DelegateCommand(
+                async () => await ExecuteCompareWebPartAsync(),
+                () => SelectedWebPart != null && !string.IsNullOrEmpty(_targetSiteUrl))
+                .ObservesProperty(() => SelectedWebPart);
+
+            CopyWebPartPropertiesCommand = new DelegateCommand(
+                async () => await ExecuteCopyWebPartPropertiesAsync(),
+                () => SelectedWebPart != null && !string.IsNullOrEmpty(_targetSiteUrl))
+                .ObservesProperty(() => SelectedWebPart);
         }
 
         // ── Called by MainWindowViewModel after creating this VM ──────────────
@@ -535,6 +559,251 @@ namespace SPUtil.App.ViewModels
         }
 
 
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Compare WebPart — shows diff of one WP between source and target page
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task ExecuteCompareWebPartAsync()
+        {
+            if (SelectedWebPart == null || SelectedPage == null) return;
+
+            // Ask which page on target to compare with
+            string sourceName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
+            var dialog = new SPUtil.Views.ComparePageDialog(
+                sourceName, _targetSiteUrl,
+                $"WebPart  : {SelectedWebPart.Title}\nSource   : {SelectedPage.FullPath}\nSite     : {_siteUrl}")
+            {
+                Title = "Compare WebPart — enter target page name",
+                Owner = Application.Current.MainWindow
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            string targetPageName = dialog.TargetPageName;
+
+            var infoWin = new SPUtil.Views.OperationInfoWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            infoWin.Show();
+            infoWin.UpdateMessage("Reading target page snapshot...");
+
+            try
+            {
+                string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName);
+                var targetSnapshot = await _spService.GetPageSnapshotAsync(
+                    _targetSiteUrl, targetRelUrl);
+
+                // Find matching WebPart on target by Title
+                var targetWp = targetSnapshot.WebParts
+                    .OrderBy(w => Math.Abs(w.VisualPosition - SelectedWebPart.VisualPosition))
+                    .FirstOrDefault(w => string.Equals(w.Title, SelectedWebPart.Title,
+                        StringComparison.OrdinalIgnoreCase));
+
+                infoWin.Close();
+
+                if (targetWp == null)
+                {
+                    MessageBox.Show(
+                        $"WebPart '{SelectedWebPart.Title}' not found on target page '{targetPageName}'.\n\n" +
+                        $"Use Copy WebPart Properties to copy its settings after adding it manually.",
+                        "Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Build diff text for this single WebPart
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"=== WebPart Comparison: {SelectedWebPart.Title} ===");
+                sb.AppendLine($"Source : {_siteUrl}{SelectedPage.FullPath}");
+                sb.AppendLine($"Target : {_targetSiteUrl}{targetRelUrl}");
+                sb.AppendLine(new string('═', 70));
+
+                var skipProps = new System.Collections.Generic.HashSet<string>(
+                    System.StringComparer.OrdinalIgnoreCase)
+                {
+                    "AllowClose","AllowConnect","AllowEdit","AllowHide","AllowMinimize",
+                    "AllowZoneChange","AuthorizationFilter","CatalogIconImageUrl",
+                    "ChromeState","ChromeType","Direction","ExportMode","HelpMode",
+                    "HelpUrl","Hidden","ImportErrorMessage","TitleIconImageUrl","TitleUrl"
+                };
+
+                int diffCount = 0;
+                var allKeys = SelectedWebPart.Properties.Keys
+                    .Union(targetWp.Properties.Keys, System.StringComparer.OrdinalIgnoreCase)
+                    .Where(k => !skipProps.Contains(k))
+                    .OrderBy(k => k);
+
+                foreach (var key in allKeys)
+                {
+                    SelectedWebPart.Properties.TryGetValue(key, out var sv); sv ??= "";
+                    targetWp.Properties.TryGetValue(key, out var tv);        tv ??= "";
+
+                    if (!string.Equals(sv, tv, System.StringComparison.Ordinal))
+                    {
+                        diffCount++;
+                        sb.AppendLine();
+                        sb.AppendLine($"✏ {key}");
+                        sb.AppendLine($"  source: {(string.IsNullOrEmpty(sv) ? "(empty)" : sv)}");
+                        sb.AppendLine($"  target: {(string.IsNullOrEmpty(tv) ? "(empty)" : tv)}");
+                    }
+                }
+
+                if (diffCount == 0)
+                    sb.AppendLine("\n✔ WebPart properties are IDENTICAL.");
+                else
+                    sb.AppendLine($"\nTotal differences: {diffCount}");
+
+                // Show in preview window
+                var win = new SPUtil.App.Views.UniversalPreviewWindow
+                {
+                    Title  = $"WP Compare: {SelectedWebPart.Title}",
+                    Owner  = Application.Current.MainWindow,
+                    Width  = 900,
+                    Height = 620
+                };
+                var vm = new WebPartsPreviewViewModel(
+                    new System.Collections.Generic.List<SPWebPartData>(),
+                    SelectedWebPart.Title, win);
+                // Override PreviewText directly
+                vm.PreviewText = sb.ToString();
+                win.DataContext = vm;
+                win.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                infoWin.Close();
+                MessageBox.Show($"Compare error:\n{ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Copy WebPart Properties — copies settings of one WP to matching WP
+        //  on the target page (by Title + closest position)
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task ExecuteCopyWebPartPropertiesAsync()
+        {
+            if (SelectedWebPart == null || SelectedPage == null) return;
+
+            // Ask target page name
+            string sourceName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
+            var dialog = new SPUtil.Views.ComparePageDialog(
+                sourceName, _targetSiteUrl,
+                $"WebPart  : {SelectedWebPart.Title}\nSource   : {SelectedPage.FullPath}\nSite     : {_siteUrl}")
+            {
+                Title = "Copy WebPart Properties — enter target page name",
+                Owner = Application.Current.MainWindow
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            string targetPageName = dialog.TargetPageName;
+
+            var confirm = MessageBox.Show(
+                $"Copy all properties of\n'{SelectedWebPart.Title}'\n" +
+                $"from source to the matching WebPart on '{targetPageName}'?\n\n" +
+                $"Target site: {_targetSiteUrl}",
+                "Confirm Copy Properties",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            var infoWin = new SPUtil.Views.OperationInfoWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            infoWin.Show();
+            infoWin.UpdateMessage("Reading target page...");
+
+            try
+            {
+                string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName);
+                var targetSnapshot = await _spService.GetPageSnapshotAsync(
+                    _targetSiteUrl, targetRelUrl);
+
+                // Find best-matching WebPart on target
+                var targetWp = targetSnapshot.WebParts
+                    .OrderBy(w => Math.Abs(w.VisualPosition - SelectedWebPart.VisualPosition))
+                    .FirstOrDefault(w => string.Equals(w.Title, SelectedWebPart.Title,
+                        StringComparison.OrdinalIgnoreCase));
+
+                if (targetWp == null)
+                {
+                    infoWin.Close();
+                    MessageBox.Show(
+                        $"WebPart '{SelectedWebPart.Title}' not found on '{targetPageName}'.\n" +
+                        $"Add it to the target page first.",
+                        "Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                infoWin.UpdateMessage($"Copying properties to '{targetWp.Title}'...");
+
+                // Get ExportXml from source to extract all properties
+                string exportXml = await _spService.GetWebPartExportXmlAsync(
+                    _siteUrl, SelectedPage.FullPath, SelectedWebPart.StorageKey);
+
+                if (string.IsNullOrEmpty(exportXml))
+                {
+                    infoWin.Close();
+                    MessageBox.Show("Could not download source WebPart settings.",
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // Apply to target
+                var request = new WebPartUpdateRequest
+                {
+                    StorageKey         = targetWp.StorageKey,
+                    PropertiesToUpdate = ParseExportXmlProperties(exportXml)
+                };
+
+                await _spService.UpdateWebPartAsync(_targetSiteUrl, targetRelUrl, request);
+
+                infoWin.Close();
+                StatusMessage = $"✔ Properties copied to '{targetWp.Title}' on '{targetPageName}'";
+                MessageBox.Show(
+                    $"Properties of '{SelectedWebPart.Title}' copied successfully\nto '{targetPageName}' on target site.",
+                    "Done", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                infoWin.Close();
+                MessageBox.Show($"Error copying properties:\n{ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>Parses custom properties from exportwp.aspx XML, skipping system ones.</summary>
+        private static System.Collections.Generic.Dictionary<string, string> ParseExportXmlProperties(string xml)
+        {
+            var result = new System.Collections.Generic.Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
+            var skip = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "AllowClose","AllowConnect","AllowEdit","AllowHide","AllowMinimize",
+                "AllowZoneChange","AuthorizationFilter","CatalogIconImageUrl",
+                "ChromeState","ChromeType","Direction","ExportMode","HelpMode",
+                "HelpUrl","Hidden","ImportErrorMessage","TitleIconImageUrl","TitleUrl",
+                "Title","Description"
+            };
+            try
+            {
+                var doc = System.Xml.Linq.XDocument.Parse(xml);
+                foreach (var prop in doc.Descendants().Where(e => e.Name.LocalName == "property"))
+                {
+                    string name = prop.Attribute("name")?.Value ?? "";
+                    if (!string.IsNullOrEmpty(name) && !skip.Contains(name))
+                        result[name] = prop.Value ?? "";
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ParseExportXml] {ex.Message}");
+            }
+            return result;
+        }
+
+
         // ── Data loading ──────────────────────────────────────────────────────
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
@@ -558,7 +827,9 @@ namespace SPUtil.App.ViewModels
             {
                 StatusMessage = "Загрузка веб-частей...";
                 WebParts.Clear();
-                var wpData = await _spService.GetWebPartsAsync(_siteUrl, fileUrl);
+                // GetWebPartsWithPositionAsync — enriches result with VisualPosition
+                // without modifying SharePointService.cs
+                var wpData = await _spService.GetWebPartsWithPositionAsync(_siteUrl, fileUrl);
                 WebParts = new ObservableCollection<SPWebPartData>(wpData);
                 StatusMessage = WebParts.Any()
                     ? $"Найдено веб-частей: {WebParts.Count}"

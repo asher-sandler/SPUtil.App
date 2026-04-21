@@ -44,6 +44,9 @@ namespace SPUtil.Infrastructure
         public string Type  { get; set; } = string.Empty;
         public string ZoneId { get; set; } = string.Empty;
 
+        /// <summary>Visual position on the page (1-based). Used for matching duplicates.</summary>
+        public int VisualPosition { get; set; }
+
         public Dictionary<string, string> Properties { get; set; } = new();
     }
 	public class FieldInfo

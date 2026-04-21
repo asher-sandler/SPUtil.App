@@ -11,22 +11,26 @@
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*"    />
-            <RowDefinition Height="5"    />
-            <RowDefinition Height="*"    />
+            <RowDefinition Height="Auto" />  <!-- 0: page toolbar -->
+            <RowDefinition Height="Auto" />  <!-- 1: status -->
+            <RowDefinition Height="*"    />  <!-- 2: pages grid -->
+            <RowDefinition Height="5"    />  <!-- 3: splitter -->
+            <RowDefinition Height="Auto" />  <!-- 4: WP toolbar -->
+            <RowDefinition Height="*"    />  <!-- 5: webparts grid -->
         </Grid.RowDefinitions>
 
+        <!-- ══════════════════════════════════════════════════════
+             Row 0 — Page-level toolbar (source mode only)
+        ══════════════════════════════════════════════════════════ -->
         <Border Grid.Row="0"
                 Background="#F5F5F5" BorderBrush="#CCCCCC" BorderThickness="0,0,0,1"
                 Visibility="{Binding IsSourceMode, Converter={StaticResource BooleanToVisibilityConverter}}"
-                Padding="5" Margin="0,0,0,10">
+                Padding="5" Margin="0,0,0,6">
             <StackPanel Orientation="Horizontal">
 
                 <Button Command="{Binding GetAllPropertiesCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Вывести все Properties в лог (Output)">
+                        ToolTip="Dump all WebPart properties to Output window">
                     <TextBlock Text="&#xE8FD;" Style="{StaticResource IconText}" Foreground="#107C10"/>
                 </Button>
 
@@ -34,108 +38,194 @@
 
                 <Button Command="{Binding ShowWebPartsPreviewCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Открыть все свойства WebParts в окне предпросмотра">
+                        ToolTip="Preview all WebPart properties">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE7C3;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
-                        <TextBlock Text=" Preview" VerticalAlignment="Center" FontSize="12" Foreground="#2B579A" Margin="3,0,0,0"/>
+                        <TextBlock Text=" Preview" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#2B579A" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>
 
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
-                <!-- Copy Page to target site -->
                 <Button Command="{Binding CopyPageCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Copy selected page to target site (right pane)">
+                        ToolTip="Copy this page to target site">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}" Foreground="#0066CC"/>
-                        <TextBlock Text=" Copy Page" VerticalAlignment="Center" FontSize="12" Foreground="#0066CC" Margin="3,0,0,0"/>
+                        <TextBlock Text=" Copy Page" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#0066CC" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>
 
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
-                <!-- Rename Page -->
                 <Button Command="{Binding RenamePageCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Rename selected page (changes filename, not Title)">
+                        ToolTip="Rename selected page">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE8AC;" Style="{StaticResource IconText}" Foreground="#6B2D8B"/>
-                        <TextBlock Text=" Rename" VerticalAlignment="Center" FontSize="12" Foreground="#6B2D8B" Margin="3,0,0,0"/>
+                        <TextBlock Text=" Rename" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#6B2D8B" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>
 
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
-                <!-- Delete Page -->
                 <Button Command="{Binding DeletePageCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
                         ToolTip="Delete selected page permanently">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE74D;" Style="{StaticResource IconText}" Foreground="#A80000"/>
-                        <TextBlock Text=" Delete" VerticalAlignment="Center" FontSize="12" Foreground="#A80000" Margin="3,0,0,0"/>
+                        <TextBlock Text=" Delete" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#A80000" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>
 
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
-                <!-- Compare Page with target site -->
                 <Button Command="{Binding ComparePageCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Compare WebParts of selected page with the same page on target site">
+                        ToolTip="Compare all WebParts with the same page on target site">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE912;" Style="{StaticResource IconText}" Foreground="#856404"/>
-                        <TextBlock Text=" Compare" VerticalAlignment="Center" FontSize="12" Foreground="#856404" Margin="3,0,0,0"/>
+                        <TextBlock Text=" Compare" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#856404" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>
 
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
-                <!-- Sync Properties — copies WebPart settings from source to matching WebParts -->
+                <!-- Sync ALL WebParts via SPUTIL placeholders -->
                 <Button Command="{Binding SyncPropertiesCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Sync WebPart properties from source to target (requires placeholders on page)">
+                        ToolTip="Sync ALL WebPart properties from source (requires placeholders on page)">
                     <StackPanel Orientation="Horizontal">
-                        <!-- E72C = Refresh/Sync icon -->
                         <TextBlock Text="&#xE72C;" Style="{StaticResource IconText}" Foreground="#107C10"/>
-                        <TextBlock Text=" Sync Properties" VerticalAlignment="Center" FontSize="12" Foreground="#107C10" Margin="3,0,0,0"/>
+                        <TextBlock Text=" Sync All" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#107C10" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>
 
             </StackPanel>
         </Border>
 
-        <TextBlock Grid.Row="1" Text="{Binding StatusMessage}"
+        <!-- Row 1 — Status -->
+        <TextBlock Grid.Row="1"
+                   Text="{Binding StatusMessage}"
                    Foreground="DarkBlue" Margin="0,0,0,5" FontWeight="Bold"/>
 
-        <DataGrid Grid.Row="2" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}"
-                  AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Background="White">
+        <!-- Row 2 — Pages list -->
+        <DataGrid Grid.Row="2"
+                  ItemsSource="{Binding Pages}"
+                  SelectedItem="{Binding SelectedPage}"
+                  AutoGenerateColumns="False" CanUserAddRows="False"
+                  IsReadOnly="True" Background="White">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Имя"  Binding="{Binding Name}"       Width="250" />
-                <DataGridTextColumn Header="Путь" Binding="{Binding RelativeUrl}" Width="*"   />
+                <DataGridTextColumn Header="Имя"  Binding="{Binding Name}"        Width="250"/>
+                <DataGridTextColumn Header="Путь" Binding="{Binding RelativeUrl}"  Width="*"/>
             </DataGrid.Columns>
         </DataGrid>
 
-        <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch" Background="#EEE" Cursor="SizeNS"/>
+        <!-- Row 3 — Splitter -->
+        <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
+                      Background="#EEE" Cursor="SizeNS"/>
 
-        <GroupBox Grid.Row="4" Header="Веб-части выбранной страницы">
-            <DataGrid ItemsSource="{Binding WebParts}" AutoGenerateColumns="False"
-                      CanUserAddRows="False" IsReadOnly="True" Background="White">
+        <!-- ══════════════════════════════════════════════════════
+             Row 4 — WebPart-level toolbar
+             Applies to SelectedWebPart. Visible only in Source mode.
+        ══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="4"
+                Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="0,1,0,1"
+                Visibility="{Binding IsSourceMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                Padding="4,3">
+            <StackPanel Orientation="Horizontal">
+
+                <TextBlock Text="Selected WP:" VerticalAlignment="Center"
+                           FontSize="11" Foreground="#888" Margin="4,0,6,0"/>
+
+                <!-- Compare selected WebPart with target page -->
+                <Button Command="{Binding CompareWebPartCommand}"
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Compare selected WebPart properties with matching WP on target page">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE912;" Style="{StaticResource IconText}"
+                                   Foreground="#856404" FontSize="14"/>
+                        <TextBlock Text=" Compare WP" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#856404" Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- Copy selected WebPart properties to target page -->
+                <Button Command="{Binding CopyWebPartPropertiesCommand}"
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Copy selected WebPart properties to matching WP on target page">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}"
+                                   Foreground="#0066CC" FontSize="14"/>
+                        <TextBlock Text=" Copy WP Properties" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="#0066CC" Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+            </StackPanel>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════
+             Row 5 — WebParts grid
+             Simplified: no Type, no StorageKey.
+             Columns: # (position) | Title | Zone | Properties
+        ══════════════════════════════════════════════════════════ -->
+        <GroupBox Grid.Row="5" Header="Веб-части выбранной страницы">
+            <DataGrid ItemsSource="{Binding WebParts}"
+                      SelectedItem="{Binding SelectedWebPart}"
+                      AutoGenerateColumns="False" CanUserAddRows="False"
+                      IsReadOnly="True" Background="White"
+                      SelectionMode="Single">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Заголовок"  Binding="{Binding Title}"      Width="200" />
-                    <DataGridTextColumn Header="Тип"        Binding="{Binding Type}"       Width="150" />
-                    <DataGridTextColumn Header="StorageKey" Binding="{Binding StorageKey}" Width="270" />
+
+                    <!-- Visual position -->
+                    <DataGridTextColumn Header="#" Binding="{Binding VisualPosition}" Width="35">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="Foreground" Value="#888"/>
+                                <Setter Property="FontSize" Value="11"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!-- Title -->
+                    <DataGridTextColumn Header="Заголовок" Binding="{Binding Title}" Width="200"/>
+
+                    <!-- Zone — short (wpz / Header / Right / etc.) -->
+                    <DataGridTextColumn Header="Zone" Binding="{Binding ZoneId}" Width="70">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#666"/>
+                                <Setter Property="FontSize" Value="11"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!-- Properties: key: value pairs -->
                     <DataGridTemplateColumn Header="Свойства" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding Properties}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <StackPanel Orientation="Horizontal" Margin="2">
-                                                    <TextBlock Text="{Binding Key}" FontWeight="Bold" Foreground="#333"/>
-                                                    <TextBlock Text=": "/>
-                                                    <TextBlock Text="{Binding Value}" TextWrapping="Wrap" Foreground="#666"/>
+                                                <StackPanel Orientation="Horizontal" Margin="2,1">
+                                                    <TextBlock Text="{Binding Key}"
+                                                               FontWeight="SemiBold" Foreground="#333"
+                                                               FontSize="11"/>
+                                                    <TextBlock Text=": " FontSize="11"/>
+                                                    <TextBlock Text="{Binding Value}"
+                                                               TextWrapping="Wrap" Foreground="#555"
+                                                               FontSize="11"/>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -144,8 +234,10 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
+
                 </DataGrid.Columns>
             </DataGrid>
         </GroupBox>
+
     </Grid>
 </UserControl>
