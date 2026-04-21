@@ -83,9 +83,11 @@ namespace SPUtil.App.ViewModels
 
         // ── Per-WebPart commands (operate on SelectedWebPart) ─────────────────
         /// <summary>Compare selected WebPart properties with the same-titled WP on target page</summary>
-        public DelegateCommand CompareWebPartCommand      { get; }
+        public DelegateCommand CompareWebPartCommand         { get; }
         /// <summary>Copy properties of selected WebPart to the same-titled WP on target page</summary>
-        public DelegateCommand CopyWebPartPropertiesCommand { get; }
+        public DelegateCommand CopyWebPartPropertiesCommand  { get; }
+        /// <summary>Copy all properties of selected WebPart to clipboard (with page/WP header)</summary>
+        public DelegateCommand CopyWpToClipboardCommand      { get; }
 
         public PagesViewModel(ISharePointService spService)
         {
@@ -143,6 +145,11 @@ namespace SPUtil.App.ViewModels
             CopyWebPartPropertiesCommand = new DelegateCommand(
                 async () => await ExecuteCopyWebPartPropertiesAsync(),
                 () => SelectedWebPart != null && !string.IsNullOrEmpty(_targetSiteUrl))
+                .ObservesProperty(() => SelectedWebPart);
+
+            CopyWpToClipboardCommand = new DelegateCommand(
+                () => ExecuteCopyWpToClipboard(),
+                () => SelectedWebPart != null)
                 .ObservesProperty(() => SelectedWebPart);
         }
 
@@ -803,6 +810,49 @@ namespace SPUtil.App.ViewModels
             return result;
         }
 
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Copy WebPart properties to clipboard
+        //  Format: page name + WP title + all key:value properties
+        // ═══════════════════════════════════════════════════════════════════════
+        private void ExecuteCopyWpToClipboard()
+        {
+            if (SelectedWebPart == null) return;
+
+            var sb = new System.Text.StringBuilder();
+
+            // Header — page and WebPart identity
+            sb.AppendLine($"Page     : {SelectedPage?.Name ?? _siteUrl}");
+            sb.AppendLine($"Site     : {_siteUrl}");
+            sb.AppendLine($"WebPart  : {SelectedWebPart.Title}");
+            sb.AppendLine($"Zone     : {SelectedWebPart.ZoneId}");
+            sb.AppendLine($"Position : {SelectedWebPart.VisualPosition}");
+            sb.AppendLine($"StorageKey: {SelectedWebPart.StorageKey}");
+            sb.AppendLine(new string('─', 60));
+
+            // All properties
+            foreach (var kv in SelectedWebPart.Properties.OrderBy(k => k.Key))
+            {
+                string val = kv.Value ?? "";
+                // Indent multi-line values
+                if (val.Contains('\n') || val.Contains('\r'))
+                    val = "\n" + string.Join("\n",
+                        val.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                           .Select(line => "              " + line));
+
+                sb.AppendLine($"{kv.Key,-30}: {val}");
+            }
+
+            try
+            {
+                System.Windows.Clipboard.SetText(sb.ToString());
+                StatusMessage = $"✔ Copied to clipboard: {SelectedWebPart.Title} ({SelectedWebPart.Properties.Count} properties)";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Clipboard error: {ex.Message}";
+            }
+        }
 
         // ── Data loading ──────────────────────────────────────────────────────
         public async Task LoadDataAsync(string siteUrl, string listId)
