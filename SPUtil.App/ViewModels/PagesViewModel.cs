@@ -70,6 +70,8 @@ namespace SPUtil.App.ViewModels
         public DelegateCommand CopyPageCommand            { get; }
         public DelegateCommand DeletePageCommand          { get; }
         public DelegateCommand RenamePageCommand          { get; }
+        public DelegateCommand ComparePageCommand         { get; }
+        public DelegateCommand SyncPropertiesCommand      { get; }
 
         public PagesViewModel(ISharePointService spService)
         {
@@ -116,6 +118,8 @@ namespace SPUtil.App.ViewModels
             CopyPageCommand   = new DelegateCommand(async () => await ExecuteCopyPageAsync());
             DeletePageCommand = new DelegateCommand(async () => await ExecuteDeletePageAsync());
             RenamePageCommand = new DelegateCommand(async () => await ExecuteRenamePageAsync());
+            ComparePageCommand    = new DelegateCommand(async () => await ExecuteComparePageAsync());
+            SyncPropertiesCommand = new DelegateCommand(async () => await ExecuteSyncPropertiesAsync());
         }
 
         // ── Called by MainWindowViewModel after creating this VM ──────────────
@@ -214,7 +218,7 @@ namespace SPUtil.App.ViewModels
             }
 
             // ── Step 4: Create page on target ─────────────────────────────────
-            int wpCount = snapshot.WebParts.Count(w => w.VisualPosition > 0);
+            int wpCount = snapshot.WebParts.Count;
             infoWin.UpdateMessage(
                 $"Creating '{targetName}' with {wpCount} WebPart(s)...");
             try
@@ -350,6 +354,184 @@ namespace SPUtil.App.ViewModels
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally { infoWin.Close(); }
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Compare Page
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task ExecuteComparePageAsync()
+        {
+            if (SelectedPage == null)
+            {
+                MessageBox.Show("Выберите страницу для сравнения.",
+                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (string.IsNullOrEmpty(_targetSiteUrl))
+            {
+                MessageBox.Show("Подключитесь к целевому сайту (правая панель).",
+                    "Нет целевого сайта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string sourceName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
+            var dialog = new SPUtil.Views.CopyPageDialog(
+                sourceName, _targetSiteUrl,
+                $"Compare: {SelectedPage.FullPath}\nSource site: {_siteUrl}")
+            {
+                Title = "Compare Page — enter target page name",
+                Owner = Application.Current.MainWindow
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            string targetPageName = dialog.TargetPageName;
+
+            var infoWin = new SPUtil.Views.OperationInfoWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            infoWin.Show();
+
+            PageCompareResult compareResult;
+            string formattedText;
+
+            try
+            {
+                infoWin.UpdateMessage("Reading source page snapshot...");
+                var sourceSnapshot = await _spService.GetPageSnapshotAsync(
+                    _siteUrl, SelectedPage.FullPath);
+
+                infoWin.UpdateMessage("Reading target page snapshot...");
+                string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName);
+                var targetSnapshot = await _spService.GetPageSnapshotAsync(
+                    _targetSiteUrl, targetRelUrl);
+
+                infoWin.UpdateMessage("Comparing...");
+                compareResult = await _spService.ComparePageSnapshotsStructured(
+                    sourceSnapshot, targetSnapshot,
+                    sourceSiteUrl: _siteUrl,
+                    targetSiteUrl: _targetSiteUrl);
+
+                // Store target URL for InsertPlaceholders button
+                compareResult.TargetUrl = targetRelUrl;
+
+                formattedText = _spService.FormatCompareResult(compareResult);
+            }
+            catch (Exception ex)
+            {
+                infoWin.Close();
+                MessageBox.Show($"Error during comparison:\n{ex.Message}",
+                    "Compare Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            infoWin.Close();
+
+            var win = new SPUtil.App.Views.UniversalPreviewWindow
+            {
+                Title  = $"Compare: {SelectedPage.Name}  ↔  {targetPageName}.aspx",
+                Owner  = Application.Current.MainWindow,
+                Width  = 1050,
+                Height = 720
+            };
+
+            var vm = new PageCompareViewModel(
+                compareResult, formattedText, win, _spService,
+                onPlaceholdersInserted: () =>
+                {
+                    // Refresh status after placeholders inserted
+                    StatusMessage = $"✔ Placeholders inserted on target — " +
+                                    $"add WebParts manually then run Sync Properties";
+                });
+
+            win.DataContext = vm;
+            win.ShowDialog();
+
+            StatusMessage = compareResult.IsIdentical
+                ? "✔ Pages are identical"
+                : $"Differences: {compareResult.ModifiedCount} modified, " +
+                  $"{compareResult.AddedCount} added, {compareResult.RemovedCount} removed";
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Sync Properties
+        //  Finds SPUTIL placeholders on the selected page, reads WebPart settings
+        //  from source, applies them to matching WebParts, removes placeholders.
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task ExecuteSyncPropertiesAsync()
+        {
+            if (SelectedPage == null)
+            {
+                MessageBox.Show("Выберите страницу для синхронизации.",
+                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Confirm
+            var confirm = MessageBox.Show(
+                $"Sync Properties will:\n" +
+                $"1. Find all [WebPart Placeholder] blocks on '{SelectedPage.Name}'\n" +
+                $"2. Copy settings from the source WebParts\n" +
+                $"3. Apply settings to matching WebParts on this page\n" +
+                $"4. Remove the placeholder blocks\n\n" +
+                $"Continue?",
+                "Sync Properties", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            var infoWin = new SPUtil.Views.OperationInfoWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            infoWin.Show();
+            infoWin.UpdateMessage("Checking for placeholders...");
+
+            try
+            {
+                bool hasPlaceholders = await _spService.PageHasPlaceholdersAsync(
+                    _siteUrl, SelectedPage.FullPath);
+
+                if (!hasPlaceholders)
+                {
+                    infoWin.Close();
+                    MessageBox.Show(
+                        "No WebPart Placeholders found on this page.\n" +
+                        "Run Compare Page first, then Insert Placeholders.",
+                        "No Placeholders", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                infoWin.UpdateMessage("Syncing WebPart properties...");
+                var result = await _spService.SyncPropertiesAsync(
+                    _siteUrl, SelectedPage.FullPath);
+
+                infoWin.Close();
+
+                string message = $"Sync complete.\n\n{result.Summary}";
+                if (result.Errors.Any())
+                {
+                    message += "\n\nDetails:\n" + string.Join("\n", result.Errors);
+                }
+
+                MessageBox.Show(message,
+                    result.IsSuccess ? "Sync Complete" : "Sync Complete (with warnings)",
+                    MessageBoxButton.OK,
+                    result.IsSuccess ? MessageBoxImage.Information : MessageBoxImage.Warning);
+
+                StatusMessage = $"Sync: {result.Summary}";
+
+                // Reload WebParts to reflect changes
+                await LoadWebPartsAsync(SelectedPage.FullPath);
+            }
+            catch (Exception ex)
+            {
+                infoWin.Close();
+                StatusMessage = $"Sync error: {ex.Message}";
+                MessageBox.Show($"Error during sync:\n{ex.Message}",
+                    "Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
 

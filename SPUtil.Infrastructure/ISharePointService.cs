@@ -260,6 +260,29 @@ namespace SPUtil.Services
         /// </summary>
         Task RenamePageAsync(string siteUrl, string currentName, string newName);
 
+        // ── Page comparison and sync ──────────────────────────────────────────
+
+        Task<PageCompareResult> ComparePageSnapshotsStructured(
+            PageSnapshot source,
+            PageSnapshot target,
+            string sourceSiteUrl = "",
+            string targetSiteUrl = "");
+
+        string FormatCompareResult(PageCompareResult result);
+
+        Task InsertPlaceholdersAsync(
+            string targetSiteUrl,
+            string targetPageRelativeUrl,
+            PageCompareResult compareResult);
+
+        Task<bool> PageHasPlaceholdersAsync(string siteUrl, string pageRelativeUrl);
+
+        Task<SyncResult> SyncPropertiesAsync(
+            string targetSiteUrl,
+            string targetPageRelativeUrl);
+
+        Task<string> GetPageRelativeUrlAsync(string siteUrl, string pageName);
+
 
     }
 }

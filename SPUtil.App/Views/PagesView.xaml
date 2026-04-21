@@ -77,6 +77,31 @@
                     </StackPanel>
                 </Button>
 
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- Compare Page with target site -->
+                <Button Command="{Binding ComparePageCommand}"
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Compare WebParts of selected page with the same page on target site">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE912;" Style="{StaticResource IconText}" Foreground="#856404"/>
+                        <TextBlock Text=" Compare" VerticalAlignment="Center" FontSize="12" Foreground="#856404" Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+
+                <!-- Sync Properties — copies WebPart settings from source to matching WebParts -->
+                <Button Command="{Binding SyncPropertiesCommand}"
+                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
+                        ToolTip="Sync WebPart properties from source to target (requires placeholders on page)">
+                    <StackPanel Orientation="Horizontal">
+                        <!-- E72C = Refresh/Sync icon -->
+                        <TextBlock Text="&#xE72C;" Style="{StaticResource IconText}" Foreground="#107C10"/>
+                        <TextBlock Text=" Sync Properties" VerticalAlignment="Center" FontSize="12" Foreground="#107C10" Margin="3,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
             </StackPanel>
         </Border>
 

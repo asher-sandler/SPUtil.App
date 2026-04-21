@@ -97,13 +97,49 @@ namespace SPUtil.Services
         }
 
         /// <summary>
-        /// Строит ms-rte-wpbox заглушку для PublishingPageContent.
-        /// zoneKey — GUID который идёт в div_GUID (webpartid2).
+        /// Builds an ms-rte-wpbox placeholder div for PublishingPageContent.
+        /// If sourceMeta is provided — inserts an SPUTIL JSON comment inside the div
+        /// so SyncPropertiesAsync can later find and process it.
         /// </summary>
-        private static string BuildWpBoxPlaceholder(string zoneKey)
+        private static string BuildWpBoxPlaceholder(
+            string zoneKey,
+            WebPartPlaceholderMeta sourceMeta = null)
         {
+            string metaComment = string.Empty;
+            string extraClass  = string.Empty;
+
+            if (sourceMeta != null)
+            {
+                // Escape values for safe JSON embedding
+                string safeTitle   = sourceMeta.Title.Replace("\"", "\\\"").Replace("\n", " ");
+                string safeSiteUrl = sourceMeta.SiteUrl.Replace("\"", "\\\"");
+                string safePageUrl = sourceMeta.PageUrl.Replace("\"", "\\\"");
+                string safeZoneId  = sourceMeta.ZoneId.Replace("\"", "\\\"");
+
+                string json =
+                    $"{{" +
+                    $"\"storageKey\":\"{sourceMeta.StorageKey}\"," +
+                    $"\"title\":\"{safeTitle}\"," +
+                    $"\"position\":{sourceMeta.Position}," +
+                    $"\"zoneId\":\"{safeZoneId}\"," +
+                    $"\"siteUrl\":\"{safeSiteUrl}\"," +
+                    $"\"pageUrl\":\"{safePageUrl}\"" +
+                    $"}}";
+
+                metaComment = $"\r\n  <!--SPUTIL:{json}-->" +
+                              $"\r\n  <p style=\"border:2px dashed #cc4400;padding:8px;" +
+                              $"background:#fff8f0;font-family:Consolas;font-size:12px;margin:4px 0\">" +
+                              $"[WebPart Placeholder] <b>{System.Web.HttpUtility.HtmlEncode(sourceMeta.Title)}</b>" +
+                              $" &nbsp;|&nbsp; Position: {sourceMeta.Position}" +
+                              $" &nbsp;|&nbsp; Zone: {sourceMeta.ZoneId}<br/>" +
+                              $"<i>Add this WebPart manually, then run Sync Properties to restore its settings.</i>" +
+                              $"</p>";
+                extraClass = " sputil-placeholder";
+            }
+
             return
-                $"<div class=\"ms-rtestate-read ms-rte-wpbox\" contenteditable=\"false\" unselectable=\"on\">\r\n" +
+                $"<div class=\"ms-rtestate-read ms-rte-wpbox{extraClass}\" " +
+                $"contenteditable=\"false\" unselectable=\"on\">{metaComment}\r\n" +
                 $"  <div class=\"ms-rtestate-notify ms-rtestate-read {zoneKey}\" " +
                 $"id=\"div_{zoneKey}\" unselectable=\"on\"></div>\r\n" +
                 $"  <div id=\"vid_{zoneKey}\" unselectable=\"on\" style=\"display:none;\"></div>\r\n" +
@@ -297,7 +333,10 @@ namespace SPUtil.Services
                     processedStorageKeys.Add(storageKey);
                 }
 
-                // ── F: Add WebParts that are in named zones (not in PublishingContent) ──
+                // ── F: Add WebParts from named zones (Header/Right/etc.) ──
+                // These WebParts have no ZoneKey in PublishingContent but we still
+                // include them with sequential VisualPosition so CreatePageFromSnapshotAsync
+                // copies them into PublishingContent on the target.
                 foreach (var kv in wpByStorageKey)
                 {
                     if (processedStorageKeys.Contains(kv.Key)) continue;
@@ -307,8 +346,8 @@ namespace SPUtil.Services
                     snapshot.WebParts.Add(new WebPartSnapshot
                     {
                         StorageKey     = kv.Key,
-                        ZoneKey        = string.Empty,  // not in PublishingContent
-                        VisualPosition = 0,             // 0 = outside PublishingContent
+                        ZoneKey        = string.Empty,   // was in named zone, no placeholder in PublishingContent
+                        VisualPosition = position++,     // sequential — not 0
                         ZoneId         = kv.Value.def.ZoneId,
                         Title          = kv.Value.def.WebPart.Title,
                         ExportXml      = exportXml,
@@ -919,9 +958,10 @@ namespace SPUtil.Services
                 // to rebuild PublishingHtml with new GUIDs.
                 var oldZoneKeyToNew = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                // Process only WebParts that are in PublishingContent (VisualPosition > 0)
+                // Copy ALL WebParts in visual order — including those that were in
+                // named zones on source (they also get sequential VisualPosition now).
                 var inContent = snapshot.WebParts
-                    .Where(wp => wp.VisualPosition > 0 && !string.IsNullOrEmpty(wp.ExportXml))
+                    .Where(wp => !string.IsNullOrEmpty(wp.ExportXml))
                     .OrderBy(wp => wp.VisualPosition)
                     .ToList();
 
@@ -1145,6 +1185,657 @@ namespace SPUtil.Services
             }
 
             return result;
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  ParsePlaceholderMeta
+        //  Reads PublishingPageContent and extracts all <!--SPUTIL:{...}--> comments.
+        //  Returns list of WebPartPlaceholderMeta with TargetZoneKey filled in.
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task<List<WebPartPlaceholderMeta>> ParsePlaceholderMetaAsync(
+            string siteUrl,
+            string pageRelativeUrl)
+        {
+            var result = new List<WebPartPlaceholderMeta>();
+
+            using var ctx = await GetContextAsync(siteUrl);
+            var pageFile = ctx.Web.GetFileByServerRelativeUrl(pageRelativeUrl);
+            ctx.Load(pageFile, f => f.ListItemAllFields);
+            await Task.Run(() => ctx.ExecuteQuery());
+            ctx.Load(pageFile.ListItemAllFields);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            string html = pageFile.ListItemAllFields["PublishingPageContent"]?.ToString() ?? "";
+            if (string.IsNullOrEmpty(html)) return result;
+
+            // Match each SPUTIL comment with the ZoneKey of its containing wpbox div
+            // Pattern: find ms-rte-wpbox div, extract ZoneKey from ms-rtestate-read class,
+            // and look for <!--SPUTIL:{...}--> inside the same div block.
+            var divMatches = Regex.Matches(
+                html,
+                @"<div[^>]*ms-rte-wpbox[^>]*>(.*?)</div>\s*</div>\s*</div>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            foreach (Match div in divMatches)
+            {
+                string block = div.Value;
+
+                // Find SPUTIL comment
+                var commentMatch = Regex.Match(block,
+                    @"<!--SPUTIL:(\{[^}]+\})-->",
+                    RegexOptions.IgnoreCase);
+                if (!commentMatch.Success) continue;
+
+                string json = commentMatch.Groups[1].Value;
+
+                // Find ZoneKey from ms-rtestate-read class
+                var zoneKeyMatch = Regex.Match(block,
+                    @"ms-rtestate-read\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+                    RegexOptions.IgnoreCase);
+
+                string targetZoneKey = zoneKeyMatch.Success
+                    ? zoneKeyMatch.Groups[1].Value.ToLower()
+                    : string.Empty;
+
+                try
+                {
+                    // Simple JSON parse without external dependencies
+                    var meta = new WebPartPlaceholderMeta
+                    {
+                        TargetZoneKey = targetZoneKey,
+                        StorageKey    = ExtractJsonString(json, "storageKey"),
+                        Title         = ExtractJsonString(json, "title"),
+                        Position      = int.TryParse(ExtractJsonString(json, "position"), out var pos) ? pos : 0,
+                        ZoneId        = ExtractJsonString(json, "zoneId"),
+                        SiteUrl       = ExtractJsonString(json, "siteUrl"),
+                        PageUrl       = ExtractJsonString(json, "pageUrl")
+                    };
+                    result.Add(meta);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ParsePlaceholder] Failed to parse: {json} | {ex.Message}");
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>Extracts a string value from a simple JSON object by key name.</summary>
+        private static string ExtractJsonString(string json, string key)
+        {
+            var m = Regex.Match(json,
+                $@"""{Regex.Escape(key)}""\s*:\s*""([^""]*)""",
+                RegexOptions.IgnoreCase);
+            if (m.Success) return m.Groups[1].Value;
+
+            // Try numeric value (for position)
+            var mn = Regex.Match(json,
+                $@"""{Regex.Escape(key)}""\s*:\s*(\d+)",
+                RegexOptions.IgnoreCase);
+            return mn.Success ? mn.Groups[1].Value : string.Empty;
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  PageHasPlaceholdersAsync
+        //  Returns true if the page contains any SPUTIL placeholder comments.
+        //  Used to enable/disable the Sync Properties button in the toolbar.
+        // ═══════════════════════════════════════════════════════════════════════
+        public async Task<bool> PageHasPlaceholdersAsync(string siteUrl, string pageRelativeUrl)
+        {
+            using var ctx = await GetContextAsync(siteUrl);
+            var pageFile = ctx.Web.GetFileByServerRelativeUrl(pageRelativeUrl);
+            ctx.Load(pageFile, f => f.ListItemAllFields);
+            await Task.Run(() => ctx.ExecuteQuery());
+            ctx.Load(pageFile.ListItemAllFields);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            string html = pageFile.ListItemAllFields["PublishingPageContent"]?.ToString() ?? "";
+            return html.Contains("<!--SPUTIL:", StringComparison.OrdinalIgnoreCase);
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  ComparePageSnapshotsStructured
+        //  Returns structured PageCompareResult.
+        //  Matching by Title — position is used as tiebreaker for duplicates.
+        // ═══════════════════════════════════════════════════════════════════════
+        public Task<PageCompareResult> ComparePageSnapshotsStructured(
+            PageSnapshot source,
+            PageSnapshot target,
+            string sourceSiteUrl = "",
+            string targetSiteUrl = "")
+        {
+            return Task.Run(() =>
+            {
+                var result = new PageCompareResult
+                {
+                    SourceUrl          = source.PageRelativeUrl,
+                    TargetUrl          = target.PageRelativeUrl,
+                    SourceSiteUrl      = sourceSiteUrl,
+                    TargetSiteUrl      = targetSiteUrl,
+                    LayoutMatches      = string.Equals(
+                        source.LayoutRelativeUrl, target.LayoutRelativeUrl,
+                        StringComparison.OrdinalIgnoreCase),
+                    SourceLayout       = source.LayoutRelativeUrl,
+                    TargetLayout       = target.LayoutRelativeUrl,
+                    SourceWebPartCount = source.WebParts.Count,
+                    TargetWebPartCount = target.WebParts.Count
+                };
+
+                // Properties to skip — always differ between sites
+                var skipProps = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "AllowClose","AllowConnect","AllowEdit","AllowHide",
+                    "AllowMinimize","AllowZoneChange","AuthorizationFilter",
+                    "CatalogIconImageUrl","ChromeState","ChromeType",
+                    "Direction","ExportMode","HelpMode","HelpUrl",
+                    "Hidden","ImportErrorMessage","TitleIconImageUrl","TitleUrl"
+                };
+
+                // Build target lookup: Title → list of WebPartSnapshot (handle duplicates)
+                var targetByTitle = new Dictionary<string, List<WebPartSnapshot>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var tw in target.WebParts.OrderBy(w => w.VisualPosition))
+                {
+                    if (!targetByTitle.ContainsKey(tw.Title))
+                        targetByTitle[tw.Title] = new List<WebPartSnapshot>();
+                    targetByTitle[tw.Title].Add(tw);
+                }
+
+                var matchedTargetKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // ── Process each source WebPart ───────────────────────────────
+                foreach (var sw in source.WebParts.OrderBy(w => w.VisualPosition))
+                {
+                    if (!targetByTitle.TryGetValue(sw.Title, out var candidates))
+                    {
+                        // Not on target → Removed
+                        result.Diffs.Add(new WebPartDiff
+                        {
+                            Kind             = WebPartDiffKind.Removed,
+                            Title            = sw.Title,
+                            SourcePosition   = sw.VisualPosition,
+                            TargetPosition   = 0,
+                            SourceStorageKey = sw.StorageKey,
+                            SourceZoneId     = sw.ZoneId
+                        });
+                        continue;
+                    }
+
+                    // Match by closest position (handles duplicates)
+                    var tw = candidates
+                        .Where(c => !matchedTargetKeys.Contains(c.StorageKey))
+                        .OrderBy(c => Math.Abs(c.VisualPosition - sw.VisualPosition))
+                        .FirstOrDefault();
+
+                    if (tw == null)
+                    {
+                        // All candidates already matched → treat as Removed
+                        result.Diffs.Add(new WebPartDiff
+                        {
+                            Kind             = WebPartDiffKind.Removed,
+                            Title            = sw.Title,
+                            SourcePosition   = sw.VisualPosition,
+                            TargetPosition   = 0,
+                            SourceStorageKey = sw.StorageKey,
+                            SourceZoneId     = sw.ZoneId
+                        });
+                        continue;
+                    }
+
+                    matchedTargetKeys.Add(tw.StorageKey);
+
+                    // Compare properties
+                    var propDiffs = new List<PropertyDiff>();
+                    var allKeys = sw.Properties.Keys
+                        .Union(tw.Properties.Keys, StringComparer.OrdinalIgnoreCase)
+                        .Where(k => !skipProps.Contains(k))
+                        .OrderBy(k => k);
+
+                    foreach (var key in allKeys)
+                    {
+                        sw.Properties.TryGetValue(key, out var sv); sv ??= "";
+                        tw.Properties.TryGetValue(key, out var tv); tv ??= "";
+                        if (!string.Equals(sv, tv, StringComparison.Ordinal))
+                            propDiffs.Add(new PropertyDiff
+                            {
+                                PropertyName = key,
+                                SourceValue  = sv,
+                                TargetValue  = tv
+                            });
+                    }
+
+                    bool posChanged = sw.VisualPosition != tw.VisualPosition;
+
+                    result.Diffs.Add(new WebPartDiff
+                    {
+                        Kind             = (propDiffs.Any() || posChanged)
+                                           ? WebPartDiffKind.Modified
+                                           : WebPartDiffKind.Identical,
+                        Title            = sw.Title,
+                        SourcePosition   = sw.VisualPosition,
+                        TargetPosition   = tw.VisualPosition,
+                        SourceStorageKey = sw.StorageKey,
+                        SourceZoneId     = sw.ZoneId,
+                        PropertyDiffs    = propDiffs
+                    });
+                }
+
+                // ── WebParts on target not matched to any source → Added ───────
+                foreach (var tw in target.WebParts)
+                {
+                    if (!matchedTargetKeys.Contains(tw.StorageKey))
+                    {
+                        result.Diffs.Add(new WebPartDiff
+                        {
+                            Kind           = WebPartDiffKind.Added,
+                            Title          = tw.Title,
+                            SourcePosition = 0,
+                            TargetPosition = tw.VisualPosition
+                        });
+                    }
+                }
+
+                // Sort: Removed → Added → Modified → Identical, then by position
+                result.Diffs = result.Diffs
+                    .OrderBy(d => d.Kind switch
+                    {
+                        WebPartDiffKind.Removed  => 0,
+                        WebPartDiffKind.Added    => 1,
+                        WebPartDiffKind.Modified => 2,
+                        _                        => 3
+                    })
+                    .ThenBy(d => d.SourcePosition > 0 ? d.SourcePosition : d.TargetPosition)
+                    .ToList();
+
+                return result;
+            });
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  FormatCompareResult
+        //  Formats PageCompareResult into readable text for UniversalPreviewWindow.
+        // ═══════════════════════════════════════════════════════════════════════
+        public string FormatCompareResult(PageCompareResult r)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("=== Page WebPart Comparison ===");
+            sb.AppendLine($"Source : {r.SourceSiteUrl}{r.SourceUrl}");
+            sb.AppendLine($"Target : {r.TargetSiteUrl}{r.TargetUrl}");
+            sb.AppendLine($"Generated: {System.DateTime.Now:dd.MM.yyyy HH:mm:ss}");
+            sb.AppendLine(new string('═', 70));
+
+            sb.AppendLine();
+            sb.AppendLine("── Summary ──────────────────────────────────────────────────────────");
+            sb.AppendLine($"  Layout       : {(r.LayoutMatches ? "✔ Match" : $"✘ Differs  ({r.SourceLayout}  vs  {r.TargetLayout})")}");
+            sb.AppendLine($"  Source WPs   : {r.SourceWebPartCount}");
+            sb.AppendLine($"  Target WPs   : {r.TargetWebPartCount}");
+            sb.AppendLine();
+            sb.AppendLine($"  ✔ Identical  : {r.IdenticalCount}");
+            sb.AppendLine($"  ✏ Modified   : {r.ModifiedCount}");
+            sb.AppendLine($"  ➕ Added      : {r.AddedCount}");
+            sb.AppendLine($"  ➖ Removed    : {r.RemovedCount}");
+
+            if (r.IsIdentical)
+            {
+                sb.AppendLine();
+                sb.AppendLine("✔ Pages are IDENTICAL.");
+                return sb.ToString();
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("── Details ──────────────────────────────────────────────────────────");
+
+            foreach (var d in r.Diffs)
+            {
+                sb.AppendLine();
+                string icon = d.Kind switch
+                {
+                    WebPartDiffKind.Identical => "✔",
+                    WebPartDiffKind.Modified  => "✏",
+                    WebPartDiffKind.Added     => "➕",
+                    WebPartDiffKind.Removed   => "➖",
+                    _                         => "?"
+                };
+
+                string posInfo = d.Kind switch
+                {
+                    WebPartDiffKind.Removed  => $"source pos {d.SourcePosition}  →  MISSING on target",
+                    WebPartDiffKind.Added    => $"MISSING on source  →  target pos {d.TargetPosition}",
+                    WebPartDiffKind.Modified => d.SourcePosition != d.TargetPosition
+                                               ? $"pos {d.SourcePosition} (src) → {d.TargetPosition} (tgt)  ⚠ position changed"
+                                               : $"pos {d.SourcePosition}",
+                    _                        => $"pos {d.SourcePosition}"
+                };
+
+                sb.AppendLine($"{icon} [{d.Kind}]  {d.Title}");
+                sb.AppendLine($"   {posInfo}");
+
+                if (d.PropertyDiffs.Any())
+                {
+                    sb.AppendLine("   ── Changed properties ──────────────────────────────────────");
+                    foreach (var pd in d.PropertyDiffs)
+                    {
+                        string sv = string.IsNullOrEmpty(pd.SourceValue) ? "(empty)" : pd.SourceValue;
+                        string tv = string.IsNullOrEmpty(pd.TargetValue) ? "(empty)" : pd.TargetValue;
+                        sb.AppendLine($"   {pd.PropertyName,-32}");
+                        sb.AppendLine($"     src: {sv}");
+                        sb.AppendLine($"     tgt: {tv}");
+                    }
+                }
+
+                sb.AppendLine(new string('─', 70));
+            }
+
+            return sb.ToString();
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  InsertPlaceholdersAsync
+        //  For each Removed WebPart in compareResult — inserts a placeholder div
+        //  with <!--SPUTIL:{...}--> metadata into target PublishingPageContent.
+        //  Placeholders are inserted at the same visual position as on source.
+        // ═══════════════════════════════════════════════════════════════════════
+        public async Task InsertPlaceholdersAsync(
+            string targetSiteUrl,
+            string targetPageRelativeUrl,
+            PageCompareResult compareResult)
+        {
+            var removed = compareResult.RemovedWebParts.ToList();
+            if (!removed.Any()) return;
+
+            await Task.Run(async () =>
+            {
+                using var ctx = await GetContextAsync(targetSiteUrl);
+                var pageFile = ctx.Web.GetFileByServerRelativeUrl(targetPageRelativeUrl);
+                ctx.Load(pageFile, f => f.ListItemAllFields);
+                await Task.Run(() => ctx.ExecuteQuery());
+
+                await SafeCheckOutAsync(ctx, pageFile);
+
+                ctx.Load(pageFile.ListItemAllFields);
+                await Task.Run(() => ctx.ExecuteQuery());
+
+                string html = pageFile.ListItemAllFields["PublishingPageContent"]?.ToString() ?? "";
+
+                // Insert placeholders in reverse position order so earlier insertions
+                // don't shift the indices of later ones
+                foreach (var diff in removed.OrderByDescending(d => d.SourcePosition))
+                {
+                    var meta = new WebPartPlaceholderMeta
+                    {
+                        StorageKey = diff.SourceStorageKey,
+                        Title      = diff.Title,
+                        Position   = diff.SourcePosition,
+                        ZoneId     = diff.SourceZoneId,
+                        SiteUrl    = compareResult.SourceSiteUrl,
+                        PageUrl    = compareResult.SourceUrl
+                    };
+
+                    // Generate a placeholder ZoneKey (no real WebPart object —
+                    // the placeholder is purely visual text with metadata)
+                    string placeholderZoneKey = Guid.NewGuid().ToString("D");
+                    string placeholder = BuildWpBoxPlaceholder(placeholderZoneKey, meta);
+
+                    // Find the position to insert — after the (sourcePosition-1)-th wpbox
+                    var existingZoneKeys = ParseZoneKeysInOrder(html);
+                    int insertAfterIndex = diff.SourcePosition - 1;  // 0-based
+
+                    if (existingZoneKeys.Count == 0 || insertAfterIndex <= 0)
+                    {
+                        // Prepend before all existing content
+                        html = placeholder + "\r\n<p><br/></p>\r\n" + html;
+                    }
+                    else if (insertAfterIndex >= existingZoneKeys.Count)
+                    {
+                        // Append at end
+                        html = html + "\r\n" + placeholder + "\r\n<p><br/></p>";
+                    }
+                    else
+                    {
+                        // Insert after the wpbox at (insertAfterIndex - 1)
+                        string anchorKey = existingZoneKeys[insertAfterIndex - 1];
+                        string insertPattern =
+                            @"(<div[^>]*ms-rte-wpbox[^>]*>.*?" +
+                            Regex.Escape(anchorKey) +
+                            @".*?</div>\s*</div>\s*</div>)";
+
+                        html = Regex.Replace(
+                            html,
+                            insertPattern,
+                            "$1\r\n" + placeholder,
+                            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    }
+                }
+
+                var fields = pageFile.ListItemAllFields;
+                fields["PublishingPageContent"] = html;
+                fields.Update();
+                await Task.Run(() => ctx.ExecuteQuery());
+
+                await CheckInAndPublishAsync(ctx, pageFile,
+                    $"Inserted {removed.Count} WebPart placeholder(s)");
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[InsertPlaceholders] Done. {removed.Count} placeholders inserted.");
+            });
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  SyncPropertiesAsync
+        //  Finds all SPUTIL placeholders on the target page,
+        //  reads WebPart settings from source via exportwp.aspx,
+        //  applies them to matching WebParts on target,
+        //  then removes the placeholder.
+        // ═══════════════════════════════════════════════════════════════════════
+        public async Task<SyncResult> SyncPropertiesAsync(
+            string targetSiteUrl,
+            string targetPageRelativeUrl)
+        {
+            var syncResult = new SyncResult();
+
+            // ── Step 1: Parse all placeholders from target PublishingContent ──
+            var placeholders = await ParsePlaceholderMetaAsync(targetSiteUrl, targetPageRelativeUrl);
+            if (!placeholders.Any())
+            {
+                syncResult.Errors.Add("No SPUTIL placeholders found on this page.");
+                return syncResult;
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[SyncProperties] Found {placeholders.Count} placeholder(s).");
+
+            // ── Step 2: Get current WebParts on target ────────────────────────
+            var targetSnapshot = await GetPageSnapshotAsync(targetSiteUrl, targetPageRelativeUrl);
+
+            // Build lookup: Title → list of WebPartSnapshot (handle duplicates)
+            var targetByTitle = new Dictionary<string, List<WebPartSnapshot>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var tw in targetSnapshot.WebParts)
+            {
+                if (!targetByTitle.ContainsKey(tw.Title))
+                    targetByTitle[tw.Title] = new List<WebPartSnapshot>();
+                targetByTitle[tw.Title].Add(tw);
+            }
+
+            // ── Step 3: For each placeholder — find match and sync ────────────
+            var matchedTargetKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var meta in placeholders)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[SyncProperties] Processing placeholder: '{meta.Title}' pos={meta.Position}");
+
+                // ── Find matching WebPart on target ───────────────────────────
+                if (!targetByTitle.TryGetValue(meta.Title, out var candidates))
+                {
+                    syncResult.SkippedCount++;
+                    syncResult.Errors.Add(
+                        $"No WebPart named '{meta.Title}' found on target page. " +
+                        $"Please add it manually then run Sync again.");
+                    continue;
+                }
+
+                // For duplicates — pick closest position, skip already matched
+                var match = candidates
+                    .Where(c => !matchedTargetKeys.Contains(c.StorageKey))
+                    .OrderBy(c => Math.Abs(c.VisualPosition - meta.Position))
+                    .FirstOrDefault();
+
+                if (match == null)
+                {
+                    syncResult.SkippedCount++;
+                    syncResult.Errors.Add(
+                        $"All WebParts named '{meta.Title}' are already matched. " +
+                        $"Add another instance manually.");
+                    continue;
+                }
+
+                matchedTargetKeys.Add(match.StorageKey);
+
+                // ── Get source ExportXml ──────────────────────────────────────
+                string exportXml = await GetWebPartExportXmlAsync(
+                    meta.SiteUrl, meta.PageUrl, meta.StorageKey);
+
+                if (string.IsNullOrEmpty(exportXml))
+                {
+                    syncResult.SkippedCount++;
+                    syncResult.Errors.Add(
+                        $"Could not download settings for '{meta.Title}' from source. " +
+                        $"Source page: {meta.SiteUrl}{meta.PageUrl}");
+                    continue;
+                }
+
+                // ── Parse properties from ExportXml ──────────────────────────
+                var propsToSync = ParsePropertiesFromExportXml(exportXml);
+
+                // ── Apply to target WebPart ───────────────────────────────────
+                try
+                {
+                    var request = new WebPartUpdateRequest
+                    {
+                        StorageKey        = match.StorageKey,
+                        PropertiesToUpdate = propsToSync
+                    };
+
+                    await UpdateWebPartAsync(targetSiteUrl, targetPageRelativeUrl, request);
+
+                    // ── Remove placeholder from PublishingContent ─────────────
+                    await RemovePlaceholderFromPageAsync(
+                        targetSiteUrl, targetPageRelativeUrl, meta.TargetZoneKey);
+
+                    syncResult.SyncedCount++;
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SyncProperties] Synced '{meta.Title}' → StorageKey={match.StorageKey}");
+                }
+                catch (Exception ex)
+                {
+                    syncResult.Errors.Add($"Error syncing '{meta.Title}': {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SyncProperties] Error for '{meta.Title}': {ex}");
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[SyncProperties] Done. {syncResult.Summary}");
+
+            return syncResult;
+        }
+
+        /// <summary>
+        /// Parses custom property values from a .webpart XML string.
+        /// Skips system properties (AllowClose, ChromeType, etc.).
+        /// </summary>
+        private static Dictionary<string, string> ParsePropertiesFromExportXml(string xml)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var skipProps = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "AllowClose","AllowConnect","AllowEdit","AllowHide",
+                "AllowMinimize","AllowZoneChange","AuthorizationFilter",
+                "CatalogIconImageUrl","ChromeState","ChromeType",
+                "Direction","ExportMode","HelpMode","HelpUrl",
+                "Hidden","ImportErrorMessage","TitleIconImageUrl","TitleUrl",
+                "Title","Description"
+            };
+
+            try
+            {
+                var doc = System.Xml.Linq.XDocument.Parse(xml);
+                var ns  = doc.Root?.GetDefaultNamespace();
+
+                var properties = doc.Descendants()
+                    .Where(e => e.Name.LocalName == "property");
+
+                foreach (var prop in properties)
+                {
+                    string name = prop.Attribute("name")?.Value ?? "";
+                    string val  = prop.Value ?? "";
+
+                    if (string.IsNullOrEmpty(name)) continue;
+                    if (skipProps.Contains(name)) continue;
+
+                    result[name] = val;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ParseExportXml] Error: {ex.Message}");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Removes the placeholder div with the given ZoneKey from PublishingPageContent.
+        /// Called after successful Sync of a WebPart.
+        /// </summary>
+        private async Task RemovePlaceholderFromPageAsync(
+            string siteUrl,
+            string pageRelativeUrl,
+            string zoneKey)
+        {
+            if (string.IsNullOrEmpty(zoneKey)) return;
+
+            using var ctx = await GetContextAsync(siteUrl);
+            var pageFile = ctx.Web.GetFileByServerRelativeUrl(pageRelativeUrl);
+            ctx.Load(pageFile, f => f.ListItemAllFields);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            await SafeCheckOutAsync(ctx, pageFile);
+
+            ctx.Load(pageFile.ListItemAllFields);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            var fields  = pageFile.ListItemAllFields;
+            string html = fields["PublishingPageContent"]?.ToString() ?? "";
+
+            fields["PublishingPageContent"] = RemovePlaceholderFromHtml(html, zoneKey);
+            fields.Update();
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            await CheckInAndPublishAsync(ctx, pageFile, $"Removed placeholder {zoneKey}");
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  GetPageRelativeUrlAsync
+        //  Returns the server-relative URL for a page by filename.
+        // ═══════════════════════════════════════════════════════════════════════
+        public async Task<string> GetPageRelativeUrlAsync(string siteUrl, string pageName)
+        {
+            string name = pageName.EndsWith(".aspx", StringComparison.OrdinalIgnoreCase)
+                ? pageName : pageName + ".aspx";
+
+            using var ctx = await GetContextAsync(siteUrl);
+            ctx.Load(ctx.Web, w => w.ServerRelativeUrl);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            return ctx.Web.ServerRelativeUrl.TrimEnd('/') + "/Pages/" + name;
         }
     }
 }
