@@ -20,4 +20,16 @@
     <ProjectReference Include="..\SPUtil.Services\SPUtil.Services.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- appsettings.json is in .gitignore — contains real site URLs.
+         Copy appsettings.example.json → appsettings.json and fill in your URLs. -->
+    <None Update="appsettings.json" Condition="Exists('appsettings.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Example template — committed to git, contains placeholder URLs -->
+    <None Update="appsettings.example.json">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

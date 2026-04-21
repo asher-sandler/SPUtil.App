@@ -15,8 +15,8 @@ namespace SPUtil.App.ViewModels
         private readonly ISharePointService _spService;
         private readonly IContainerExtension _container;
 
-        private string _leftSiteUrl = "https://portals2.ekmd.huji.ac.il/home/huca/EinKarem/ekcc/QA/AsherSpace/";
-        private string _rightSiteUrl = "https://portals2.ekmd.huji.ac.il/home/huca/EinKarem/ekcc/QA/AsherSpace/dev/";
+        private string _leftSiteUrl  = string.Empty;
+        private string _rightSiteUrl = string.Empty;
 		//string.Empty;
         private ObservableCollection<SPNode>? _leftSiteNodes;
         private ObservableCollection<SPNode>? _rightSiteNodes;
@@ -153,6 +153,11 @@ namespace SPUtil.App.ViewModels
             _spService = spService;
             _container = container;
             _cloneService = cloneService; // Сохраняем его
+
+            // Load site URLs from appsettings.json (excluded from git)
+            var (leftUrl, rightUrl) = LoadAppSettings();
+            _leftSiteUrl  = leftUrl;
+            _rightSiteUrl = rightUrl;
 
             CheckService();
 
@@ -1233,6 +1238,48 @@ namespace SPUtil.App.ViewModels
 		}
 */
 		
-		private bool CanExecuteCopy() => true;		
+		private bool CanExecuteCopy() => true;
+
+        // ── Settings loader ───────────────────────────────────────────────────
+        /// <summary>
+        /// Reads LeftSiteUrl and RightSiteUrl from appsettings.json next to the exe.
+        /// The file is excluded from git via .gitignore — copy appsettings.example.json
+        /// to appsettings.json and fill in your real URLs.
+        /// </summary>
+        private static (string leftUrl, string rightUrl) LoadAppSettings()
+        {
+            try
+            {
+                string path = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+
+                if (!System.IO.File.Exists(path))
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "[AppSettings] appsettings.json not found — URLs left empty. " +
+                        "Copy appsettings.example.json → appsettings.json and fill in your URLs.");
+                    return (string.Empty, string.Empty);
+                }
+
+                string json  = System.IO.File.ReadAllText(path);
+                string left  = ExtractJsonString(json, "LeftSiteUrl");
+                string right = ExtractJsonString(json, "RightSiteUrl");
+                return (left, right);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AppSettings] Failed to load: {ex.Message}");
+                return (string.Empty, string.Empty);
+            }
+        }
+
+        /// <summary>Extracts a string value from a simple flat JSON object by key name.</summary>
+        private static string ExtractJsonString(string json, string key)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(
+                json,
+                $@"""{System.Text.RegularExpressions.Regex.Escape(key)}""\s*:\s*""([^""]*)""");
+            return m.Success ? m.Groups[1].Value : string.Empty;
+        }
     }
 }
