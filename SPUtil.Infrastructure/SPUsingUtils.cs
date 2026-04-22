@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System;
 using System.Collections.Generic;
@@ -110,7 +110,7 @@ namespace SPUtil.Infrastructure
             }
             catch
             {
-                // Если это не валидный URL, возвращаем как есть
+                // If URL is invalid, return as-is
             }
 
             return url.Trim();
@@ -137,7 +137,7 @@ namespace SPUtil.Infrastructure
                     }
                 }
             }
-            catch { /* Если URL невалидный, возвращаем как есть */ }
+            catch { /* If URL is invalid, return as-is */ }
 
             return url;
         }
@@ -243,7 +243,7 @@ namespace SPUtil.Infrastructure
             catch (Exception ex)
             {
                 // Если даже так не вышло, возвращаем оригинал, чтобы не падать
-                System.Diagnostics.Debug.WriteLine("Ошибка форматирования XML: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("XML formatting error: " + ex.Message);
                 return xml;
             }
         }

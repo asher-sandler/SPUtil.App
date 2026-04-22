@@ -1,11 +1,11 @@
-﻿using System.Windows;
+using System.Windows;
 using SPUtil.Infrastructure;
 
 namespace SPUtil.App.Views
 {
     public partial class UniversalPreviewWindow : Window
     {
-        // Оставляем пустой конструктор для MVVM
+        // Empty constructor for MVVM
         public UniversalPreviewWindow()
         {
             InitializeComponent();
@@ -13,13 +13,13 @@ namespace SPUtil.App.Views
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            // Получаем кнопку из контекста данных
+            // Get the button from the data context
             if ((sender as FrameworkElement)?.DataContext is DialogButton btn)
             {
-                // Выполняем действие
+                // Execute the action
                 btn.Action?.Invoke();
                 
-                // Если кнопка закрывающая — закрываем окно
+                // If this is a cancel/close button — close the window
                 if (btn.IsCancel) 
                 {
                     this.Close();

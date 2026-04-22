@@ -16,7 +16,7 @@ namespace SPUtil.App.ViewModels
         private readonly ISharePointService _spService;
         private string  _siteUrl       = string.Empty;
         private string  _targetSiteUrl = string.Empty;
-        private string  _statusMessage = "Готов";
+        private string  _statusMessage = "Ready";
         private ObservableCollection<SPFileData>    _pages    = new();
         private ObservableCollection<SPWebPartData> _webParts = new();
         private SPFileData?    _selectedPage;
@@ -80,6 +80,8 @@ namespace SPUtil.App.ViewModels
         public DelegateCommand CopyWebPartPropertiesCommand  { get; }
         /// <summary>Copy all properties of selected WebPart to clipboard (with page/WP header)</summary>
         public DelegateCommand CopyWpToClipboardCommand      { get; }
+        /// <summary>Generate PowerShell script with all WebParts as embedded JSON, show in preview</summary>
+        public DelegateCommand ExportWpToPowerShellCommand   { get; }
 
         public PagesViewModel(ISharePointService spService)
         {
@@ -94,7 +96,7 @@ namespace SPUtil.App.ViewModels
                     foreach (var prop in wp.Properties)
                         Debug.WriteLine($"   {prop.Key}: {prop.Value}");
                 }
-                StatusMessage = "Данные свойств выведены в Output";
+                StatusMessage = "Property data written to Output";
             });
 
             ShowWebPartsPreviewCommand = new DelegateCommand(() =>
@@ -143,6 +145,11 @@ namespace SPUtil.App.ViewModels
                 () => ExecuteCopyWpToClipboard(),
                 () => SelectedWebPart != null)
                 .ObservesProperty(() => SelectedWebPart);
+
+            ExportWpToPowerShellCommand = new DelegateCommand(
+                () => ExecuteExportWpToPowerShell(),
+                () => WebParts != null && WebParts.Any())
+                .ObservesProperty(() => WebParts);
         }
 
         // ── Called by MainWindowViewModel after creating this VM ──────────────
@@ -156,14 +163,14 @@ namespace SPUtil.App.ViewModels
         {
             if (SelectedPage == null)
             {
-                MessageBox.Show("Выберите страницу для копирования.",
-                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please select a page to copy.",
+                    "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             if (string.IsNullOrEmpty(_targetSiteUrl))
             {
-                MessageBox.Show("Подключитесь к целевому сайту (правая панель).",
-                    "Нет целевого сайта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Connect to target site (right panel).",
+                    "No target site", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -302,8 +309,8 @@ namespace SPUtil.App.ViewModels
         {
             if (SelectedPage == null)
             {
-                MessageBox.Show("Выберите страницу для удаления.",
-                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please select a page to delete.",
+                    "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -346,8 +353,8 @@ namespace SPUtil.App.ViewModels
         {
             if (SelectedPage == null)
             {
-                MessageBox.Show("Выберите страницу для переименования.",
-                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please select a page to rename.",
+                    "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -412,14 +419,14 @@ namespace SPUtil.App.ViewModels
         {
             if (SelectedPage == null)
             {
-                MessageBox.Show("Выберите страницу для сравнения.",
-                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please select a page to compare.",
+                    "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             if (string.IsNullOrEmpty(_targetSiteUrl))
             {
-                MessageBox.Show("Подключитесь к целевому сайту (правая панель).",
-                    "Нет целевого сайта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Connect to target site (right panel).",
+                    "No target site", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -513,8 +520,8 @@ namespace SPUtil.App.ViewModels
         {
             if (SelectedPage == null)
             {
-                MessageBox.Show("Выберите страницу для синхронизации.",
-                    "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please select a page to sync.",
+                    "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -888,6 +895,168 @@ namespace SPUtil.App.ViewModels
             return lastSlash <= 0 ? string.Empty : afterPages.Substring(0, lastSlash);
         }
 
+        // ═══════════════════════════════════════════════════════════════════════
+        //  Export WebParts as PowerShell script
+        //  Generates a .ps1 file that:
+        //    1. Contains embedded JSON (as a here-string @"..."@)
+        //    2. Defines $PageSnapshot as a PowerShell hashtable
+        //    3. Outputs page name, WebPart names, properties and values on run
+        // ═══════════════════════════════════════════════════════════════════════
+        private void ExecuteExportWpToPowerShell()
+        {
+            if (!WebParts.Any() || SelectedPage == null) return;
+
+            string pageName = SelectedPage.Name;
+            string pageNameNoExt = System.IO.Path.GetFileNameWithoutExtension(pageName);
+            string now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+            // ── Build JSON ────────────────────────────────────────────────────
+            var jsonSb = new System.Text.StringBuilder();
+            jsonSb.AppendLine("{");
+            jsonSb.AppendLine($"  \"Page\": \"{EscapeJson(pageName)}\",");
+            jsonSb.AppendLine($"  \"Site\": \"{EscapeJson(_siteUrl)}\",");
+            jsonSb.AppendLine($"  \"Path\": \"{EscapeJson(SelectedPage.FullPath)}\",");
+            jsonSb.AppendLine($"  \"Exported\": \"{now}\",");
+            jsonSb.AppendLine("  \"WebParts\": [");
+
+            var wpList = WebParts.ToList();
+            for (int i = 0; i < wpList.Count; i++)
+            {
+                var wp = wpList[i];
+                bool lastWp = i == wpList.Count - 1;
+
+                jsonSb.AppendLine("    {");
+                jsonSb.AppendLine($"      \"Title\": \"{EscapeJson(wp.Title)}\",");
+                jsonSb.AppendLine($"      \"Position\": {wp.VisualPosition},");
+                jsonSb.AppendLine($"      \"Zone\": \"{EscapeJson(wp.ZoneId)}\",");
+                jsonSb.AppendLine($"      \"StorageKey\": \"{wp.StorageKey}\",");
+                jsonSb.AppendLine("      \"Properties\": {");
+
+                var props = wp.Properties.OrderBy(k => k.Key).ToList();
+                for (int j = 0; j < props.Count; j++)
+                {
+                    bool lastProp = j == props.Count - 1;
+                    string val = EscapeJson(props[j].Value ?? "");
+                    string comma = lastProp ? "" : ",";
+                    jsonSb.AppendLine($"        \"{EscapeJson(props[j].Key)}\": \"{val}\"{comma}");
+                }
+
+                jsonSb.AppendLine("      }");
+                jsonSb.AppendLine(lastWp ? "    }" : "    },");
+            }
+
+            jsonSb.AppendLine("  ]");
+            jsonSb.Append("}");
+
+            string json = jsonSb.ToString();
+
+            // ── Build PowerShell script ───────────────────────────────────────
+            var ps = new System.Text.StringBuilder();
+
+            ps.AppendLine($"# WebParts snapshot — {pageName}");
+            ps.AppendLine($"# Site     : {_siteUrl}");
+            ps.AppendLine($"# Path     : {SelectedPage.FullPath}");
+            ps.AppendLine($"# Generated: {now}");
+            ps.AppendLine($"# WebParts : {wpList.Count}");
+            ps.AppendLine("#");
+            ps.AppendLine("# Run this script to display all WebPart properties.");
+            ps.AppendLine("# The embedded JSON can be extracted from $JsonRaw.");
+            ps.AppendLine();
+
+            // Embedded JSON as here-string
+            ps.AppendLine("# ── Embedded JSON ───────────────────────────────────────────────");
+            ps.AppendLine("$JsonRaw = @\"");
+            ps.AppendLine(json);
+            ps.AppendLine("\"@");
+            ps.AppendLine();
+
+            // Parse JSON to hashtable
+            ps.AppendLine("# ── Parse JSON to PowerShell object ─────────────────────────────");
+            ps.AppendLine("$PageSnapshot = $JsonRaw | ConvertFrom-Json");
+            ps.AppendLine();
+
+            // Output section
+            ps.AppendLine("# ── Output ──────────────────────────────────────────────────────");
+            ps.AppendLine("Write-Host ''");
+            ps.AppendLine("Write-Host ('=' * 70) -ForegroundColor DarkGray");
+            ps.AppendLine("Write-Host \"Page     : $($PageSnapshot.Page)\" -ForegroundColor Cyan");
+            ps.AppendLine("Write-Host \"Site     : $($PageSnapshot.Site)\" -ForegroundColor Gray");
+            ps.AppendLine("Write-Host \"Path     : $($PageSnapshot.Path)\" -ForegroundColor Gray");
+            ps.AppendLine("Write-Host \"Exported : $($PageSnapshot.Exported)\" -ForegroundColor Gray");
+            ps.AppendLine("Write-Host \"WebParts : $($PageSnapshot.WebParts.Count)\" -ForegroundColor Gray");
+            ps.AppendLine("Write-Host ('=' * 70) -ForegroundColor DarkGray");
+            ps.AppendLine("Write-Host ''");
+            ps.AppendLine();
+            ps.AppendLine("foreach ($wp in $PageSnapshot.WebParts) {");
+            ps.AppendLine("    Write-Host \"[$($wp.Position)] $($wp.Title)\" -ForegroundColor Yellow");
+            ps.AppendLine("    Write-Host \"    Zone       : $($wp.Zone)\"");
+            ps.AppendLine("    Write-Host \"    StorageKey : $($wp.StorageKey)\"");
+            ps.AppendLine("    Write-Host \"    Properties :\" -ForegroundColor White");
+            ps.AppendLine();
+            ps.AppendLine("    $wp.Properties.PSObject.Properties | Sort-Object Name | ForEach-Object {");
+            ps.AppendLine("        Write-Host (\"        {0,-35}: {1}\" -f $_.Name, $_.Value)");
+            ps.AppendLine("    }");
+            ps.AppendLine("    Write-Host ''");
+            ps.AppendLine("}");
+
+            string script = ps.ToString();
+
+            // ── Show in UniversalPreviewWindow with Copy button ───────────────
+            var win = new SPUtil.App.Views.UniversalPreviewWindow
+            {
+                Title  = $"PowerShell Export — {pageName}",
+                Owner  = Application.Current.MainWindow,
+                Width  = 1100,
+                Height = 750
+            };
+
+            var buttons = new System.Collections.ObjectModel.ObservableCollection<DialogButton>
+            {
+                new DialogButton
+                {
+                    Caption = "📋  Copy script",
+                    Action  = () =>
+                    {
+                        try
+                        {
+                            System.Windows.Clipboard.SetText(script);
+                            StatusMessage = $"✔ PowerShell script copied to clipboard ({wpList.Count} WebParts)";
+                        }
+                        catch (Exception ex)
+                        {
+                            StatusMessage = $"Clipboard error: {ex.Message}";
+                        }
+                    }
+                },
+                new DialogButton
+                {
+                    Caption  = "Close",
+                    IsCancel = true,
+                    Action   = () => win?.Close()
+                }
+            };
+
+            // Reuse WebPartsPreviewViewModel pattern inline
+            var vm = new PowerShellPreviewViewModel(script, pageName, wpList.Count, win, buttons);
+            win.DataContext = vm;
+            win.ShowDialog();
+
+            StatusMessage = $"PowerShell script generated for {pageName} ({wpList.Count} WebParts)";
+        }
+
+        /// <summary>Escapes a string value for JSON embedding.</summary>
+        private static string EscapeJson(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\r\n", "\\n")
+                .Replace("\n", "\\n")
+                .Replace("\r", "\\n")
+                .Replace("\t", "\\t");
+        }
+
         // ── Data loading ──────────────────────────────────────────────────────
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
@@ -921,13 +1090,14 @@ namespace SPUtil.App.ViewModels
                 // without modifying SharePointService.cs
                 var wpData = await _spService.GetWebPartsWithPositionAsync(_siteUrl, fileUrl);
                 WebParts = new ObservableCollection<SPWebPartData>(wpData);
+                ExportWpToPowerShellCommand.RaiseCanExecuteChanged();
                 StatusMessage = WebParts.Any()
                     ? $"Web parts count: {WebParts.Count}"
                     : "No Web parts found.";
             }
             catch (Exception ex)
             {
-                StatusMessage = $"Ошибка веб-частей: {ex.Message}";
+                StatusMessage = $"Web part error: {ex.Message}";
                 Debug.WriteLine(ex.ToString());
             }
         }

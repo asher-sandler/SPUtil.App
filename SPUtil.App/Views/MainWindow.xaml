@@ -1,4 +1,4 @@
-﻿<Window x:Class="SPUtil.App.Views.MainWindow"
+<Window x:Class="SPUtil.App.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:prism="http://prismlibrary.com/"
@@ -186,10 +186,10 @@
 											<MenuItem Header="{Binding Title}" IsEnabled="False" FontWeight="Bold" Background="#F0F0F0"/>
 											<Separator />
 											
-											<MenuItem Header="Скопировать структуру (пустой)" 
+											<MenuItem Header="Copy structure (empty)" 
 													  Command="{Binding PlacementTarget.Tag.DataContext.CopyEmptyListCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
 											
-											<MenuItem Header="Скопировать с данными" 
+											<MenuItem Header="Copy with data" 
 													  Command="{Binding PlacementTarget.Tag.DataContext.CopyListWithDataCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
 										</ContextMenu>           </Setter.Value>
 									</Setter>

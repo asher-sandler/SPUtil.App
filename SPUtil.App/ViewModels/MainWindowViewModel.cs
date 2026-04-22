@@ -1,4 +1,4 @@
-﻿
+
 using SPUtil.App.Views;
 using SPUtil.Infrastructure;
 using SPUtil.Services;
@@ -23,7 +23,7 @@ namespace SPUtil.App.ViewModels
         private SPNode? _selectedLeftNode;
         private SPNode? _selectedRightNode;
         
-        // Две независимые панели деталей
+        // Two independent detail panels
         private object? _leftDetailsView;
         private object? _rightDetailsView;
         private string? _detailedInfo;
@@ -36,7 +36,7 @@ namespace SPUtil.App.ViewModels
         public string ConnectionStatus { get => _connectionStatus; set => SetProperty(ref _connectionStatus, value); }
 		public string CurrentUserName { get => _currentUserName; set => SetProperty(ref _currentUserName, value); }
 
-		// В конструкторе
+		// Constructor
 		public SPNode? SelectedLeftNode
 		{
 			get => _selectedLeftNode;
@@ -44,7 +44,7 @@ namespace SPUtil.App.ViewModels
 			{
 				if (SetProperty(ref _selectedLeftNode, value))
 				{
-					// Уведомляем команду, что нужно перепроверить доступность
+					// Notify command to re-check CanExecute
 					CopyEmptyListCommand.RaiseCanExecuteChanged();
 				}
 			}
@@ -101,7 +101,7 @@ namespace SPUtil.App.ViewModels
 		// В объявлении свойств команд:
 		public DelegateCommand ConnectAsCommand { get; }
 
-		// В конструкторе ViewModel:
+		// Constructor ViewModel:
 		
 		private string _statusMessage = "Ready";
 		public string StatusMessage 
@@ -152,7 +152,7 @@ namespace SPUtil.App.ViewModels
         {
             _spService = spService;
             _container = container;
-            _cloneService = cloneService; // Сохраняем его
+            _cloneService = cloneService; // Store reference
 
             // Load site URLs from appsettings.json (excluded from git)
             var (leftUrl, rightUrl) = LoadAppSettings();
@@ -361,7 +361,7 @@ namespace SPUtil.App.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    // Ошибка авторизации (401) или доступа
+                    // Error авторизации (401) или доступа
                     var result = ShowLoginDialog();
                     if (!result) return new ObservableCollection<SPNode>(); // Пользователь отменил
 
@@ -473,9 +473,9 @@ namespace SPUtil.App.ViewModels
 
                 var finalLines = new List<string>();
 
-                finalLines.AddRange(schemasHead1);     // Заголовок полей
+                finalLines.AddRange(schemasHead1);     // Title полей
                 finalLines.AddRange(cleanFieldSchemas); // Сами поля
-                finalLines.AddRange(schemasHead2);     // Заголовок вьюх
+                finalLines.AddRange(schemasHead2);     // Title вьюх
                 finalLines.AddRange(viewSchemas);      // Сами вьюхи
 
                 // 5. Формируем финальную строку
@@ -589,18 +589,18 @@ namespace SPUtil.App.ViewModels
                     else 
                     {
                         // Для всех остальных типов (настройки, папки и т.д.)
-                        newView = new InfoViewModel($"Тип: {node.Type}\nID шаблона: {templateId}\nИмя: {node.Title}\n\nЭтот тип объекта пока не имеет специального интерфейса.");
+                        newView = new InfoViewModel($"Type: {node.Type}\nTemplate ID: {templateId}\nName: {node.Title}\n\nThis object type has no dedicated interface yet.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    newView = new InfoViewModel($"Ошибка загрузки деталей: {ex.Message}");
+                    newView = new InfoViewModel($"Detail load error: {ex.Message}");
                 }
             }
             else
             {
                 // Если кликнули на узел без ID шаблона (например, корень сайта или системную папку)
-                newView = new InfoViewModel($"Объект: {node.Title}\nТип: {node.Type}\nПуть: {node.Path}");
+                newView = new InfoViewModel($"Object: {node.Title}\nType: {node.Type}\nPath: {node.Path}");
             }
 
             // Назначаем созданную вью-модель в нужную панель
@@ -839,7 +839,7 @@ namespace SPUtil.App.ViewModels
 					var el = System.Xml.Linq.XElement.Parse(xml);
 					string name = el.Attribute("Name")?.Value;
 					if (!string.IsNullOrEmpty(name)) dict[name] = xml;
-				} catch { /* игнорируем битый XML */ }
+				} catch { /* ignore malformed XML */ }
 			}
 			return dict;
 		}

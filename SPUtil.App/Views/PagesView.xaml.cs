@@ -1,26 +1,36 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using System.Windows.Controls.Primitives;
 
 namespace SPUtil.App.Views
 {
-    /// <summary>
-    /// Interaction logic for PagesView.xaml
-    /// </summary>
     public partial class PagesView : UserControl
     {
         public PagesView()
         {
             InitializeComponent();
+        }
+
+        // Opens page-actions ContextMenu on left-click
+        private void BtnHamburger_Click(object sender, RoutedEventArgs e)
+        {
+            OpenContextMenu(sender);
+        }
+
+        // Opens WP-actions ContextMenu on left-click
+        private void BtnWpHamburger_Click(object sender, RoutedEventArgs e)
+        {
+            OpenContextMenu(sender);
+        }
+
+        private static void OpenContextMenu(object sender)
+        {
+            if (sender is Button btn && btn.ContextMenu != null)
+            {
+                btn.ContextMenu.PlacementTarget = btn;
+                btn.ContextMenu.Placement = PlacementMode.Bottom;
+                btn.ContextMenu.IsOpen = true;
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using Microsoft.SharePoint.Client;
+using Microsoft.SharePoint.Client;
 using Microsoft.SharePoint.Client.WebParts;
 using Microsoft.SharePoint.DesignTime.Activities;
 using Microsoft.SharePoint.JSGrid;
@@ -38,7 +38,7 @@ namespace SPUtil.Services
 				string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate";
 				using (var key = Registry.CurrentUser.OpenSubKey(regPath))
 				{
-					// Пытаемся достать Param1, если ключа или значения нет — возвращаем "Unknown" или дефолт
+					// Try to get Param1; return "Unknown" or default if key/value is missing
 					return key?.GetValue("Param1")?.ToString() ?? "Unknown";
 				}
 			}
@@ -55,19 +55,19 @@ namespace SPUtil.Services
 			try
 			{
 				Uri uri = new Uri(url);
-				string host = uri.Host; // Например, portals2.ekmd.huji.ac.il
+				string host = uri.Host; // e.g. portals2.ekmd.huji.ac.il
 				string[] parts = host.Split('.');
 
 				if (parts.Length > 0)
 				{
 					string firstPart = parts[0]; // portals2
 
-					// Если первая часть заканчивается на '2', убираем её
+					// If the first part ends with '2', remove it
 					if (firstPart.EndsWith("2"))
 					{
 						parts[0] = firstPart.Remove(firstPart.Length - 1);
 
-						// Собираем URL обратно
+						// Rebuild the URL
 						var builder = new UriBuilder(uri);
 						builder.Host = string.Join(".", parts);
 						return builder.Uri.ToString().TrimEnd('/');
@@ -76,7 +76,7 @@ namespace SPUtil.Services
 			}
 			catch
 			{
-				// Если это не валидный URL, возвращаем как есть
+				// If URL is invalid, return as-is
 			}
 
 			return url.Trim();
@@ -108,13 +108,13 @@ namespace SPUtil.Services
                 using (var context = await GetContextAsync(siteUrl))
                 {
                     context.Load(context.Web, w => w.Title);
-                    await Task.Run(() => context.ExecuteQuery()); // Здесь происходит сетевой запрос
+                    await Task.Run(() => context.ExecuteQuery()); // Network request happens here
                     return AuthResult.Success;
                 }
             }
             catch (Exception ex)
             {
-                // Проверяем само исключение И внутреннее исключение (на всякий случай)
+                // Check both the exception and inner exception
                 var webEx = (ex as System.Net.WebException) ?? (ex.InnerException as System.Net.WebException);
 
                 if (webEx != null && webEx.Response is System.Net.HttpWebResponse response)
@@ -133,11 +133,11 @@ namespace SPUtil.Services
                     }
                 }
 
-                // Если это специфическая ошибка SharePoint ServerException
+                // Handle SharePoint-specific ServerException
                 if (ex is Microsoft.SharePoint.Client.ServerException serverEx)
                 {
                     System.Diagnostics.Debug.WriteLine($"[SP_AUTH_DEBUG] ServerException: {serverEx.Message}");
-                    if (serverEx.Message.Contains("Access denied") || serverEx.Message.Contains("У вас нет прав"))
+                    if (serverEx.Message.Contains("Access denied") || serverEx.Message.Contains("You do not have permission"))
                         return AuthResult.AccessDenied;
                 }
 
@@ -145,7 +145,7 @@ namespace SPUtil.Services
                 return AuthResult.Error;
             }
         }
-        // Вспомогательный метод для создания контекста (решает ошибку CS0103)
+        // Helper method for creating context (fixes error CS0103)
         private async Task<ClientContext> GetContextAsync(string siteUrl)
 		{
 			return await Task.Run(() =>
@@ -218,7 +218,7 @@ namespace SPUtil.Services
 					return new SPFileData
 					{
 						Name = item["FileLeafRef"]?.ToString() ?? "",
-						FullPath = item["FileRef"]?.ToString() ?? "", // Используем FullPath
+						FullPath = item["FileRef"]?.ToString() ?? "",
 						IsFolder = isFolder,
 						Modified = item["Modified"] != null ? (DateTime)item["Modified"] : DateTime.MinValue,
 						Size = 0
@@ -233,7 +233,7 @@ namespace SPUtil.Services
 				try
 				{
 					using var context = await GetContextAsync(siteUrl);
-					// Пытаемся получить список по имени (Title)
+					// Try to get list by display name (Title)
 					var lists = context.Web.Lists;
 					context.Load(lists, l => l.Include(list => list.Title));
 					context.ExecuteQuery();
@@ -243,7 +243,7 @@ namespace SPUtil.Services
 				}
 				catch
 				{
-					// Если сайт недоступен или ошибка — считаем, что создавать нельзя (или обрабатываем иначе)
+					// If site is unavailable or error — treat as cannot create
 					return true;
 				}
 			});
@@ -259,9 +259,9 @@ namespace SPUtil.Services
 				context.Load(list, l => l.Title, l => l.ItemCount);
 				context.ExecuteQuery();
 
-				return $"Список: {list.Title}\nТип: {templateId}\nЭлементов: {list.ItemCount}";
+				return $"List: {list.Title}\nType: {templateId}\nItems: {list.ItemCount}";
 			}
-			catch (Exception ex) { return $"Ошибка: {ex.Message}"; }
+			catch (Exception ex) { return $"Error: {ex.Message}"; }
 		}
 		/*
 		private SecureString DecryptFromPowerShell(string hexString)
@@ -285,7 +285,7 @@ namespace SPUtil.Services
 				var list = context.Web.Lists.GetById(new Guid(listId));
 
 				CamlQuery query = new CamlQuery();
-				// Рекурсивный поиск файлов и папок
+				// Recursive file and folder search
 				query.ViewXml = @"<View Scope='RecursiveAll'><Query></Query></View>";
 
 				ListItemCollection items = list.GetItems(query);
@@ -380,7 +380,7 @@ namespace SPUtil.Services
 					int loaded = 0;
 					var allItems = new List<SPListItemData>();
 
-					// Вместо query.RowLimit = 500; делаем так:
+					// Instead of query.RowLimit = 500, do:
 					CamlQuery query = new CamlQuery();
 					query.ViewXml = @"<View Scope='RecursiveAll'>
 										<Query>
@@ -404,11 +404,11 @@ namespace SPUtil.Services
 						loaded += items.Count;
 						if (total > 0)
 						{
-							progress?.Report((loaded * 100) / total); // Отправляем прогресс в UI
+							progress?.Report((loaded * 100) / total); // Report progress to UI
 						}
 						else
 						{
-							progress?.Report(100); // Если элементов 0, прогресс сразу 100%
+							progress?.Report(100); // 0 items means 100% immediately
 						}
 
                 } while (query.ListItemCollectionPosition != null);
@@ -429,7 +429,7 @@ namespace SPUtil.Services
 				using var ctx = await GetContextAsync(siteUrl);
 				var list = ctx.Web.Lists.GetByTitle(listTitle);
 				ctx.Load(list, l => l.ItemCount);
-				ctx.ExecuteQuery(); // В вашей версии только синхронный
+				ctx.ExecuteQuery(); // Synchronous only in this version
 
 				int total = list.ItemCount;
 				int loaded = 0;
@@ -448,7 +448,7 @@ namespace SPUtil.Services
 
 					var items = list.GetItems(query);
 					ctx.Load(items);
-					ctx.ExecuteQuery(); // Блокирующий вызов
+					ctx.ExecuteQuery(); // Blocking call
 
 					query.ListItemCollectionPosition = items.ListItemCollectionPosition;
 					
@@ -464,7 +464,7 @@ namespace SPUtil.Services
 						progress?.Report((loaded * 100) / total);
 					}
 
-					// Даем WPF время обновить ProgressBar перед следующим тяжелым ExecuteQuery
+					// Give WPF time to update ProgressBar before next heavy ExecuteQuery
 					await Task.Yield(); 
 
 				} while (query.ListItemCollectionPosition != null);
@@ -480,22 +480,22 @@ namespace SPUtil.Services
 				using var context = await GetContextAsync(siteUrl);
 				var list = context.Web.Lists.GetById(new Guid(listId));
 
-				// Базовый запрос для Default View
+				// Base query for Default View
 				var query = CamlQuery.CreateAllItemsQuery();
 				var items = list.GetItems(query);
 
-				// Загружаем только необходимые свойства без null-propagating операторов
+				// Load only necessary properties without null-propagating operators
 				context.Load(items, icol => icol.Include(
 					i => i.Id,
 					i => i["Title"]));
 
-				// ИСПОЛЬЗУЕМ СИНХРОННЫЙ МЕТОД
+				// USE SYNCHRONOUS METHOD
 				context.ExecuteQuery();
 
 				return items.AsEnumerable().Select(i => new SPListItemData
 				{
 					Id = i.Id,
-					Title = i["Title"] != null ? i["Title"].ToString() : "Без названия"
+					Title = i["Title"] != null ? i["Title"].ToString() : "Untitled"
 				}).ToList();
 			});
 		}
@@ -506,10 +506,10 @@ namespace SPUtil.Services
 
 			try
 			{
-				// Убираем фигурные скобки и парсим строку в Guid
+				// Strip curly braces and parse to Guid
 				Guid g = new Guid(listId.Trim('{', '}'));
 				
-				// Вызываем основной типизированный метод
+				// Call the main typed method
 				return await GetListTitleByGuidAsync(siteUrl, g);
 			}
 			catch
@@ -520,13 +520,13 @@ namespace SPUtil.Services
 
 		public async Task<string> GetListTitleByGuidAsync(string siteUrl, Guid listGuid)
 		{
-			// Используем GetContextAsync (который уже асинхронный внутри вашего сервиса)
+			// Use GetContextAsync (already async internally)
 			using (var ctx = await GetContextAsync(siteUrl))
 			{
 				var list = ctx.Web.Lists.GetById(listGuid);
 				ctx.Load(list, l => l.Title);
 				
-				// Выполняем запрос в фоновом потоке, чтобы не блокировать UI
+				// Execute request in background thread to avoid blocking UI
 				await Task.Run(() => ctx.ExecuteQuery());
 				
 				return list.Title;
@@ -536,15 +536,15 @@ namespace SPUtil.Services
 		{
 			try 
 			{
-                // Вызываем новый метод, который берет SchemaXml напрямую из SharePoint
-                // без фильтрации и преобразований
+                // Call the new method that gets SchemaXml directly from SharePoint
+                // without filtering or transformations
                 //return await _cloneService.GetAllRawFieldSchemasAsync(siteUrl, listTitle);
                 return await GetAllRawFieldSchemasAsync(siteUrl, listTitle);
             }
 			catch (Exception ex)
 			{
-				// Логирование ошибки, если нужно
-				throw new Exception($"Не удалось получить полную схему списка: {ex.Message}");
+				// Log error if needed
+				throw new Exception($"Failed to retrieve full list schema: {ex.Message}");
 			}
 		}
         private async Task<List<string>> GetAllRawFieldSchemasAsync(string siteUrl, string listTitle)
@@ -552,20 +552,20 @@ namespace SPUtil.Services
             var schemas = new List<string>();
             using (var ctx = await GetContextAsync(siteUrl))
             {
-                // Здесь должна быть ваша настройка Credentials
+                // Configure Credentials here
 
                 Web web = ctx.Web;
                 List list = web.Lists.GetByTitle(listTitle);
-                // Загружаем расширенный набор свойств, включая ReadOnlyField и Formula
+                // Load extended property set including ReadOnlyField and Formula
                 ctx.Load(list.Fields, fs => fs.Include(
                     f => f.Title,
                     f => f.InternalName,
                     f => f.StaticName,
                     f => f.FieldTypeKind,
                     f => f.Required,
-                    f => f.ReadOnlyField, // Нужно для фильтрации системных полей
-                    f => f.Hidden,        // Нужно для фильтрации скрытых полей
-                    f => f.SchemaXml      // Резервный источник данных
+                    f => f.ReadOnlyField, // Needed to filter system fields
+                    f => f.Hidden,        // Needed to filter hidden fields
+                    f => f.SchemaXml      // Fallback data source
                 ));
 
 
@@ -594,8 +594,8 @@ namespace SPUtil.Services
 
                 foreach (var field in list.Fields)
                 {
-                    // Если поле только для чтения, мы его пропускаем, КРОМЕ вычисляемых полей
-                    // Пропускаем системные ReadOnly поля, но ОСТАВЛЯЕМ Id (для маппинга) и Calculated (для формул)
+                    // Skip read-only fields EXCEPT calculated fields
+                    // Skip system ReadOnly fields but KEEP Id (for mapping) and Calculated (for formulas)
                     if (field.InternalName.Equals("Id", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
@@ -612,27 +612,27 @@ namespace SPUtil.Services
                     {
                         continue;
                     }
-                    // 1. Список имен, которые мы хотим обрабатывать (не пропускать), даже если они ReadOnly
-                    // 1. Проверяем, является ли поле системным исключением (которые мы хотим оставить)
+                    // 1. List of names to keep (not skip) even if ReadOnly
+                    // 1. Check if field is a system exception (ones we want to keep)
                     bool isSystemException =
                         field.InternalName.Equals("Created", StringComparison.OrdinalIgnoreCase) ||
                         field.InternalName.Equals("Author", StringComparison.OrdinalIgnoreCase) ||
                         field.InternalName.Equals("Modified", StringComparison.OrdinalIgnoreCase) ||
                         field.InternalName.Equals("Editor", StringComparison.OrdinalIgnoreCase);
 
-                    // 2. Логика фильтрации:
-                    // МЫ ПРОПУСКАЕМ (continue) поле, ТОЛЬКО если оно:
-                    // - Помечено как ReadOnly
-                    // - И при этом НЕ является вычисляемым (Calculated)
-                    // - И при этом НЕ является системным исключением (Id, Created и т.д.)
+                    // 2. Filtering logic:
+                    // SKIP (continue) a field ONLY if it is:
+                    // - Marked as ReadOnly
+                    // - AND is NOT a Calculated field
+                    // - AND is NOT a system exception (Id, Created, etc.)
                     if (field.ReadOnlyField && field.FieldTypeKind != FieldType.Calculated && !isSystemException)
                     {
                         continue;
                     }
 
-                    // 3. Если мы дошли до сюда, поле проходит фильтр и добавляется в список
-                    // (Здесь должен идти ваш Switch по типам полей и в конце fieldInfos.Add(info))  
-                    // Скрытые поля и системные префиксы игнорируем всегда
+                    // 3. If we reached here, the field passes the filter and is added
+                    // (Switch by field type goes here; end with fieldInfos.Add(info))  
+                    // Always ignore hidden fields and system prefixes
                     if (!field.InternalName.StartsWith("_x")) // Hebrew Names
                     {
                         if (field.Hidden || field.InternalName.StartsWith("_") || field.InternalName.StartsWith("vti_"))
@@ -654,15 +654,15 @@ namespace SPUtil.Services
         }
         public async Task CreateDocLibAsync(string siteUrl, string listName, string displayName = "")
         {
-            // Используем ваш вспомогательный метод для получения контекста
+            // Use helper method to get context
             using (var context = await GetContextAsync(siteUrl))
             {
                 Web web = context.Web;
                 context.Load(web, w => w.Lists);
                 context.ExecuteQuery();
 
-                // Проверка на существование (аналог Check-ListExists в PS)
-                // Ищем либо по системному имени, либо по отображаемому
+                // Check existence (analogous to Check-ListExists in PS)
+                // Search by internal name or display name
                 string searchTitle = string.IsNullOrEmpty(displayName) ? listName : displayName;
                 bool exists = false;
 
@@ -673,7 +673,7 @@ namespace SPUtil.Services
                     context.ExecuteQuery();
                     exists = true;
                 }
-                catch { /* Список не найден */ }
+                catch { /* List not found */ }
 
                 if (!exists)
                 {
@@ -790,11 +790,11 @@ namespace SPUtil.Services
 
 
                     // Запоминаем ID созданного поля (используем ID источника как ключ)
-                    // ЗАПОМИНАЕМ: Ключ = "ИмяСписка:ИмяПоля"
+                    // ЗАПОМИНАЕМ: Ключ = "NameСписка:NameПоля"
                     string key = $"{field.LookupListName}:{field.Name}";
                     fieldGuidMap[key] = createdField.Id.ToString();
 
-                    System.Diagnostics.Debug.WriteLine($"[MAP] Сохранили ID для {key} -> {createdField.Id}");
+                    System.Diagnostics.Debug.WriteLine($"[MAP] Saved ID for {key} -> {createdField.Id}");
                 }
 
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Lookup Error {field.Name}: {ex.Message}"); }
@@ -1011,7 +1011,7 @@ namespace SPUtil.Services
 						}
 						catch (Exception ex)
 						{
-							System.Diagnostics.Debug.WriteLine($"Ошибка маппинга Lookup для {field.Name}: {ex.Message}");
+							System.Diagnostics.Debug.WriteLine($"Error mapping Lookup for {field.Name}: {ex.Message}");
 						}
 					}
 					// --- НОВОЕ: Разделяем поля на обычные и вычисляемые ---
@@ -1176,7 +1176,7 @@ namespace SPUtil.Services
 
             List newList = ctx.Web.Lists.Add(creationInfo);
 
-            // --- ШАГ 2: Сразу меняем отображаемый заголовок на правильный ---
+            // --- STEP 2: Сразу меняем отображаемый заголовок на правильный ---
             // Это не изменит URL (RootFolder), но в интерфейсе будет красиво
             if (internalName != newlistTitle)
             {
@@ -1220,7 +1220,7 @@ namespace SPUtil.Services
 
 						if (items.Count > 0)
 						{
-							System.Diagnostics.Debug.WriteLine($"[CLEANUP] Удаление пакета: {items.Count} элементов...");
+							System.Diagnostics.Debug.WriteLine($"[CLEANUP] Deleting batch: {items.Count} item(s)...");
 							for (int i = items.Count - 1; i >= 0; i--)
 							{
 								items[i].DeleteObject();
@@ -1702,7 +1702,7 @@ namespace SPUtil.Services
 			IProgress<CopyProgressArgs> progress, 
 			CancellationToken ct)
 		{
-			// --- ШАГ 1: ВЫЗОВ ОЧИСТКИ ПЕРЕД КОПИРОВАНИЕМ ---
+			// --- STEP 1: ВЫЗОВ ОЧИСТКИ ПЕРЕД КОПИРОВАНИЕМ ---
 			if (action == "Overwrite")
 			{
 				await ClearListItemsAsync(targetUrl, targetListName);
@@ -1793,7 +1793,7 @@ namespace SPUtil.Services
 				catch (OperationCanceledException) { throw; } // Пробрасываем отмену выше
 				catch (Exception ex)
 				{
-					System.Diagnostics.Debug.WriteLine($"Ошибка при копировании: {ex.Message}");
+					System.Diagnostics.Debug.WriteLine($"Error during copy: {ex.Message}");
 					throw;
 				}
 			});

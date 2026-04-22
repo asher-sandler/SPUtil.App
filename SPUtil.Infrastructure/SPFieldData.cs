@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -59,7 +59,7 @@ namespace SPUtil.Infrastructure
 		public string Required { get; set; } = string.Empty;
 		public string EnforceUniqueValues { get; set; } = "False";
 
-		// Свойства, вызывавшие ошибки CS1061:
+		// Properties, вызывавшие ошибки CS1061:
 		public int MaxLength { get; set; } = 255;                  // Для типа Text
 		public int NumLines { get; set; } = 6;                     // Для типа Note
 		public int? Decimals { get; set; }                         // Для Number/Currency

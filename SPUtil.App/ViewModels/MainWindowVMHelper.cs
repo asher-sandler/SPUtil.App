@@ -1,4 +1,4 @@
-﻿using Microsoft.SharePoint.Portal.WebControls.WSRPWebService;
+using Microsoft.SharePoint.Portal.WebControls.WSRPWebService;
 using SPUtil.Infrastructure;
 using System;
 using System.Collections.Generic;
@@ -13,7 +13,7 @@ namespace SPUtil.App.ViewModels
         {
             if (SelectedLeftNode == null || SelectedLeftNode.Type != SharePointObjectType.List)
             {
-                System.Windows.MessageBox.Show("Выберите список или библиотеку в левой панели.");
+                System.Windows.MessageBox.Show("Please select a list or library in the left panel.");
                 return;
             }
 
@@ -53,7 +53,7 @@ namespace SPUtil.App.ViewModels
         }
         private async Task ProcessListCopyAsync(SPListInfo info, string targetUrl,  bool withData, int templateId)
         {
-            // --- ШАГ 1: Первичный диалог (Выбор имени) ---
+            // --- STEP 1: Первичный диалог (Выбор имени) ---
             var copyDialog = new SPUtil.Views.CopyListDialog(info.Title, info.URL, info.ToString())
             {
                 Owner = System.Windows.Application.Current.MainWindow
@@ -70,7 +70,7 @@ namespace SPUtil.App.ViewModels
                 Owner = System.Windows.Application.Current.MainWindow
             };
 
-            // --- ШАГ 2: Обработка существующего или создание нового списка ---
+            // --- STEP 2: Обработка существующего или создание нового списка ---
             if (listExists)
             {
                 var existsDialog = new SPUtil.Views.ExistsActionDialog(targetListName);
@@ -80,7 +80,7 @@ namespace SPUtil.App.ViewModels
 
                 if (action == "Overwrite")
                 {
-                    StatusMessage = "Удаление старого списка...";
+                    StatusMessage = "Deleting existing list...";
                     infoWin.Show();
                     infoWin.UpdateMessage($"Deleting existing list: {targetListName}...");
                     await _spService.DeleteListAsync(targetUrl, targetListName);
@@ -92,7 +92,7 @@ namespace SPUtil.App.ViewModels
                 }
                 else if (action == "Append")
                 {
-                    StatusMessage = "Будет выполнено добавление в существующий список.";
+                    StatusMessage = "Will append to existing list.";
                 }
                 else return;
             }
@@ -105,15 +105,15 @@ namespace SPUtil.App.ViewModels
                 if (!created) return;
             }
 
-            // --- ШАГ 3: Копирование данных ---
+            // --- STEP 3: Copy data ---
             if (withData)
             {
                 await ExecuteDataCopyAsync(info.URL, targetUrl, info.Title, targetListName, action);
             }
 
-            // --- ШАГ 4: Финализация ---
+            // --- STEP 4: Финализация ---
             RightSiteNodes = await _spService.GetSiteStructureAsync(targetUrl);
-            StatusMessage = "Готово";
+            StatusMessage = "Ready";
         }
 		private async Task ExecuteDataCopyAsync(string sourceUrl, string targetUrl, string sourceTitle, string targetListName, string action)
 		{
@@ -132,12 +132,12 @@ namespace SPUtil.App.ViewModels
 			}
 			catch (OperationCanceledException)
 			{
-				System.Windows.MessageBox.Show("Копирование данных отменено.");
+				System.Windows.MessageBox.Show("Data copy cancelled.");
 			}
 			catch (Exception ex)
 			{
 				progressWin.Close();
-				System.Windows.MessageBox.Show($"Ошибка при копировании данных: {ex.Message}");
+				System.Windows.MessageBox.Show($"Data copy error: {ex.Message}");
 			}
 		}
 		
@@ -282,7 +282,7 @@ namespace SPUtil.App.ViewModels
             try
             {
                 
-                 StatusMessage = "Анализ структуры и зависимостей...";
+                 StatusMessage = "Analysing structure and dependencies...";
                  var fieldInfos = await _spService.GetFieldInfosFromSiteAsync(info.URL, info.Title);
                  var sourceViews = await _spService.GetListViewsAsync(info.URL, info.Title);
                 
@@ -300,18 +300,18 @@ namespace SPUtil.App.ViewModels
                     if (missingLists.Count > 0)
                     {
                         string allMissing = string.Join("\n - ", missingLists);
-                        System.Windows.MessageBox.Show($"Необходимы списки-зависимости:\n - {allMissing}", "Ошибка зависимостей");
+                        System.Windows.MessageBox.Show($"Required dependency lists are missing:\n - {allMissing}", "Dependency Error");
                         return false;
                     }
                 //}
 
-                StatusMessage = "Создание списка на целевом сайте...";
+                StatusMessage = "Creating list on target site...";
                 await _spService.CreateListFromSchemaAsync(targetUrl, info.InternalName, targetListName, fieldInfos, sourceViews, templateId);
                 return true;
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Ошибка при создании структуры: {ex.Message}");
+                System.Windows.MessageBox.Show($"Structure creation error: {ex.Message}");
                 return false;
             }
         }

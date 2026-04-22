@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="SPUtil.App.Views.InfoView"
+<UserControl x:Class="SPUtil.App.Views.InfoView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -15,7 +15,7 @@
                     </Canvas>
                 </Viewbox>
 
-                <TextBlock Text="ИНФОРМАЦИЯ ОБ ОБЪЕКТЕ" 
+                <TextBlock Text="OBJECT INFORMATION" 
                            FontSize="11" 
                            FontWeight="Bold" 
                            Foreground="Gray" 

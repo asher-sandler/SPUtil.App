@@ -3,12 +3,20 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
              mc:Ignorable="d" d:DesignHeight="600" d:DesignWidth="900">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <!-- Subtle separator style -->
+        <!-- Sort Pages by Name ascending -->
+        <CollectionViewSource x:Key="SortedPages" Source="{Binding Pages}">
+            <CollectionViewSource.SortDescriptions>
+                <scm:SortDescription PropertyName="Name" Direction="Ascending"/>
+            </CollectionViewSource.SortDescriptions>
+        </CollectionViewSource>
+
+        <!-- Subtle property styles -->
         <Style x:Key="PropKey" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="#333"/>
@@ -20,6 +28,15 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
+
+        <!-- Menu icon helpers -->
+        <TextBlock x:Key="IconMenuPreview" Text="&#xE7C3;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#2B579A"/>
+        <TextBlock x:Key="IconMenuCopy"    Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#0066CC"/>
+        <TextBlock x:Key="IconMenuRename"  Text="&#xE8AC;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#6B2D8B"/>
+        <TextBlock x:Key="IconMenuDelete"  Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#A80000"/>
+        <TextBlock x:Key="IconMenuCompare" Text="&#xE912;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#856404"/>
+        <TextBlock x:Key="IconMenuSync"    Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#107C10"/>
+        <TextBlock x:Key="IconMenuExport"  Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#8B4513"/>
     </UserControl.Resources>
 
     <Grid Margin="10">
@@ -34,92 +51,121 @@
 
         <!-- ══════════════════════════════════════════
              Row 0 — Page toolbar (source mode only)
+             Layout: [☰ menu] | [icon-only frequent actions] | stretch | [status label]
         ══════════════════════════════════════════════ -->
         <Border Grid.Row="0"
                 Background="#F5F5F5" BorderBrush="#CCCCCC" BorderThickness="0,0,0,1"
                 Visibility="{Binding IsSourceMode, Converter={StaticResource BoolToVis}}"
-                Padding="5" Margin="0,0,0,6">
-            <StackPanel Orientation="Horizontal">
+                Padding="4,3" Margin="0,0,0,6">
+            <DockPanel LastChildFill="False">
 
-                <Button Command="{Binding GetAllPropertiesCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Dump all WebPart properties to Output window">
-                    <TextBlock Text="&#xE8FD;" Style="{StaticResource IconText}" Foreground="#107C10"/>
+                <!-- ── Hamburger menu button ─────────────────────────── -->
+                <Button x:Name="BtnHamburger"
+                        DockPanel.Dock="Left"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="6,4"
+                        Click="BtnHamburger_Click"
+                        ToolTip="All page actions">
+                    <Button.Content>
+                        <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets"
+                                   FontSize="16" Foreground="#333"
+                                   VerticalAlignment="Center"/>
+                    </Button.Content>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <!-- Page operations -->
+                            <MenuItem Header="View WebParts (Preview)"
+                                      Command="{Binding ShowWebPartsPreviewCommand}"
+                                      Icon="{StaticResource IconMenuPreview}"/>
+                            <MenuItem Header="Copy Page to target site"
+                                      Command="{Binding CopyPageCommand}"
+                                      Icon="{StaticResource IconMenuCopy}"/>
+                            <MenuItem Header="Rename Page"
+                                      Command="{Binding RenamePageCommand}"
+                                      Icon="{StaticResource IconMenuRename}"/>
+                            <Separator/>
+                            <!-- WebPart sync -->
+                            <MenuItem Header="Compare Page WebParts with target"
+                                      Command="{Binding ComparePageCommand}"
+                                      Icon="{StaticResource IconMenuCompare}"/>
+                            <MenuItem Header="Sync All WebPart Properties"
+                                      Command="{Binding SyncPropertiesCommand}"
+                                      Icon="{StaticResource IconMenuSync}"/>
+                            <Separator/>
+                            <!-- Export -->
+                            <MenuItem Header="Export WebParts as PowerShell script"
+                                      Command="{Binding ExportWpToPowerShellCommand}"
+                                      Icon="{StaticResource IconMenuExport}"/>
+                            <Separator/>
+                            <!-- Debug -->
+                            <MenuItem Header="Dump all properties to Output"
+                                      Command="{Binding GetAllPropertiesCommand}"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <!-- Open ContextMenu on left-click too -->
+
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                <Rectangle DockPanel.Dock="Left" Width="1" Fill="#CCC" Margin="4,4,4,4"/>
 
-                <Button Command="{Binding ShowWebPartsPreviewCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="View all WebPart properties">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE7C3;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
-                        <TextBlock Text="View WP" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#2B579A" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <!-- ── Frequent actions — icon only ──────────────────── -->
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding ShowWebPartsPreviewCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="View WebParts (Preview)">
+                    <TextBlock Text="&#xE7C3;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#2B579A"/>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
-
-                <Button Command="{Binding CopyPageCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Copy this page to target site">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}" Foreground="#0066CC"/>
-                        <TextBlock Text=" Copy Page" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#0066CC" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding CopyPageCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Copy Page to target site">
+                    <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#0066CC"/>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
-
-                <Button Command="{Binding RenamePageCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Rename selected page">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE8AC;" Style="{StaticResource IconText}" Foreground="#6B2D8B"/>
-                        <TextBlock Text=" Rename" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#6B2D8B" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding RenamePageCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Rename Page">
+                    <TextBlock Text="&#xE8AC;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#6B2D8B"/>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                <Rectangle DockPanel.Dock="Left" Width="1" Fill="#CCC" Margin="4,4,4,4"/>
 
-                <Button Command="{Binding DeletePageCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Delete selected page permanently">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE74D;" Style="{StaticResource IconText}" Foreground="#A80000"/>
-                        <TextBlock Text=" Delete" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#A80000" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding ComparePageCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Compare Page WebParts with target">
+                    <TextBlock Text="&#xE912;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#856404"/>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
-
-                <Button Command="{Binding ComparePageCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Compare all WebParts with the same page on target site">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE912;" Style="{StaticResource IconText}" Foreground="#856404"/>
-                        <TextBlock Text=" Compare" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#856404" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding SyncPropertiesCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Sync All WebPart Properties">
+                    <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#107C10"/>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
-
-                <Button Command="{Binding SyncPropertiesCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Sync ALL WebPart properties from source (requires placeholders on page)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE72C;" Style="{StaticResource IconText}" Foreground="#107C10"/>
-                        <TextBlock Text=" Sync All" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#107C10" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding ExportWpToPowerShellCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Export WebParts as PowerShell script">
+                    <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#8B4513"/>
                 </Button>
 
-            </StackPanel>
+            </DockPanel>
         </Border>
 
         <!-- Row 1 — Status -->
@@ -129,7 +175,7 @@
 
         <!-- Row 2 — Pages list -->
         <DataGrid Grid.Row="2"
-                  ItemsSource="{Binding Pages}"
+                  ItemsSource="{Binding Source={StaticResource SortedPages}}"
                   SelectedItem="{Binding SelectedPage}"
                   AutoGenerateColumns="False" CanUserAddRows="False"
                   IsReadOnly="True" Background="White"
@@ -161,36 +207,64 @@
                 Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="0,1,0,1"
                 Visibility="{Binding IsSourceMode, Converter={StaticResource BoolToVis}}"
                 Padding="4,3">
-            <StackPanel Orientation="Horizontal">
+            <DockPanel LastChildFill="False">
 
-                <TextBlock Text="Selected WP:" VerticalAlignment="Center"
-                           FontSize="11" Foreground="#888" Margin="4,0,8,0"/>
-
-                <Button Command="{Binding CompareWebPartCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Compare selected WebPart with matching WP on target page">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE912;" Style="{StaticResource IconText}"
-                                   Foreground="#856404" FontSize="14"/>
-                        <TextBlock Text=" Compare WP" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#856404" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <!-- Hamburger menu for WP actions -->
+                <Button x:Name="BtnWpHamburger"
+                        DockPanel.Dock="Left"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="6,4"
+                        Click="BtnWpHamburger_Click"
+                        ToolTip="All WebPart actions">
+                    <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="16" Foreground="#333"/>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Compare WP with target page"
+                                      Command="{Binding CompareWebPartCommand}"
+                                      Icon="{StaticResource IconMenuCompare}"/>
+                            <MenuItem Header="Copy WP Properties to target"
+                                      Command="{Binding CopyWebPartPropertiesCommand}"
+                                      Icon="{StaticResource IconMenuCopy}"/>
+                            <Separator/>
+                            <MenuItem Header="Copy WP properties to clipboard"
+                                      Command="{Binding CopyWpToClipboardCommand}"
+                                      Icon="{StaticResource IconMenuPreview}"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                <Rectangle DockPanel.Dock="Left" Width="1" Fill="#CCC" Margin="4,4,4,4"/>
 
-                <Button Command="{Binding CopyWebPartPropertiesCommand}"
-                        Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Copy selected WebPart properties to matching WP on target page">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}"
-                                   Foreground="#0066CC" FontSize="14"/>
-                        <TextBlock Text=" Copy WP Properties" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="#0066CC" Margin="3,0,0,0"/>
-                    </StackPanel>
+                <!-- Icon-only quick actions -->
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding CompareWebPartCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Compare selected WebPart with target page">
+                    <TextBlock Text="&#xE912;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#856404"/>
                 </Button>
 
-            </StackPanel>
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding CopyWebPartPropertiesCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Copy WP Properties to target page">
+                    <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#0066CC"/>
+                </Button>
+
+                <Button DockPanel.Dock="Left"
+                        Command="{Binding CopyWpToClipboardCommand}"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Cursor="Hand" Padding="5,4"
+                        ToolTip="Copy WP properties to clipboard">
+                    <TextBlock Text="&#xE8D0;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="15" Foreground="#555"/>
+                </Button>
+
+            </DockPanel>
         </Border>
 
         <!-- ══════════════════════════════════════════════════════
@@ -272,50 +346,26 @@
                             <RowDefinition Height="*"/>     <!-- property list -->
                         </Grid.RowDefinitions>
 
-                        <!-- WP header: Title / Zone / StorageKey + Copy button -->
+                        <!-- WP header: Title / Zone / StorageKey -->
                         <Border Grid.Row="0"
                                 Background="#F0F4FF" BorderBrush="#C8D8FF"
                                 BorderThickness="0,0,0,1" Padding="8,6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="Title: " Style="{StaticResource PropKey}"/>
-                                        <TextBlock Text="{Binding SelectedWebPart.Title}"
-                                                   FontSize="12" FontWeight="Bold" Foreground="#1a1a7a"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                        <TextBlock Text="Zone: " Style="{StaticResource PropKey}"/>
-                                        <TextBlock Text="{Binding SelectedWebPart.ZoneId}"
-                                                   Style="{StaticResource PropVal}"/>
-                                        <TextBlock Text="   StorageKey: " Style="{StaticResource PropKey}"
-                                                   Margin="12,0,4,0"/>
-                                        <TextBlock Text="{Binding SelectedWebPart.StorageKey}"
-                                                   Style="{StaticResource PropVal}" FontFamily="Consolas"/>
-                                    </StackPanel>
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Title: " Style="{StaticResource PropKey}"/>
+                                    <TextBlock Text="{Binding SelectedWebPart.Title}"
+                                               FontSize="12" FontWeight="Bold" Foreground="#1a1a7a"/>
                                 </StackPanel>
-
-                                <!-- Copy to clipboard button -->
-                                <Button Grid.Column="1"
-                                        Command="{Binding CopyWpToClipboardCommand}"
-                                        Background="Transparent" BorderBrush="Transparent"
-                                        Cursor="Hand" VerticalAlignment="Center"
-                                        Padding="6,4"
-                                        ToolTip="Copy all properties to clipboard (with page name)">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE8C8;"
-                                                   Style="{StaticResource IconText}"
-                                                   Foreground="#0066CC" FontSize="14"/>
-                                        <TextBlock Text=" Copy" VerticalAlignment="Center"
-                                                   FontSize="11" Foreground="#0066CC" Margin="3,0,0,0"/>
-                                    </StackPanel>
-                                </Button>
-
-                            </Grid>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock Text="Zone: " Style="{StaticResource PropKey}"/>
+                                    <TextBlock Text="{Binding SelectedWebPart.ZoneId}"
+                                               Style="{StaticResource PropVal}"/>
+                                    <TextBlock Text="   StorageKey: " Style="{StaticResource PropKey}"
+                                               Margin="12,0,4,0"/>
+                                    <TextBlock Text="{Binding SelectedWebPart.StorageKey}"
+                                               Style="{StaticResource PropVal}" FontFamily="Consolas"/>
+                                </StackPanel>
+                            </StackPanel>
                         </Border>
 
                         <!-- Property list -->
@@ -324,13 +374,6 @@
                                       HorizontalScrollBarVisibility="Visible">
                             <ItemsControl ItemsSource="{Binding SelectedWebPart.Properties}"
                                           Margin="4,4,4,4">
-                                <ItemsControl.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="📋  Copy all properties to clipboard"
-                                                  Command="{Binding PlacementTarget.DataContext.CopyWpToClipboardCommand,
-                                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                    </ContextMenu>
-                                </ItemsControl.ContextMenu>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Grid Margin="0,1">

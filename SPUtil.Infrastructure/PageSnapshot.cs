@@ -77,7 +77,7 @@ namespace SPUtil.Infrastructure
         public string ExportXml { get; set; } = string.Empty;
 
         /// <summary>
-        /// Свойства из LimitedWebPartManager.WebPart.Properties.
+        /// Properties из LimitedWebPartManager.WebPart.Properties.
         /// Используется для отображения и точечного обновления свойств.
         /// </summary>
         public Dictionary<string, string> Properties { get; set; } = new();
@@ -95,7 +95,7 @@ namespace SPUtil.Infrastructure
         /// <summary>Новый Title (null = не менять)</summary>
         public string? NewTitle { get; set; }
 
-        /// <summary>Свойства которые нужно обновить. Key = имя свойства, Value = новое значение.</summary>
+        /// <summary>Properties которые нужно обновить. Key = имя свойства, Value = новое значение.</summary>
         public Dictionary<string, string> PropertiesToUpdate { get; set; } = new();
 
         /// <summary>

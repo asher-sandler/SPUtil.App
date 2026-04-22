@@ -37,7 +37,7 @@ namespace SPUtil.App.ViewModels
 
         // ── Scalar state ─────────────────────────────────────────────────────
         private string     _listTitle     = string.Empty;
-        private string     _statusMessage = "Готов";
+        private string     _statusMessage = "Ready";
         private bool       _isSourceMode;
         private SPViewData _selectedView;
 
@@ -91,13 +91,13 @@ namespace SPUtil.App.ViewModels
                 switch (tab)
                 {
                     case ListTab.Items:
-                        LogAndStatus("Создать структуру списка на целевом сайте [вкладка: Items]");
+                        LogAndStatus("Create list structure on target site [tab: Items]");
                         break;
                     case ListTab.Fields:
-                        LogAndStatus("Создать структуру списка на целевом сайте [вкладка: Fields]");
+                        LogAndStatus("Create list structure on target site [tab: Fields]");
                         break;
                     case ListTab.Views:
-                        LogAndStatus("Создать структуру списка на целевом сайте [вкладка: Views]");
+                        LogAndStatus("Create list structure on target site [tab: Views]");
                         break;
                 }
             });
@@ -108,13 +108,13 @@ namespace SPUtil.App.ViewModels
                 switch (tab)
                 {
                     case ListTab.Items:
-                        LogAndStatus("Копировать структуру + данные [вкладка: Items]");
+                        LogAndStatus("Copy structure + data [tab: Items]");
                         break;
                     case ListTab.Fields:
-                        LogAndStatus("Копировать поля на целевой сайт [вкладка: Fields]");
+                        LogAndStatus("Copy fields to target site [tab: Fields]");
                         break;
                     case ListTab.Views:
-                        LogAndStatus("Копировать представления на целевой сайт [вкладка: Views]");
+                        LogAndStatus("Copy views to target site [tab: Views]");
                         break;
                 }
             });
@@ -122,7 +122,7 @@ namespace SPUtil.App.ViewModels
             CopyViewsCommand = new DelegateCommand<object>(param =>
             {
                 var tab = ToTab(param);
-                LogAndStatus($"Копировать представления (Views) [активный таб: {tab}]");
+                LogAndStatus($"Copy views [active tab: {tab}]");
             });
 
             CompareCommand = new DelegateCommand<object>(param =>
@@ -131,13 +131,13 @@ namespace SPUtil.App.ViewModels
                 switch (tab)
                 {
                     case ListTab.Items:
-                        LogAndStatus("Сравнить элементы [вкладка: Items]");
+                        LogAndStatus("Compare items [tab: Items]");
                         break;
                     case ListTab.Fields:
-                        LogAndStatus("Сравнить поля [вкладка: Fields]");
+                        LogAndStatus("Compare fields [tab: Fields]");
                         break;
                     case ListTab.Views:
-                        LogAndStatus("Сравнить представления [вкладка: Views]");
+                        LogAndStatus("Compare views [tab: Views]");
                         break;
                 }
             });
@@ -170,7 +170,7 @@ namespace SPUtil.App.ViewModels
             _lastSiteUrl  = siteUrl;
             _lastListPath = listPath;
 
-            LogAndStatus($"Загрузка данных для списка: {listPath}...");
+            LogAndStatus($"Loading list data: {listPath}...");
             Fields.Clear();
             Views.Clear();
 
@@ -188,11 +188,11 @@ namespace SPUtil.App.ViewModels
                         f.InternalName != "Attachments")
                     .ToList();
                 Fields = new ObservableCollection<SPFieldData>(result);
-                LogAndStatus($"Загружено полей: {Fields.Count}");
+                LogAndStatus($"Fields loaded: {Fields.Count}");
             }
             catch (Exception ex)
             {
-                LogAndStatus($"Ошибка загрузки полей: {ex.Message}");
+                LogAndStatus($"Field load error: {ex.Message}");
             }
 
             // ── Views ──
@@ -203,7 +203,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка вью: {ex.Message}");
+                Debug.WriteLine($"View load error: {ex.Message}");
             }
 
             // ── Items ──
@@ -212,18 +212,18 @@ namespace SPUtil.App.ViewModels
                 var allItems = await _spService.GetListItemsByIDAsync(siteUrl, cleanId);
                 if (allItems.Count > 250)
                 {
-                    LogAndStatus($"Внимание: в списке {allItems.Count} элементов. Показаны первые 250.");
+                    LogAndStatus($"Warning: list contains {allItems.Count} items. Showing first 250.");
                     Items = new ObservableCollection<SPListItemData>(allItems.Take(250));
                 }
                 else
                 {
-                    LogAndStatus($"Элементов: {allItems.Count}  |  Полей: {Fields.Count}  |  Представлений: {Views.Count}");
+                    LogAndStatus($"Items: {allItems.Count}  |  Fields: {Fields.Count}  |  Views: {Views.Count}");
                     Items = new ObservableCollection<SPListItemData>(allItems);
                 }
             }
             catch (Exception ex)
             {
-                LogAndStatus($"Ошибка загрузки элементов: {ex.Message}");
+                LogAndStatus($"Item load error: {ex.Message}");
             }
         }
     }

@@ -164,7 +164,7 @@ namespace SPUtil.Services
 							            ctx.ExecuteQuery();
 							            info.LookupListName = targetList.Title;
 						            }
-						            catch { /* Список может быть на другом вебе или удален */ }
+						            catch { /* List may be on another web or deleted */ }
 					            }
 					
 					break;                            
@@ -257,7 +257,7 @@ namespace SPUtil.Services
 
 					// Парсим GUID (ваш 100149a3-951e-4e22-aedd-0ad603a3c99a)
 					if (!Guid.TryParse(listPath, out Guid listId))
-						throw new Exception("Неверный формат GUID списка");
+						throw new Exception("Invalid list GUID format");
 
 					List list = context.Web.Lists.GetById(listId);
 
@@ -274,15 +274,15 @@ namespace SPUtil.Services
 													   // В версии 15.0 используем СИНХРОННЫЙ метод
 					context.ExecuteQuery();
 					
-                    System.Diagnostics.Debug.WriteLine($"--- Список полей для списка {listId} ---");
+                    System.Diagnostics.Debug.WriteLine($"--- Field list for list {listId} ---");
 
                     foreach (var field in fields)
                     {
                         // Выводим название и внутреннее имя каждого поля
-                        System.Diagnostics.Debug.WriteLine($"Поле: {field.Title} | InternalName: {field.InternalName} | Type: {field.FieldTypeKind}");
+                        System.Diagnostics.Debug.WriteLine($"Field: {field.Title} | InternalName: {field.InternalName} | Type: {field.FieldTypeKind}");
                     }
 
-                    System.Diagnostics.Debug.WriteLine($"--- Всего полей: {fields.Count} ---");
+                    System.Diagnostics.Debug.WriteLine($"--- Total fields: {fields.Count} ---");
 					
 					// 1. Сначала получаем ВСЕ поля, которые прошли базовый технический фильтр
 					var allFieldsList = fields.ToList();
@@ -356,7 +356,7 @@ namespace SPUtil.Services
 				var viewDataList = new List<SPViewData>();
 				using (var ctx =   await GetContextAsync(siteUrl))
 				{
-					// Здесь должна быть ваша настройка Credentials (Credentials = ...)
+					// Configure Credentials here (Credentials = ...)
 					
 					Microsoft.SharePoint.Client.Web web = ctx.Web;
 
