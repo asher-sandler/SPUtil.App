@@ -51,10 +51,10 @@
 
                 <Button Command="{Binding ShowWebPartsPreviewCommand}"
                         Background="Transparent" BorderBrush="Transparent" Cursor="Hand"
-                        ToolTip="Preview all WebPart properties">
+                        ToolTip="View all WebPart properties">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE7C3;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
-                        <TextBlock Text=" Preview" VerticalAlignment="Center" FontSize="12"
+                        <TextBlock Text="View WP" VerticalAlignment="Center" FontSize="12"
                                    Foreground="#2B579A" Margin="3,0,0,0"/>
                     </StackPanel>
                 </Button>

@@ -101,14 +101,14 @@ namespace SPUtil.App.ViewModels
             {
                 if (SelectedPage == null)
                 {
-                    MessageBox.Show("Выберите страницу в списке сверху.",
-                        "Нет выбранной страницы", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("Select a page from the list above.",
+                        "No page selected", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
                 if (!WebParts.Any())
                 {
-                    MessageBox.Show("На выбранной странице нет веб-частей или они ещё не загружены.",
-                        "Нет веб-частей", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("The selected page does not contain any web parts or they have not yet loaded.",
+                        "No web parts", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
                 var win = new SPUtil.App.Views.UniversalPreviewWindow
@@ -915,7 +915,7 @@ namespace SPUtil.App.ViewModels
         {
             try
             {
-                StatusMessage = "Загрузка веб-частей...";
+                StatusMessage = "Load Web parts...";
                 WebParts.Clear();
                 // GetWebPartsWithPositionAsync — enriches result with VisualPosition
                 // without modifying SharePointService.cs
