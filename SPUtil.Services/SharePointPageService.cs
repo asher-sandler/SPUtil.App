@@ -899,17 +899,29 @@ namespace SPUtil.Services
         public async Task CreatePageFromSnapshotAsync(
             string targetSiteUrl,
             string targetPageName,
-            PageSnapshot snapshot)
+            PageSnapshot snapshot,
+            string subfolderPath = "")   // "" = Pages root; "Dean" or "FacultyAdmin/Sub" = subfolder
         {
             await Task.Run(async () =>
             {
                 using var ctx = await GetContextAsync(targetSiteUrl);
 
                 // ── Create Publishing page ──
-                var web          = ctx.Web;
-                var pubWeb       = PublishingWeb.GetPublishingWeb(ctx, web);
+                var web    = ctx.Web;
+                var pubWeb = PublishingWeb.GetPublishingWeb(ctx, web);
                 ctx.Load(pubWeb);
+                ctx.Load(web, w => w.ServerRelativeUrl);
                 await Task.Run(() => ctx.ExecuteQuery());
+
+                // ── Ensure subfolder exists if requested ───────────────────────
+                string pagesRoot = web.ServerRelativeUrl.TrimEnd('/') + "/Pages";
+                Folder targetFolder = null;
+                if (!string.IsNullOrEmpty(subfolderPath))
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[CreatePage] Ensuring subfolder: Pages/{subfolderPath}");
+                    targetFolder = await EnsureSubfolderAsync(ctx, pagesRoot, subfolderPath);
+                }
 
                 // Find the layout in Master Page Gallery
                 var rootWeb = ctx.Site.RootWeb;
@@ -924,6 +936,9 @@ namespace SPUtil.Services
                                          : targetPageName + ".aspx",
                     PageLayoutListItem = layoutFile.ListItemAllFields
                 };
+
+                if (targetFolder != null)
+                    pageInfo.Folder = targetFolder;
 
                 var newPage = pubWeb.AddPublishingPage(pageInfo);
                 ctx.Load(newPage, p => p.ListItem);
@@ -1836,6 +1851,60 @@ namespace SPUtil.Services
             await Task.Run(() => ctx.ExecuteQuery());
 
             return ctx.Web.ServerRelativeUrl.TrimEnd('/') + "/Pages/" + name;
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  EnsureSubfolderAsync
+        //  Creates the subfolder hierarchy under the Pages library if it doesn't
+        //  exist. Returns the deepest Folder object.
+        //  subfolderPath examples: "Dean"  /  "FacultyAdmin/Sub"
+        // ═══════════════════════════════════════════════════════════════════════
+        private async Task<Folder> EnsureSubfolderAsync(
+            ClientContext ctx,
+            string pagesRootServerRelativeUrl,
+            string subfolderPath)
+        {
+            var parts = subfolderPath.Split(
+                new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+
+            string currentPath = pagesRootServerRelativeUrl;
+            Folder folder      = ctx.Web.GetFolderByServerRelativeUrl(currentPath);
+            ctx.Load(folder);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            foreach (var part in parts)
+            {
+                string childPath = currentPath.TrimEnd('/') + "/" + part;
+                try
+                {
+                    var child = ctx.Web.GetFolderByServerRelativeUrl(childPath);
+                    ctx.Load(child, f => f.Name);
+                    await Task.Run(() => ctx.ExecuteQuery());
+                    // Folder already exists — continue
+                    folder      = child;
+                    currentPath = childPath;
+                }
+                catch (ServerException ex) when (
+                    ex.ServerErrorTypeName == "System.IO.FileNotFoundException" ||
+                    ex.Message.Contains("does not exist") ||
+                    ex.Message.Contains("FileNotFoundException"))
+                {
+                    // Folder doesn't exist — create it
+                    folder.Folders.Add(part);
+                    await Task.Run(() => ctx.ExecuteQuery());
+
+                    folder = ctx.Web.GetFolderByServerRelativeUrl(childPath);
+                    ctx.Load(folder, f => f.Name, f => f.ServerRelativeUrl);
+                    await Task.Run(() => ctx.ExecuteQuery());
+
+                    currentPath = childPath;
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[EnsureSubfolder] Created: {childPath}");
+                }
+            }
+
+            return folder;
         }
     }
 }

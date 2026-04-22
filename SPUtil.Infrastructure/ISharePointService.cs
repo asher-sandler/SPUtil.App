@@ -109,7 +109,8 @@ namespace SPUtil.Services
 		Task CreatePageFromSnapshotAsync(
 			string targetSiteUrl,
 			string targetPageName,       // без .aspx
-			PageSnapshot snapshot);
+			PageSnapshot snapshot,
+			string subfolderPath = "");  // "" = Pages root; "Dean" = Pages/Dean/
 
 		// ── 3. Изменить один WebPart ─────────────────────────────────────────────────
 

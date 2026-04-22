@@ -132,10 +132,21 @@
                   ItemsSource="{Binding Pages}"
                   SelectedItem="{Binding SelectedPage}"
                   AutoGenerateColumns="False" CanUserAddRows="False"
-                  IsReadOnly="True" Background="White">
+                  IsReadOnly="True" Background="White"
+                  HorizontalScrollBarVisibility="Visible"
+                  ColumnWidth="Auto">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Name" Binding="{Binding Name}"       Width="250"/>
-                <DataGridTextColumn Header="Path" Binding="{Binding RelativeUrl}" Width="*"/>
+                <DataGridTextColumn Binding="{Binding Name}" Width="250" MinWidth="150">
+                    <DataGridTextColumn.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Name"/>
+                            <!-- TextBlock Text=" ▲" Foreground="#0066CC" FontSize="10"
+                                       VerticalAlignment="Center" Margin="3,0,0,0"
+                                       ToolTip="Sorted A→Z by name"/ -->
+                        </StackPanel>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Path" Binding="{Binding FullPath}" Width="600" MinWidth="200"/>
             </DataGrid.Columns>
         </DataGrid>
 
@@ -227,7 +238,7 @@
             <GroupBox Grid.Column="2" Header="Properties">
 
                 <!-- Placeholder when nothing selected -->
-                <Grid>
+                <Grid >
                     <TextBlock Text="Select a WebPart to view its properties."
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="#AAA" FontStyle="Italic" FontSize="12">
@@ -310,7 +321,7 @@
                         <!-- Property list -->
                         <ScrollViewer Grid.Row="1"
                                       VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
+                                      HorizontalScrollBarVisibility="Visible">
                             <ItemsControl ItemsSource="{Binding SelectedWebPart.Properties}"
                                           Margin="4,4,4,4">
                                 <ItemsControl.ContextMenu>

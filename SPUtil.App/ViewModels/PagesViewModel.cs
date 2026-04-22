@@ -60,15 +60,7 @@ namespace SPUtil.App.ViewModels
             set
             {
                 if (SetProperty(ref _selectedPage, value) && value != null)
-                {
-                    if (!value.IsFolder)
-                        _ = LoadWebPartsAsync(value.FullPath);
-                    else
-                    {
-                        WebParts.Clear();
-                        StatusMessage = "Выбрана папка";
-                    }
-                }
+                    _ = LoadWebPartsAsync(value.FullPath);
             }
         }
 
@@ -175,20 +167,23 @@ namespace SPUtil.App.ViewModels
                 return;
             }
 
-            string sourceName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
-            string sourceInfo = $"Page : {SelectedPage.Name}\nPath : {SelectedPage.FullPath}\nSite : {_siteUrl}";
+            string sourceName    = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
+            string sourceSubfolder = ComputeSubfolderPath(SelectedPage.FullPath);
+            string sourceInfo      = $"Page : {SelectedPage.Name}\nPath : {SelectedPage.FullPath}\nSite : {_siteUrl}";
 
-            // ── Step 1: Name + conflict resolution dialog ─────────────────────
-            var dialog = new SPUtil.Views.CopyPageDialog(sourceName, _targetSiteUrl, sourceInfo)
+            // ── Step 1: Dialog — name + optional path ─────────────────────────
+            var dialog = new SPUtil.Views.CopyPageDialog(
+                sourceName, _targetSiteUrl, sourceInfo, sourceSubfolder)
             {
                 Owner = Application.Current.MainWindow
             };
             if (dialog.ShowDialog() != true) return;
 
-            string targetName   = dialog.TargetPageName;
-            string existsAction = dialog.ExistsAction;   // "Replace" | "Rename"
+            string targetName    = dialog.TargetPageName;
+            string subfolderPath = (dialog.KeepFolderPath && !string.IsNullOrEmpty(sourceSubfolder))
+                                   ? sourceSubfolder : string.Empty;
 
-            // ── Step 2: Check existence ───────────────────────────────────────
+            // ── Step 2: Check if page already exists on target ────────────────
             var infoWin = new SPUtil.Views.OperationInfoWindow
             {
                 Owner = Application.Current.MainWindow
@@ -200,24 +195,28 @@ namespace SPUtil.App.ViewModels
 
             if (exists)
             {
-                if (existsAction == "Rename")
+                // Page exists — ask what to do (Replace or Rename)
+                infoWin.Close();
+
+                var existsDialog = MessageBox.Show(
+                    $"Page '{targetName}.aspx' already exists on target site.\n\n" +
+                    $"Replace — delete existing page and create from source\n" +
+                    $"No — rename existing to '{targetName}_old' first, then create",
+                    "Page Already Exists",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Warning);
+
+                if (existsDialog == MessageBoxResult.Cancel) return;
+
+                infoWin = new SPUtil.Views.OperationInfoWindow
                 {
-                    string oldName = targetName + "_old";
-                    infoWin.UpdateMessage($"Renaming existing '{targetName}' → '{oldName}'...");
-                    try
-                    {
-                        await _spService.RenamePageAsync(_targetSiteUrl, targetName, oldName);
-                    }
-                    catch (Exception ex)
-                    {
-                        infoWin.Close();
-                        MessageBox.Show($"Error renaming existing page:\n{ex.Message}",
-                            "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-                }
-                else  // Replace
+                    Owner = Application.Current.MainWindow
+                };
+                infoWin.Show();
+
+                if (existsDialog == MessageBoxResult.Yes)
                 {
+                    // Replace — delete existing
                     infoWin.UpdateMessage($"Deleting existing page '{targetName}'...");
                     try
                     {
@@ -228,6 +227,23 @@ namespace SPUtil.App.ViewModels
                         infoWin.Close();
                         MessageBox.Show($"Error deleting existing page:\n{ex.Message}",
                             "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    // No — rename existing to _old first
+                    string oldName = targetName + "_old";
+                    infoWin.UpdateMessage($"Renaming '{targetName}' → '{oldName}'...");
+                    try
+                    {
+                        await _spService.RenamePageAsync(_targetSiteUrl, targetName, oldName);
+                    }
+                    catch (Exception ex)
+                    {
+                        infoWin.Close();
+                        MessageBox.Show($"Error renaming existing page:\n{ex.Message}",
+                            "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         return;
                     }
                 }
@@ -248,14 +264,15 @@ namespace SPUtil.App.ViewModels
                 return;
             }
 
-            // ── Step 4: Create page on target ─────────────────────────────────
+            // ── Step 4: Create page on target (with optional subfolder) ────────
             int wpCount = snapshot.WebParts.Count;
-            infoWin.UpdateMessage(
-                $"Creating '{targetName}' with {wpCount} WebPart(s)...");
+            string pathLabel = string.IsNullOrEmpty(subfolderPath)
+                ? "" : $" in Pages/{subfolderPath}";
+            infoWin.UpdateMessage($"Creating '{targetName}'{pathLabel} with {wpCount} WebPart(s)...");
             try
             {
                 await _spService.CreatePageFromSnapshotAsync(
-                    _targetSiteUrl, targetName, snapshot);
+                    _targetSiteUrl, targetName, snapshot, subfolderPath);
             }
             catch (Exception ex)
             {
@@ -854,20 +871,43 @@ namespace SPUtil.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// Extracts the subfolder path within Pages from a full server-relative page URL.
+        /// /home/Agriculture/Pages/Dean/Candidate.aspx → "Dean"
+        /// /home/Agriculture/Pages/FacultyAdmin/Sub/Page.aspx → "FacultyAdmin/Sub"
+        /// /home/Agriculture/Pages/Page.aspx → ""
+        /// </summary>
+        private static string ComputeSubfolderPath(string pageRelativeUrl)
+        {
+            if (string.IsNullOrEmpty(pageRelativeUrl)) return string.Empty;
+            string url = pageRelativeUrl.Replace('\\', '/');
+            int pagesIdx = url.IndexOf("/pages/", StringComparison.OrdinalIgnoreCase);
+            if (pagesIdx < 0) return string.Empty;
+            string afterPages = url.Substring(pagesIdx + "/pages/".Length);
+            int lastSlash = afterPages.LastIndexOf('/');
+            return lastSlash <= 0 ? string.Empty : afterPages.Substring(0, lastSlash);
+        }
+
         // ── Data loading ──────────────────────────────────────────────────────
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
             _siteUrl = siteUrl;
             try
             {
-                StatusMessage = "Загрузка страниц (рекурсивно)...";
+                StatusMessage = "Loading pages...";
                 var data = await _spService.GetPageItemsAsync(siteUrl, listId);
-                Pages = new ObservableCollection<SPFileData>(data);
-                StatusMessage = $"Загружено элементов: {data.Count}";
+
+                // Show only pages (.aspx files), skip folders, sort by Name
+                var pages = data
+                    .Where(f => !f.IsFolder)
+                    .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                Pages = new ObservableCollection<SPFileData>(pages);
+                StatusMessage = $"Pages: {pages.Count}";
             }
             catch (Exception ex)
             {
-                StatusMessage = $"Ошибка загрузки: {ex.Message}";
+                StatusMessage = $"Load error: {ex.Message}";
             }
         }
 
@@ -882,8 +922,8 @@ namespace SPUtil.App.ViewModels
                 var wpData = await _spService.GetWebPartsWithPositionAsync(_siteUrl, fileUrl);
                 WebParts = new ObservableCollection<SPWebPartData>(wpData);
                 StatusMessage = WebParts.Any()
-                    ? $"Найдено веб-частей: {WebParts.Count}"
-                    : "Веб-частей не найдено";
+                    ? $"Web parts count: {WebParts.Count}"
+                    : "No Web parts found.";
             }
             catch (Exception ex)
             {
