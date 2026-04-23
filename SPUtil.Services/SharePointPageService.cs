@@ -19,6 +19,8 @@ namespace SPUtil.Services
     /// </summary>
     public partial class SharePointService
     {
+        //private static readonly ILogger _log = Log.ForContext("SourceContext", "SharePointPageService");
+
         private static readonly ILogger _logPage = Log.ForContext("SourceContext", "SharePointPageService");
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -205,6 +207,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception innerEx)
                 {
+                    _log.Error(innerEx, "ERROR: {ExType} — {Message}", innerEx.GetType().Name, innerEx.Message);
                     throw new InvalidOperationException(
                         $"File is checked out by another user and cannot be taken over automatically.\n" +
                         $"Please ask the user to check it in, or check it in manually via SharePoint UI.\n" +
@@ -236,7 +239,7 @@ namespace SPUtil.Services
             string siteUrl,
             string pageRelativeUrl)
         {
-            _logPage.Debug("GetPageSnapshot: {Page} site={Site}", pageRelativeUrl, siteUrl);
+            _log.Debug("GetPageSnapshot: {Page} site={Site}", pageRelativeUrl, siteUrl);
             return await Task.Run(async () =>
             {
                 var snapshot = new PageSnapshot
@@ -987,7 +990,7 @@ namespace SPUtil.Services
 
                 foreach (var wp in inContent)
                 {
-                    _logPage.Debug("Adding WebPart [{Pos}] {Title}", wp.VisualPosition, wp.Title);
+                    _log.Debug("Adding WebPart [{Pos}] {Title}", wp.VisualPosition, wp.Title);
                     string newStorageKey = await AddWebPartAsync(
                         targetSiteUrl, newPageRelUrl, wp.ExportXml, 0);
 
@@ -1200,6 +1203,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception ex)
                 {
+                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     System.Diagnostics.Debug.WriteLine(
                         $"[GetAllPages] Error on {fileRef}: {ex.Message}");
                 }
@@ -1276,6 +1280,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception ex)
                 {
+                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     System.Diagnostics.Debug.WriteLine($"[ParsePlaceholder] Failed to parse: {json} | {ex.Message}");
                 }
             }
@@ -1756,6 +1761,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception ex)
                 {
+                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     syncResult.Errors.Add($"Error syncing '{meta.Title}': {ex.Message}");
                     System.Diagnostics.Debug.WriteLine(
                         $"[SyncProperties] Error for '{meta.Title}': {ex}");
@@ -1807,6 +1813,7 @@ namespace SPUtil.Services
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine($"[ParseExportXml] Error: {ex.Message}");
             }
 

@@ -722,6 +722,7 @@ namespace SPUtil.Services
                 using (var ctx = await GetContextAsync(targetUrl))
                 {
                     // 1. Создаем список
+                    _log.Information("Create List  Internal: {internal} Title: {Title} Type {Type}", internalListName, newlistTitle,listType);
                     var newList = await CreateListAsync(ctx, internalListName, newlistTitle, listType);
 
                     // 2. Инициализируем существующие поля и представления
@@ -752,7 +753,12 @@ namespace SPUtil.Services
                             fieldXml = @"<Field Type=""TargetTo"" DisplayName=""Target Audiences"" Required=""FALSE""><Customization><ArrayOfProperty><Property><Name>AllowGlobalAudience</Name><Value xmlns:q1=""http://www.w3.org/2001/XMLSchema"" p4:type=""q1:boolean"" xmlns:p4=""http://www.w3.org/2001/XMLSchema-instance"">true</Value></Property><Property><Name>AllowDL</Name><Value xmlns:q2=""http://www.w3.org/2001/XMLSchema"" p4:type=""q2:boolean"" xmlns:p4=""http://www.w3.org/2001/XMLSchema-instance"">true</Value></Property><Property><Name>AllowSPGroup</Name><Value xmlns:q3=""http://www.w3.org/2001/XMLSchema"" p4:type=""q3:boolean"" xmlns:p4=""http://www.w3.org/2001/XMLSchema-instance"">true</Value></Property></ArrayOfProperty></Customization></Field>";
                         }
 
+                        _log.Information("Create List Field {Schema}", fieldXml);
+
                         newList.Fields.AddFieldAsXml(fieldXml, true, AddFieldOptions.AddFieldInternalNameHint);
+                        //newList.Update();
+                        //ctx.ExecuteQuery();
+
                     }
                     newList.Update();
                     ctx.ExecuteQuery();
@@ -912,16 +918,43 @@ namespace SPUtil.Services
                     ctx.Load(targetView.ViewFields);
                     await Task.Run(() => ctx.ExecuteQuery());
 
+                    // Load all fields that actually exist on the target list
+                    // so we can validate before adding to the view.
+                    // SharePoint throws ServerException if you add a field that
+                    // doesn't exist — even if it's just a casing mismatch.
+                    ctx.Load(newList.Fields, fs => fs.Include(f => f.InternalName));
+                    await Task.Run(() => ctx.ExecuteQuery());
+
+                    // Build a case-insensitive set of existing field internal names
+                    var existingFieldNames = newList.Fields
+                        .Select(f => f.InternalName)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
                     // RemoveAll() clears the entire field list in one server call
                     targetView.ViewFields.RemoveAll();
 
-                    // Add fields in source order
+                    // Add fields in source order — skip any that don't exist on target
                     if (viewData.ViewFields != null)
                     {
                         foreach (var fName in viewData.ViewFields)
                         {
-                            if (!string.IsNullOrWhiteSpace(fName))
-                                targetView.ViewFields.Add(fName);
+                            if (string.IsNullOrWhiteSpace(fName))
+                                continue;
+
+                            // Case-insensitive check — find the actual name on target
+                            var actualName = existingFieldNames
+                                .FirstOrDefault(n => n.Equals(fName, StringComparison.OrdinalIgnoreCase));
+
+                            if (actualName != null)
+                            {
+                                targetView.ViewFields.Add(actualName);
+                                _log.Information("Adding field: '{Field}' to view '{View}'", actualName, viewData.Title);
+                            }
+                            else
+                            {
+                                // Field doesn't exist on target — skip and log warning
+                                _log.Warning("Field '{Field}' not found on target list — skipped for view '{View}'", fName, viewData.Title);
+                            }
                         }
                     }
 

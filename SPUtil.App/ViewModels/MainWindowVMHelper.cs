@@ -10,11 +10,13 @@ namespace SPUtil.App.ViewModels
 {
     public partial class MainWindowViewModel : BindableBase
     {
-        private static readonly ILogger _logHelper = Log.ForContext<MainWindowViewModel>();
+        //private static readonly ILogger _log = Log.ForContext<MainWindowViewModel>();
+
+        //private static readonly ILogger _logHelper = Log.ForContext<MainWindowViewModel>();
 
         private async Task StartCopyProcess(bool withData)
         {
-            _logHelper.Information("StartCopyProcess withData={WithData}", withData);
+            _log.Information("StartCopyProcess withData={WithData}", withData);
             if (SelectedLeftNode == null || SelectedLeftNode.Type != SharePointObjectType.List)
             {
                 System.Windows.MessageBox.Show("Please select a list or library in the left panel.");
@@ -136,10 +138,12 @@ namespace SPUtil.App.ViewModels
 			}
 			catch (OperationCanceledException)
 			{
+			    _log.Error("ERROR in catch block");
 				System.Windows.MessageBox.Show("Data copy cancelled.");
 			}
 			catch (Exception ex)
 			{
+			    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				progressWin.Close();
 				System.Windows.MessageBox.Show($"Data copy error: {ex.Message}");
 			}
@@ -272,11 +276,13 @@ namespace SPUtil.App.ViewModels
             }
             catch (OperationCanceledException)
             {
+                _log.Error("ERROR in catch block");
                 progressWin.Close();
                 MessageBox.Show("File copy cancelled.", "Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 progressWin.Close();
                 MessageBox.Show($"Error copying files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -315,7 +321,8 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _logHelper.Error(ex, "CreateListStructureAsync failed");
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Error(ex, "CreateListStructureAsync failed");
                 System.Windows.MessageBox.Show($"Structure creation error: {ex.Message}");
                 return false;
             }

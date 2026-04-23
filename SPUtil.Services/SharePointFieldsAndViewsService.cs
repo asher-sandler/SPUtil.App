@@ -12,6 +12,7 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Serilog;
 //using SPUtil.Infrastructure;
 
 namespace SPUtil.Services
@@ -165,6 +166,7 @@ namespace SPUtil.Services
 							            info.LookupListName = targetList.Title;
 						            }
 						            catch { /* List may be on another web or deleted */ }
+						                _log.Error("ERROR in catch block");
 					            }
 					
 					break;                            
@@ -230,6 +232,7 @@ namespace SPUtil.Services
                     }
                     catch (Exception ex)
                     {
+                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                         // Если по какому-то полю не удалось получить детали, 
                         // логируем, но не прерываем весь процесс
                         System.Diagnostics.Debug.WriteLine($"Error fetching details for field {field.InternalName}: {ex.Message}");

@@ -1,21 +1,19 @@
 using Microsoft.Win32;
-using System;
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
+
 using System.Net;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 using System.Xml.Linq;
+using Serilog;
 
 namespace SPUtil.Infrastructure
 {
     public static class SPUsingUtils
     {
-		private static string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate";
+        private static readonly ILogger _log = Log.ForContext("SourceContext", nameof(SPUsingUtils));
+
+        private static string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate";
         /*
 		public static 	NetworkCredential GetCredentials()
 		{
@@ -138,6 +136,7 @@ namespace SPUtil.Infrastructure
                 }
             }
             catch { /* If URL is invalid, return as-is */ }
+                _log.Error("ERROR in catch block");
 
             return url;
         }
@@ -242,6 +241,7 @@ namespace SPUtil.Infrastructure
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 // Если даже так не вышло, возвращаем оригинал, чтобы не падать
                 System.Diagnostics.Debug.WriteLine("XML formatting error: " + ex.Message);
                 return xml;

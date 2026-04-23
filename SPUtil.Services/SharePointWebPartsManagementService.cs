@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace SPUtil.Services
 {
@@ -22,6 +23,8 @@ namespace SPUtil.Services
     /// </summary>
     public partial class SharePointService
     {
+        //private static readonly ILogger _log = Log.ForContext("SourceContext", "SharePointWebPartsManagementService");
+
         // ═══════════════════════════════════════════════════════════════════════
         //  GetWebPartsWithPositionAsync
         //  Calls the existing GetWebPartsAsync, then resolves VisualPosition
@@ -77,6 +80,7 @@ namespace SPUtil.Services
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine(
                     $"[GetWebPartsWithPosition] VisualPosition resolution failed: {ex.Message}");
                 return SortByPosition(webParts);

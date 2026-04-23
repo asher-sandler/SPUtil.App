@@ -185,6 +185,7 @@ namespace SPUtil.App.ViewModels
 				}
 				catch (Exception ex)
 				{
+				    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 					ConnectionStatus = $"Error: {ex.Message}";
 				}
 				finally
@@ -213,6 +214,7 @@ namespace SPUtil.App.ViewModels
 				}
 				catch (Exception ex)
 				{
+				    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 					ConnectionStatus = $"Error: {ex.Message}";
 				}
 				finally
@@ -364,6 +366,7 @@ namespace SPUtil.App.ViewModels
                 }
                 catch (Exception ex)
                 {
+                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     // Error авторизации (401) или доступа
                     var result = ShowLoginDialog();
                     if (!result) return new ObservableCollection<SPNode>(); // Пользователь отменил
@@ -506,6 +509,7 @@ namespace SPUtil.App.ViewModels
             }
 			catch (Exception ex)
 			{
+			    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				System.Windows.MessageBox.Show(ex.Message);
 			}
 		}
@@ -535,6 +539,7 @@ namespace SPUtil.App.ViewModels
 			}
 			catch (Exception ex) 
 			{
+			    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				// Выводим ошибку в статус-бар
 				//ConnectionStatus = $"Connection Error: {ex.Message}";
 				ConnectionStatus = $"Error: {ex.Message}"; 
@@ -597,6 +602,7 @@ namespace SPUtil.App.ViewModels
                 }
                 catch (Exception ex)
                 {
+                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     newView = new InfoViewModel($"Detail load error: {ex.Message}");
                 }
             }
@@ -747,6 +753,7 @@ namespace SPUtil.App.ViewModels
 				}
 				catch (Exception ex)
 				{
+				    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 					PreviewText = "Error during compare: " + ex.Message;
 					StatusMessage = "Error";
 				}
@@ -910,9 +917,11 @@ namespace SPUtil.App.ViewModels
 							StatusMessage = "SQL Script is ready.";
 						}
 						catch (OperationCanceledException) {
+						    _log.Error("ERROR in catch block");
 							StatusMessage = "Export cancelled.";
 						}
 						catch (Exception ex) {
+						    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 							StatusMessage = "Error: " + ex.Message;
 						}
 						finally {
@@ -938,6 +947,7 @@ namespace SPUtil.App.ViewModels
 							StatusMessage = "CSV is ready. After insert data to Excel press ALT + A + E";
 						}
 						catch (OperationCanceledException) {
+						    _log.Error("ERROR in catch block");
 							StatusMessage = "Export cancelled.";
 						}
 						finally {
@@ -1276,6 +1286,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine($"[AppSettings] Failed to load: {ex.Message}");
                 return (string.Empty, string.Empty);
             }

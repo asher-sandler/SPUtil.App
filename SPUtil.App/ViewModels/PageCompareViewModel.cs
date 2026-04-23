@@ -4,11 +4,14 @@ using SPUtil.Services;
 using System;
 using System.Collections.ObjectModel;
 using System.Windows;
+using Serilog;
 
 namespace SPUtil.App.ViewModels
 {
     public class PageCompareViewModel : BindableBase
     {
+        private static readonly ILogger _log = Log.ForContext<PageCompareViewModel>();
+
         private string _previewText    = string.Empty;
         private string _statusMessage  = string.Empty;
         private bool   _isExporting;
@@ -78,6 +81,7 @@ namespace SPUtil.App.ViewModels
                         }
                         catch (Exception ex)
                         {
+                            _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                             StatusMessage = $"✘ {ex.Message}";
                             MessageBox.Show($"Error inserting placeholders:\n{ex.Message}",
                                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);

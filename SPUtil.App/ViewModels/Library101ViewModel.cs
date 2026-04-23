@@ -6,11 +6,14 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace SPUtil.App.ViewModels
 {
     public class Library101ViewModel : BindableBase
     {
+        private static readonly ILogger _log = Log.ForContext<Library101ViewModel>();
+
         private readonly ISharePointService _spService;
         private ObservableCollection<SPFileData> _files = new();
         private string _statusMessage = string.Empty;
@@ -82,6 +85,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex) 
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"SERVER ERROR: {ex.Message}"; 
                 System.Diagnostics.Debug.WriteLine($"Full error: {ex.ToString()}");
             }

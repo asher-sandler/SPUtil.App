@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Diagnostics;
 using System;
+using Serilog;
 
 namespace SPUtil.App.ViewModels
 {
@@ -24,6 +25,8 @@ namespace SPUtil.App.ViewModels
 
     public class List100ViewModel : BindableBase
     {
+        private static readonly ILogger _log = Log.ForContext<List100ViewModel>();
+
         private readonly ISharePointService _spService;
 
         // ── Data collections ─────────────────────────────────────────────────
@@ -192,6 +195,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 LogAndStatus($"Field load error: {ex.Message}");
             }
 
@@ -203,6 +207,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 Debug.WriteLine($"View load error: {ex.Message}");
             }
 
@@ -223,6 +228,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 LogAndStatus($"Item load error: {ex.Message}");
             }
         }

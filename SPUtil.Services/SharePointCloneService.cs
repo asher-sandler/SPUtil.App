@@ -1,4 +1,4 @@
-﻿using Microsoft.SharePoint.Administration;
+using Microsoft.SharePoint.Administration;
 using Microsoft.SharePoint.Client;
 using SPUtil.Infrastructure;
 using System;
@@ -47,17 +47,30 @@ namespace SPUtil.Services
 				
 			);
 
-			// Add Internal and Static names
+			// Add Required attribute
 			if (!string.IsNullOrEmpty(field.Required))
 			{
 				if (field.Required.ToLower() == "true" || field.Required.ToLower() == "false")
 				{
 					if (field.FieldType != "Calculated")
-					{
 						fieldXml.Add(new XAttribute("Required", field.Required));
-					}
 				}
-				//fieldXml.Add(new XAttribute("StaticName", field.StaticName ?? field.Name));
+			}
+
+			// StaticName and Name must be set explicitly from the source field name.
+			// Without them SharePoint derives StaticName from DisplayName — which may
+			// differ in casing (e.g. DisplayName="president" but source View references
+			// "President" → ServerException: Column does not exist).
+			// SharePoint also truncates InternalName to 32 chars — we apply the same
+			// limit so the name on target matches what ViewFields.Add() will look for.
+			if (!string.IsNullOrEmpty(field.Name))
+			{
+				string internalName = field.Name.Length > 32
+					? field.Name.Substring(0, 32)
+					: field.Name;
+
+				fieldXml.Add(new XAttribute("StaticName", internalName));
+				fieldXml.Add(new XAttribute("Name",       internalName));
 			}
 
             // Add Default Value if exists (generic for most types)
@@ -157,8 +170,10 @@ namespace SPUtil.Services
 
 				case "Number":
 				case "Currency":
-					if (field.MinValue.HasValue) fieldXml.Add(new XAttribute("Min", field.MinValue.Value));
-					if (field.MaxValue.HasValue) fieldXml.Add(new XAttribute("Max", field.MaxValue.Value));
+					if (field.MinValue.HasValue && !double.IsInfinity(field.MinValue.Value))
+					fieldXml.Add(new XAttribute("Min", field.MinValue.Value));
+					if (field.MaxValue.HasValue && !double.IsInfinity(field.MaxValue.Value))
+					fieldXml.Add(new XAttribute("Max", field.MaxValue.Value));
 					if (field.Decimals.HasValue) fieldXml.Add(new XAttribute("Decimals", field.Decimals.Value));
 					break;
 

@@ -241,6 +241,7 @@ namespace SPUtil.App.ViewModels
                     }
                     catch (Exception ex)
                     {
+                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                         infoWin.Close();
                         MessageBox.Show($"Error deleting existing page:\n{ex.Message}",
                             "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -258,6 +259,7 @@ namespace SPUtil.App.ViewModels
                     }
                     catch (Exception ex)
                     {
+                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                         infoWin.Close();
                         MessageBox.Show($"Error renaming existing page:\n{ex.Message}",
                             "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -358,6 +360,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Delete error: {ex.Message}";
                 MessageBox.Show($"Error deleting page:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -425,6 +428,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Rename error: {ex.Message}";
                 MessageBox.Show($"Error renaming page:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -499,6 +503,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 MessageBox.Show($"Error during comparison:\n{ex.Message}",
                     "Compare Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -606,6 +611,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 StatusMessage = $"Sync error: {ex.Message}";
                 MessageBox.Show($"Error during sync:\n{ex.Message}",
@@ -725,6 +731,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 MessageBox.Show($"Compare error:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -822,6 +829,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 MessageBox.Show($"Error copying properties:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -853,6 +861,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine($"[ParseExportXml] {ex.Message}");
             }
             return result;
@@ -898,6 +907,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Clipboard error: {ex.Message}";
             }
         }
@@ -1048,6 +1058,7 @@ namespace SPUtil.App.ViewModels
                         }
                         catch (Exception ex)
                         {
+                            _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                             StatusMessage = $"Clipboard error: {ex.Message}";
                         }
                     }
@@ -1100,6 +1111,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Load error: {ex.Message}";
             }
         }
