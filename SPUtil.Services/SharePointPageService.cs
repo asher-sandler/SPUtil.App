@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using Serilog;
 using System.Threading.Tasks;
 
 namespace SPUtil.Services
@@ -18,6 +19,8 @@ namespace SPUtil.Services
     /// </summary>
     public partial class SharePointService
     {
+        private static readonly ILogger _logPage = Log.ForContext("SourceContext", "SharePointPageService");
+
         // ═══════════════════════════════════════════════════════════════════════
         //  ВНУТРЕННИЕ ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
         // ═══════════════════════════════════════════════════════════════════════
@@ -228,10 +231,12 @@ namespace SPUtil.Services
         //  1. GetPageSnapshotAsync
         //     Читает полный снимок страницы с WebParts в визуальном порядке.
         // ═══════════════════════════════════════════════════════════════════════
+        // Logged: entry, WebPart count, errors
         public async Task<PageSnapshot> GetPageSnapshotAsync(
             string siteUrl,
             string pageRelativeUrl)
         {
+            _logPage.Debug("GetPageSnapshot: {Page} site={Site}", pageRelativeUrl, siteUrl);
             return await Task.Run(async () =>
             {
                 var snapshot = new PageSnapshot
@@ -982,6 +987,7 @@ namespace SPUtil.Services
 
                 foreach (var wp in inContent)
                 {
+                    _logPage.Debug("Adding WebPart [{Pos}] {Title}", wp.VisualPosition, wp.Title);
                     string newStorageKey = await AddWebPartAsync(
                         targetSiteUrl, newPageRelUrl, wp.ExportXml, 0);
 
@@ -1555,6 +1561,7 @@ namespace SPUtil.Services
         //  with <!--SPUTIL:{...}--> metadata into target PublishingPageContent.
         //  Placeholders are inserted at the same visual position as on source.
         // ═══════════════════════════════════════════════════════════════════════
+        // Logged: placeholders inserted count and errors
         public async Task InsertPlaceholdersAsync(
             string targetSiteUrl,
             string targetPageRelativeUrl,

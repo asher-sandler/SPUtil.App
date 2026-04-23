@@ -13,12 +13,15 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Serilog;
 //using SPUtil.Infrastructure;
 
 namespace SPUtil.Services
 {
 	public partial class SharePointService : ISharePointService
 	{
+        private static readonly ILogger _log = Log.ForContext<SharePointService>();
+
 		/*
 		public string GetConnectionStatus()
 		{
@@ -103,6 +106,7 @@ namespace SPUtil.Services
 
         public async Task<AuthResult> ValidateConnectionAsync(string siteUrl)
         {
+            _log.Debug("ValidateConnection: {Url}", siteUrl);
             try
             {
                 using (var context = await GetContextAsync(siteUrl))
@@ -308,6 +312,7 @@ namespace SPUtil.Services
 
 		public async Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl)
 		{
+			_log.Debug("GetWebParts: {File}", fileRelativeUrl);
 			return await Task.Run(async () =>
 			{
 				using var context = await GetContextAsync(siteUrl);
@@ -654,6 +659,7 @@ namespace SPUtil.Services
         }
         public async Task CreateDocLibAsync(string siteUrl, string listName, string displayName = "")
         {
+            _log.Information("CreateDocLib: {Name} on {Site}", listName, siteUrl);
             // Use helper method to get context
             using (var context = await GetContextAsync(siteUrl))
             {
@@ -1198,6 +1204,7 @@ namespace SPUtil.Services
 
 		public async Task ClearListItemsAsync(string siteUrl, string listTitle)
 		{
+			_log.Warning("ClearListItems: {Title} on {Site}", listTitle, siteUrl);
 			await Task.Run(async () =>
 			{
 				using (var ctx = await GetContextAsync(siteUrl))
@@ -1408,6 +1415,7 @@ namespace SPUtil.Services
         //          "Overwrite" — replace existing files on the target.
         //          "Mirror"    — library was already wiped by the caller; behaves as Append.
         // ─────────────────────────────────────────────────────────────────────────
+        // Logged internally per-file
         public async Task CopyDocLibFilesAsync(
             string sourceUrl,
             string targetUrl,

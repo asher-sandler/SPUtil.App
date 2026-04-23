@@ -5,6 +5,7 @@ using SPUtil.Services;
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using Serilog;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -13,6 +14,8 @@ namespace SPUtil.App.ViewModels
 {
     public class PagesViewModel : BindableBase
     {
+        private static readonly ILogger _log = Log.ForContext<PagesViewModel>();
+
         private readonly ISharePointService _spService;
         private string  _siteUrl       = string.Empty;
         private string  _targetSiteUrl = string.Empty;
@@ -161,14 +164,19 @@ namespace SPUtil.App.ViewModels
         // ═══════════════════════════════════════════════════════════════════════
         private async Task ExecuteCopyPageAsync()
         {
+            _log.Debug("CopyPage started. SelectedPage={Page} TargetSite={Site}",
+                SelectedPage?.Name, _targetSiteUrl);
+
             if (SelectedPage == null)
             {
+                _log.Warning("CopyPage aborted — no page selected");
                 MessageBox.Show("Please select a page to copy.",
                     "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             if (string.IsNullOrEmpty(_targetSiteUrl))
             {
+                _log.Warning("CopyPage aborted — no target site configured");
                 MessageBox.Show("Connect to target site (right panel).",
                     "No target site", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -199,6 +207,8 @@ namespace SPUtil.App.ViewModels
             infoWin.UpdateMessage("Checking target site...");
 
             bool exists = await _spService.PageExistsAsync(_targetSiteUrl, targetName);
+            _log.Information("PageExists check: {Page} exists={Exists} on {Site}",
+                targetName, exists, _targetSiteUrl);
 
             if (exists)
             {
@@ -261,10 +271,13 @@ namespace SPUtil.App.ViewModels
             PageSnapshot snapshot;
             try
             {
+                _log.Information("Reading snapshot: {Page} from {Site}", SelectedPage.FullPath, _siteUrl);
                 snapshot = await _spService.GetPageSnapshotAsync(_siteUrl, SelectedPage.FullPath);
+                _log.Information("Snapshot read OK — {Count} WebPart(s)", snapshot.WebParts.Count);
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "Failed to read snapshot: {Page}", SelectedPage.FullPath);
                 infoWin.Close();
                 MessageBox.Show($"Error reading source page:\n{ex.Message}",
                     "Snapshot Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -278,11 +291,15 @@ namespace SPUtil.App.ViewModels
             infoWin.UpdateMessage($"Creating '{targetName}'{pathLabel} with {wpCount} WebPart(s)...");
             try
             {
+                _log.Information("Creating page {Name} in subfolder='{Sub}' on {Site}",
+                    targetName, subfolderPath, _targetSiteUrl);
                 await _spService.CreatePageFromSnapshotAsync(
                     _targetSiteUrl, targetName, snapshot, subfolderPath);
+                _log.Information("Page created successfully: {Name}", targetName);
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "Failed to create page {Name} on {Site}", targetName, _targetSiteUrl);
                 infoWin.Close();
                 MessageBox.Show($"Error creating target page:\n{ex.Message}",
                     "Create Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -307,6 +324,7 @@ namespace SPUtil.App.ViewModels
         // ═══════════════════════════════════════════════════════════════════════
         private async Task ExecuteDeletePageAsync()
         {
+            _log.Debug("DeletePage started. Page={Page}", SelectedPage?.Name);
             if (SelectedPage == null)
             {
                 MessageBox.Show("Please select a page to delete.",
@@ -328,7 +346,9 @@ namespace SPUtil.App.ViewModels
 
             try
             {
+                _log.Information("Deleting page {Page} from {Site}", SelectedPage.Name, _siteUrl);
                 await _spService.DeletePageAsync(_siteUrl, SelectedPage.Name);
+                _log.Information("Page deleted: {Page}", SelectedPage.Name);
 
                 var removed = Pages.FirstOrDefault(p => p.FullPath == SelectedPage.FullPath);
                 if (removed != null) Pages.Remove(removed);
@@ -351,6 +371,7 @@ namespace SPUtil.App.ViewModels
         // ═══════════════════════════════════════════════════════════════════════
         private async Task ExecuteRenamePageAsync()
         {
+            _log.Debug("RenamePage started. Page={Page}", SelectedPage?.Name);
             if (SelectedPage == null)
             {
                 MessageBox.Show("Please select a page to rename.",
@@ -417,6 +438,8 @@ namespace SPUtil.App.ViewModels
         // ═══════════════════════════════════════════════════════════════════════
         private async Task ExecuteComparePageAsync()
         {
+            _log.Debug("ComparePage started. Source={Page} Site={Site}",
+                SelectedPage?.Name, _siteUrl);
             if (SelectedPage == null)
             {
                 MessageBox.Show("Please select a page to compare.",
@@ -518,6 +541,7 @@ namespace SPUtil.App.ViewModels
         // ═══════════════════════════════════════════════════════════════════════
         private async Task ExecuteSyncPropertiesAsync()
         {
+            _log.Debug("SyncProperties started. Page={Page}", SelectedPage?.Name);
             if (SelectedPage == null)
             {
                 MessageBox.Show("Please select a page to sync.",
@@ -1082,6 +1106,7 @@ namespace SPUtil.App.ViewModels
 
         private async Task LoadWebPartsAsync(string fileUrl)
         {
+            _log.Debug("LoadWebParts: {Url}", fileUrl);
             try
             {
                 StatusMessage = "Load Web parts...";
@@ -1091,12 +1116,14 @@ namespace SPUtil.App.ViewModels
                 var wpData = await _spService.GetWebPartsWithPositionAsync(_siteUrl, fileUrl);
                 WebParts = new ObservableCollection<SPWebPartData>(wpData);
                 ExportWpToPowerShellCommand.RaiseCanExecuteChanged();
+                _log.Information("WebParts loaded: {Count} for {Url}", wpData.Count, fileUrl);
                 StatusMessage = WebParts.Any()
                     ? $"Web parts count: {WebParts.Count}"
                     : "No Web parts found.";
             }
             catch (Exception ex)
             {
+                _log.Error(ex, "LoadWebParts failed for {Url}", fileUrl);
                 StatusMessage = $"Web part error: {ex.Message}";
                 Debug.WriteLine(ex.ToString());
             }

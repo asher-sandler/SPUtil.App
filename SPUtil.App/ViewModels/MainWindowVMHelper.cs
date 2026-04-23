@@ -4,13 +4,17 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Windows;
+using Serilog;
 
 namespace SPUtil.App.ViewModels
 {
     public partial class MainWindowViewModel : BindableBase
     {
+        private static readonly ILogger _logHelper = Log.ForContext<MainWindowViewModel>();
+
         private async Task StartCopyProcess(bool withData)
         {
+            _logHelper.Information("StartCopyProcess withData={WithData}", withData);
             if (SelectedLeftNode == null || SelectedLeftNode.Type != SharePointObjectType.List)
             {
                 System.Windows.MessageBox.Show("Please select a list or library in the left panel.");
@@ -311,6 +315,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
+                _logHelper.Error(ex, "CreateListStructureAsync failed");
                 System.Windows.MessageBox.Show($"Structure creation error: {ex.Message}");
                 return false;
             }

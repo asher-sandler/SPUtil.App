@@ -3,6 +3,7 @@ using SPUtil.App.Views;
 using SPUtil.Infrastructure;
 using SPUtil.Services;
 using System.Collections.ObjectModel;
+using Serilog;
 using System.Windows;
 
 
@@ -12,6 +13,8 @@ namespace SPUtil.App.ViewModels
 {
     public partial class MainWindowViewModel : BindableBase
     {
+        private static readonly ILogger _log = Log.ForContext<MainWindowViewModel>();
+
         private readonly ISharePointService _spService;
         private readonly IContainerExtension _container;
 
@@ -608,27 +611,32 @@ namespace SPUtil.App.ViewModels
         }
 		private async void ExecuteCopyEmptyList()
 		{
-			await StartCopyProcess(withData: false);
+			try { await StartCopyProcess(withData: false); }
+			catch (Exception ex) { _log.Error(ex, nameof(ExecuteCopyEmptyList)); }
 		}
 		
 		private async void ExecuteCopyListWithData()
 		{
-			await StartCopyProcess(withData: true);
+			try { await StartCopyProcess(withData: true); }
+			catch (Exception ex) { _log.Error(ex, nameof(ExecuteCopyListWithData)); }
 		}		
 		//
 		private async void ExecuteDeleteList()
 		{
-			await DeleteList();
+			try { await DeleteList(); }
+			catch (Exception ex) { _log.Error(ex, nameof(ExecuteDeleteList)); }
 		}		
 		//
 		private async void ExecuteCompareList()
 		{
-			await CompareList();
+			try { await CompareList(); }
+			catch (Exception ex) { _log.Error(ex, nameof(ExecuteCompareList)); }
 		}		
 		//
 		private async void ExecuteExportList()
 		{
-			await ExportList();
+			try { await ExportList(); }
+			catch (Exception ex) { _log.Error(ex, nameof(ExecuteExportList)); }
 		}		
 		//
 		private async Task DeleteList()
