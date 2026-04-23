@@ -5,6 +5,7 @@ using SPUtil.App.Views;
 using SPUtil.App.ViewModels;
 using SPUtil.Services;
 using System.Windows;
+using Serilog;
 
 namespace SPUtil.App
 {
