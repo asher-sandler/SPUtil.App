@@ -71,7 +71,9 @@ namespace SPUtil.App.ViewModels
 
 		public DelegateCommand CopyEmptyListCommand { get; }
 		public DelegateCommand CopyListWithDataCommand { get; private set; }
+		/*
 		public DelegateCommand DeleteListCommand { get; private set; }
+		*/
 		public DelegateCommand CompareListsCommand { get; private set; }
 		public DelegateCommand ExportListCommand { get; private set; }
 		public DelegateCommand ShowSchemaCommand { get; }
@@ -254,10 +256,11 @@ namespace SPUtil.App.ViewModels
                     .ObservesProperty(() => SelectedLeftNode)
                     .ObservesProperty(() => RightSiteUrl);
 
-            DeleteListCommand = new DelegateCommand(ExecuteDeleteList, CanExecuteCopy)
+            /*
+			DeleteListCommand = new DelegateCommand(ExecuteDeleteList, CanExecuteCopy)
                     .ObservesProperty(() => SelectedLeftNode)
                     .ObservesProperty(() => RightSiteUrl);
-
+			*/
            CompareListsCommand = new DelegateCommand(ExecuteCompareList, CanExecuteCopy)
                     .ObservesProperty(() => SelectedLeftNode)
                     .ObservesProperty(() => RightSiteUrl);
@@ -627,11 +630,13 @@ namespace SPUtil.App.ViewModels
 			catch (Exception ex) { _log.Error(ex, nameof(ExecuteCopyListWithData)); }
 		}		
 		//
+		/*
 		private async void ExecuteDeleteList()
 		{
 			try { await DeleteList(); }
 			catch (Exception ex) { _log.Error(ex, nameof(ExecuteDeleteList)); }
-		}		
+		}
+		*/		
 		//
 		private async void ExecuteCompareList()
 		{
@@ -645,6 +650,7 @@ namespace SPUtil.App.ViewModels
 			catch (Exception ex) { _log.Error(ex, nameof(ExecuteExportList)); }
 		}		
 		//
+		/*
 		private async Task DeleteList()
 		{
 			if (SelectedLeftNode == null || SelectedLeftNode.Type != SharePointObjectType.List)
@@ -674,6 +680,7 @@ namespace SPUtil.App.ViewModels
 			
 			
 		}
+		*/
 		private async Task CompareList()
 		{
 			if (SelectedLeftNode == null || SelectedLeftNode.Type != SharePointObjectType.List)

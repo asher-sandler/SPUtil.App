@@ -120,14 +120,14 @@
 						</Button>
 
 						<Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,10"/>
-
+						<!--
 						<Button Command="{Binding Tag.DeleteListCommand, RelativeSource={RelativeSource AncestorType=StackPanel}}" 
 								ToolTipService.ToolTip="Delete List">
 							<TextBlock Text="&#xE74D;" Style="{StaticResource IconText}" Foreground="#D13438"/>
 						</Button>
-
+						
 						<Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,10"/>
-
+						-->
 						<Button Command="{Binding Tag.CompareListsCommand, RelativeSource={RelativeSource AncestorType=StackPanel}}" 
 								ToolTipService.ToolTip="Compare Lists">
 							<TextBlock Text="&#xE835;" Style="{StaticResource IconText}" Foreground="#484644"/>
