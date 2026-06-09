@@ -31,15 +31,8 @@
             <StackPanel Orientation="Horizontal"
                         Visibility="{Binding IsSourceMode, Converter={StaticResource BooleanToVisibilityConverter}}">
 
-                <!-- Create structure on target -->
-                <Button Style="{StaticResource IconButton}"
-                        Command="{Binding CreateOnTargetCommand}"
-                        CommandParameter="{Binding ActiveTab}"
-                        ToolTip="Create this list on the target site">
-                    <TextBlock Text="&#xE710;" Style="{StaticResource IconText}" Foreground="#0078D4"/>
-                </Button>
-
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                <!-- 2026-06-09: CreateOnTargetCommand removed — creation is handled
+                     via the main toolbar (Copy structure to target). No per-tab value here. -->
 
                 <!-- Copy with data -->
                 <Button Style="{StaticResource IconButton}"
@@ -61,15 +54,9 @@
 
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
 
-                <!-- Compare -->
-                <Button Style="{StaticResource IconButton}"
-                        Command="{Binding CompareCommand}"
-                        CommandParameter="{Binding ActiveTab}"
-                        ToolTip="Compare structures">
-                    <TextBlock Text="&#xE912;" Style="{StaticResource IconText}" Foreground="#856404"/>
-                </Button>
-
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                <!-- 2026-06-09: CompareCommand removed — duplicate of MainWindow CompareListsCommand
+                     (Fields tab: identical logic via GetListSchemaAsync;
+                      Items/Views tab: no implementation, nothing to compare here) -->
 
                 <!-- Refresh -->
                 <Button Style="{StaticResource IconButton}"

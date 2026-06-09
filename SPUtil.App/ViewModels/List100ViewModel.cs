@@ -62,7 +62,12 @@ namespace SPUtil.App.ViewModels
             set
             {
                 if (SetProperty(ref _activeTab, value))
+                {
                     RaisePropertyChanged(nameof(ActiveTabIndex));
+                    // 2026-06-09: re-evaluate button enabled state on every tab switch
+                    CopyWithDataCommand.RaiseCanExecuteChanged();
+                    CopyViewsCommand.RaiseCanExecuteChanged();
+                }
             }
         }
 
@@ -91,72 +96,52 @@ namespace SPUtil.App.ViewModels
         // DelegateCommand<object> — XAML passes CommandParameter="{Binding ActiveTab}"
         // so the handler receives the ListTab enum value at the moment of the click.
 
-        public DelegateCommand<object> CreateOnTargetCommand { get; }
+        // 2026-06-09: CreateOnTargetCommand removed — creation is handled via main toolbar
         public DelegateCommand<object> CopyWithDataCommand   { get; }
         public DelegateCommand<object> CopyViewsCommand      { get; }
-        public DelegateCommand<object> CompareCommand        { get; }
+        // 2026-06-09: CompareCommand removed — duplicate of MainWindow CompareListsCommand
         public DelegateCommand         RefreshCommand        { get; }
 
         public List100ViewModel(ISharePointService spService)
         {
             _spService = spService;
 
-            CreateOnTargetCommand = new DelegateCommand<object>(param =>
-            {
-                var tab = ToTab(param);
-                switch (tab)
-                {
-                    case ListTab.Items:
-                        LogAndStatus("Create list structure on target site [tab: Items]");
-                        break;
-                    case ListTab.Fields:
-                        LogAndStatus("Create list structure on target site [tab: Fields]");
-                        break;
-                    case ListTab.Views:
-                        LogAndStatus("Create list structure on target site [tab: Views]");
-                        break;
-                }
-            });
+            // 2026-06-09: CreateOnTargetCommand removed — creation is handled via main toolbar
 
-            CopyWithDataCommand = new DelegateCommand<object>(async param =>
-            {
-                var tab = ToTab(param);
-                switch (tab)
+            // 2026-06-09: CanExecute added — button is greyed out when tab context makes it irrelevant
+            // Copy is only meaningful on Items tab (selected rows to copy)
+            CopyWithDataCommand = new DelegateCommand<object>(
+                executeMethod: async param =>
                 {
-                    case ListTab.Items:
-                        await CopySelectedItemsAsync();
-                        break;
-                    case ListTab.Fields:
-                        LogAndStatus("Copy fields to target site [tab: Fields]");
-                        break;
-                    case ListTab.Views:
-                        LogAndStatus("Copy views to target site [tab: Views]");
-                        break;
-                }
-            });
+                    var tab = ToTab(param);
+                    switch (tab)
+                    {
+                        case ListTab.Items:
+                            await CopySelectedItemsAsync();
+                            break;
+                        case ListTab.Fields:
+                            LogAndStatus("Copy fields to target site [tab: Fields]");
+                            break;
+                        case ListTab.Views:
+                            LogAndStatus("Copy views to target site [tab: Views]");
+                            break;
+                    }
+                },
+                canExecuteMethod: param => ToTab(param) == ListTab.Items);
 
-            CopyViewsCommand = new DelegateCommand<object>(param =>
-            {
-                var tab = ToTab(param);
-                LogAndStatus($"Copy views [active tab: {tab}]");
-            });
-
-            CompareCommand = new DelegateCommand<object>(param =>
-            {
-                var tab = ToTab(param);
-                switch (tab)
+            // CopyViews is only meaningful on Views tab
+            CopyViewsCommand = new DelegateCommand<object>(
+                executeMethod: param =>
                 {
-                    case ListTab.Items:
-                        LogAndStatus("Compare items [tab: Items]");
-                        break;
-                    case ListTab.Fields:
-                        LogAndStatus("Compare fields [tab: Fields]");
-                        break;
-                    case ListTab.Views:
-                        LogAndStatus("Compare views [tab: Views]");
-                        break;
-                }
-            });
+                    var tab = ToTab(param);
+                    LogAndStatus($"Copy views [active tab: {tab}]");
+                },
+                canExecuteMethod: param => ToTab(param) == ListTab.Views);
+
+            // 2026-06-09: CompareCommand removed — duplicate of MainWindow CompareListsCommand.
+            // Fields tab: identical schema comparison already available via GetListSchemaAsync.
+            // Items/Views tab: no implementation existed — only LogAndStatus stubs.
+            // Use the Compare button in the main toolbar instead.
 
             RefreshCommand = new DelegateCommand(async () =>
             {
