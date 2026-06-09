@@ -76,14 +76,16 @@ namespace SPUtil.Services
 		Task CreateListFromSchemaAsync(string targetUrl, string internalListName, string newlistTitle, List<FieldInfo> sourceFields, List<SPViewData> sourceViews, int listType);
 
 
+        // 2026-06-09: added optional itemIds parameter — null = copy all, list = copy selected only
         Task CopyListItemsAsync(
 			string sourceUrl, 
 			string targetUrl, 
 			string sourceTitle, 
-			string targetListName, // Новый параметр
+			string targetListName,
 			string action,         // "Overwrite" или "Append"
 			IProgress<CopyProgressArgs> progress, 
-			CancellationToken ct);
+			CancellationToken ct,
+			IEnumerable<int> itemIds = null);
 			
 		Task ClearListItemsAsync(string siteUrl, string listTitle);
         Task<SPListInfo> GetListDetailedInfoAsync(string siteUrl, string listTitle);

@@ -1734,17 +1734,22 @@ namespace SPUtil.Services
             }, ct);
         }
 
+        // 2026-06-09: added itemIds optional parameter — two branches:
+        //   itemIds != null → one CAML <Eq> per ID, one ExecuteQuery per item (atomic, safe)
+        //   itemIds == null → original pagination behaviour, unchanged
         public async Task CopyListItemsAsync(
-			string sourceUrl, 
-			string targetUrl, 
-			string sourceTitle, 
-			string targetListName, 
-			string action,         
-			IProgress<CopyProgressArgs> progress, 
-			CancellationToken ct)
+			string sourceUrl,
+			string targetUrl,
+			string sourceTitle,
+			string targetListName,
+			string action,
+			IProgress<CopyProgressArgs> progress,
+			CancellationToken ct,
+			IEnumerable<int> itemIds = null)
 		{
-			// --- STEP 1: ВЫЗОВ ОЧИСТКИ ПЕРЕД КОПИРОВАНИЕМ ---
-			if (action == "Overwrite")
+			// Clear target only when copying ALL items with Overwrite.
+			// When itemIds is set we always append — clearing makes no sense.
+			if (action == "Overwrite" && itemIds == null)
 			{
 				await ClearListItemsAsync(targetUrl, targetListName);
 			}
@@ -1759,82 +1764,161 @@ namespace SPUtil.Services
 						List sourceList = sourceCtx.Web.Lists.GetByTitle(sourceTitle);
 						List targetList = targetCtx.Web.Lists.GetByTitle(targetListName);
 
-						// Загружаем количество элементов для прогресса
+						// Load fields — needed by both branches
 						sourceCtx.Load(sourceList, l => l.ItemCount, l => l.Fields);
-						sourceCtx.Load(sourceList.Fields, fs => fs.Include(f => f.InternalName, f => f.ReadOnlyField, f => f.Hidden));
+						sourceCtx.Load(sourceList.Fields, fs => fs.Include(
+							f => f.InternalName,
+							f => f.ReadOnlyField,
+							f => f.Hidden));
 						sourceCtx.ExecuteQuery();
 
-						int totalItems = sourceList.ItemCount;
-						int processedCount = 0;
-
 						var fieldsToCopy = sourceList.Fields.AsEnumerable()
-							.Where(f => !f.ReadOnlyField && !f.Hidden && 
-										f.InternalName != "ContentTypeId" && 
+							.Where(f => !f.ReadOnlyField && !f.Hidden &&
+										f.InternalName != "ContentTypeId" &&
 										f.InternalName != "Attachments")
 							.ToList();
 
-						CamlQuery query = new CamlQuery();
-						query.ViewXml = @"<View Scope='RecursiveAll'>
-											<Query><OrderBy><FieldRef Name='ID' Ascending='TRUE' /></OrderBy></Query>
-											<RowLimit>25</RowLimit>
-										  </View>";
-
-						do
+						// ── Branch A: selected items — one CAML <Eq> per ID ─────────
+						if (itemIds != null)
 						{
-							ct.ThrowIfCancellationRequested(); // Проверка отмены пользователем
+							var idList      = itemIds.ToList();
+							int total       = idList.Count;
+							int processed   = 0;
 
-							ListItemCollection sourceItems = sourceList.GetItems(query);
-							sourceCtx.Load(sourceItems);
-							sourceCtx.ExecuteQuery();
-
-							query.ListItemCollectionPosition = sourceItems.ListItemCollectionPosition;
-
-							if (sourceItems.Count > 0)
+							foreach (var id in idList)
 							{
-								foreach (var sourceItem in sourceItems)
+								ct.ThrowIfCancellationRequested();
+
+								// Fetch exactly one item by ID from source
+								var query = new CamlQuery
 								{
-									ListItemCreationInformation itemCreateInfo = new ListItemCreationInformation();
-									ListItem newItem = targetList.AddItem(itemCreateInfo);
+									ViewXml = $@"<View>
+										<Query><Where>
+											<Eq>
+												<FieldRef Name='ID'/>
+												<Value Type='Number'>{id}</Value>
+											</Eq>
+										</Where></Query>
+									</View>"
+								};
 
-									foreach (var field in fieldsToCopy)
-									{
-										try
-										{
-											object val = sourceItem[field.InternalName];
-											if (val != null) newItem[field.InternalName] = val;
-										}
-										catch { }
-									}
+								ListItemCollection sourceItems = sourceList.GetItems(query);
+								sourceCtx.Load(sourceItems);
+								sourceCtx.ExecuteQuery();
 
-									// Копируем системные поля
-									newItem["Author"] = sourceItem["Author"];
-									newItem["Editor"] = sourceItem["Editor"];
-									newItem["Created"] = sourceItem["Created"];
-									newItem["Modified"] = sourceItem["Modified"];
-									
-									// ВАЖНО: Используйте Update(), если права ограничены, 
-									// или UpdateOverwriteVersion(), если нужно сохранить даты/авторов (требует прав админа)
-									newItem.Update(); 
-									processedCount++;
+								if (sourceItems.Count == 0)
+								{
+									System.Diagnostics.Debug.WriteLine(
+										$"[COPY_ITEMS] ID {id} not found on source — skipped.");
+									continue;
 								}
 
+								var sourceItem = sourceItems[0];
+
+								ListItem newItem = targetList.AddItem(new ListItemCreationInformation());
+
+								foreach (var field in fieldsToCopy)
+								{
+									try
+									{
+										object val = sourceItem[field.InternalName];
+										if (val != null) newItem[field.InternalName] = val;
+									}
+									catch { }
+								}
+
+								newItem["Author"]   = sourceItem["Author"];
+								newItem["Editor"]   = sourceItem["Editor"];
+								newItem["Created"]  = sourceItem["Created"];
+								newItem["Modified"] = sourceItem["Modified"];
+
+								newItem.Update();
+
+								// One ExecuteQuery per item — atomic: if one fails others are already saved
 								targetCtx.ExecuteQuery();
 
-								// ОТЧЕТ О ПРОГРЕССЕ
-								progress?.Report(new CopyProgressArgs 
-								{ 
-									Processed = processedCount, 
-									Total = totalItems, 
-									Message = $"Copied {processedCount} of {totalItems} items..." 
+								processed++;
+								System.Diagnostics.Debug.WriteLine(
+									$"[COPY_ITEMS] Copied ID {id} ({processed}/{total})");
+
+								// total = number of SELECTED items, not sourceList.ItemCount
+								// so ProgressWindow shows "1 of 3", not "1 of 1000"
+								progress?.Report(new CopyProgressArgs
+								{
+									Processed = processed,
+									Total     = total,
+									Message   = $"Copied item ID {id} ({processed} of {total})..."
 								});
 							}
-						} while (query.ListItemCollectionPosition != null);
+						}
+						// ── Branch B: copy all — original pagination, unchanged ──────
+						else
+						{
+							int totalItems    = sourceList.ItemCount;
+							int processedCount = 0;
+
+							CamlQuery query = new CamlQuery();
+							query.ViewXml = @"<View Scope='RecursiveAll'>
+												<Query><OrderBy><FieldRef Name='ID' Ascending='TRUE' /></OrderBy></Query>
+												<RowLimit>25</RowLimit>
+											  </View>";
+
+							do
+							{
+								ct.ThrowIfCancellationRequested();
+
+								ListItemCollection sourceItems = sourceList.GetItems(query);
+								sourceCtx.Load(sourceItems);
+								sourceCtx.ExecuteQuery();
+
+								query.ListItemCollectionPosition = sourceItems.ListItemCollectionPosition;
+
+								if (sourceItems.Count > 0)
+								{
+									foreach (var sourceItem in sourceItems)
+									{
+										ListItemCreationInformation itemCreateInfo = new ListItemCreationInformation();
+										ListItem newItem = targetList.AddItem(itemCreateInfo);
+
+										foreach (var field in fieldsToCopy)
+										{
+											try
+											{
+												object val = sourceItem[field.InternalName];
+												if (val != null) newItem[field.InternalName] = val;
+											}
+											catch { }
+										}
+
+										newItem["Author"]   = sourceItem["Author"];
+										newItem["Editor"]   = sourceItem["Editor"];
+										newItem["Created"]  = sourceItem["Created"];
+										newItem["Modified"] = sourceItem["Modified"];
+
+										// ВАЖНО: Update() сохраняет данные, но не сохраняет даты/авторов.
+										// Для сохранения дат нужен ValidateUpdateListItem(..., bNewDocumentUpdate: true)
+										// (требует прав Manage Lists)
+										newItem.Update();
+										processedCount++;
+									}
+
+									targetCtx.ExecuteQuery();
+
+									progress?.Report(new CopyProgressArgs
+									{
+										Processed = processedCount,
+										Total     = totalItems,
+										Message   = $"Copied {processedCount} of {totalItems} items..."
+									});
+								}
+							} while (query.ListItemCollectionPosition != null);
+						}
 					}
 				}
-				catch (OperationCanceledException) { throw; } // Пробрасываем отмену выше
+				catch (OperationCanceledException) { throw; }
 				catch (Exception ex)
 				{
-					System.Diagnostics.Debug.WriteLine($"Error during copy: {ex.Message}");
+					System.Diagnostics.Debug.WriteLine($"[COPY_ITEMS] Error: {ex.Message}");
 					throw;
 				}
 			});

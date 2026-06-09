@@ -2,6 +2,8 @@ using Prism.Commands;
 using Prism.Mvvm;
 using SPUtil.Services;
 using SPUtil.Infrastructure;
+using SPUtil.App.Views;
+using SPUtil.Views;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Linq;
@@ -237,7 +239,7 @@ namespace SPUtil.App.ViewModels
             var confirm = System.Windows.MessageBox.Show(
                 $"{selectedItems.Count} item(s) will be APPENDED to\n" +
                 $"list \"{_listTitle}\" on:\n{_targetSiteUrl}\n\n" +
-                $"IDs: {idList}\n\n" +
+                //$"IDs: {idList}\n\n" +
                 "Existing items on the target will NOT be modified.\nContinue?",
                 "Confirm Append",
                 System.Windows.MessageBoxButton.OKCancel,
@@ -250,19 +252,61 @@ namespace SPUtil.App.ViewModels
             Debug.WriteLine($">>> [List100] CopySelectedItemsAsync — IDs: [{idList}]");
             _log.Information("CopySelectedItemsAsync — count: {Count}, IDs: [{Ids}]",
                 selectedItems.Count, idList);
-            LogAndStatus($"Copying {selectedItems.Count} item(s)... IDs: [{idList}]");
+            LogAndStatus($"Copying {selectedItems.Count} item(s)...");
 
-            // ── 5. TODO: call service ────────────────────────────────────────
-            // await _spService.CopyListItemsAsync(
-            //     sourceUrl     : _lastSiteUrl,
-            //     targetUrl     : _targetSiteUrl,
-            //     sourceTitle   : _listTitle,
-            //     targetListName: _listTitle,
-            //     action        : "Append",
-            //     progress      : new Progress<CopyProgressArgs>(a => LogAndStatus(a.Message)),
-            //     ct            : CancellationToken.None,
-            //     itemIds       : selectedItems.Select(i => i.Id));
-            await Task.CompletedTask;
+            // 2026-06-09: wired up real service call with ProgressWindow + CancellationToken
+            using var cts = new System.Threading.CancellationTokenSource();
+
+            var progressWin = new ProgressWindow(cts)
+            {
+                Owner = System.Windows.Application.Current.MainWindow
+            };
+
+            var progressIndicator = new Progress<CopyProgressArgs>(e =>
+                progressWin.UpdateStatus(e.Processed, e.Total, e.Message));
+
+            try
+            {
+                progressWin.Show();
+
+                await _spService.CopyListItemsAsync(
+                    sourceUrl     : _lastSiteUrl,
+                    targetUrl     : _targetSiteUrl,
+                    sourceTitle   : _listTitle,
+                    targetListName: _listTitle,
+                    action        : "Append",
+                    progress      : progressIndicator,
+                    ct            : cts.Token,
+                    itemIds       : selectedItems.Select(i => i.Id));
+
+                progressWin.Close();
+                LogAndStatus($"Done. {selectedItems.Count} item(s) copied to {_targetSiteUrl}");
+                _log.Information("CopySelectedItemsAsync complete — {Count} items", selectedItems.Count);
+                System.Windows.MessageBox.Show(
+                    $"{selectedItems.Count} item(s) successfully copied to:\n{_targetSiteUrl}\n\n" +
+                    "Refresh the right panel to see the changes.",
+                    "Copy Complete",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+            }
+            catch (OperationCanceledException)
+            {
+                progressWin.Close();
+                LogAndStatus("Copy cancelled.");
+                _log.Warning("CopySelectedItemsAsync cancelled by user");
+            }
+            catch (Exception ex)
+            {
+                progressWin.Close();
+                _log.Error(ex, "ERROR in CopySelectedItemsAsync: {ExType} — {Message}",
+                    ex.GetType().Name, ex.Message);
+                System.Windows.MessageBox.Show(
+                    $"Copy error:\n{ex.Message}",
+                    "Error",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+                LogAndStatus($"Copy error: {ex.Message}");
+            }
         }
 
         private void LogAndStatus(string message)
