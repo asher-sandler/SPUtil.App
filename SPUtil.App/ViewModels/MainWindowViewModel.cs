@@ -566,7 +566,12 @@ namespace SPUtil.App.ViewModels
                     {
                         var vm = _container.Resolve<List100ViewModel>();
                         vm.ListTitle = node.Title;
-						vm.IsSourceMode = isLeftPane; // true для левой, false для правой
+						vm.IsSourceMode = isLeftPane;
+                        // Toolbar buttons are hidden when IsSourceMode=false (right pane),
+                        // so copy commands only ever fire from the left pane.
+                        // Target is therefore always the right site.
+                        vm.SetTargetSiteUrl(
+                            SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl));
                         await vm.LoadDataAsync(siteUrl, node.Path);
                         newView = vm;
                     }

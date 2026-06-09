@@ -74,6 +74,17 @@ namespace SPUtil.App.ViewModels
         private string _lastSiteUrl  = string.Empty;
         private string _lastListPath = string.Empty;
 
+        // ── Target site URL (set by MainWindowViewModel, same pattern as PagesViewModel) ──
+        private string _targetSiteUrl = string.Empty;
+
+        /// <summary>
+        /// Called by MainWindowViewModel right after resolving this VM.
+        /// Always the right-pane site URL — toolbar is hidden when IsSourceMode=false,
+        /// so copy commands can only ever fire from the left pane.
+        /// </summary>
+        public void SetTargetSiteUrl(string targetSiteUrl) =>
+            _targetSiteUrl = targetSiteUrl ?? string.Empty;
+
         // ── Commands ─────────────────────────────────────────────────────────
         // DelegateCommand<object> — XAML passes CommandParameter="{Binding ActiveTab}"
         // so the handler receives the ListTab enum value at the moment of the click.
@@ -105,13 +116,13 @@ namespace SPUtil.App.ViewModels
                 }
             });
 
-            CopyWithDataCommand = new DelegateCommand<object>(param =>
+            CopyWithDataCommand = new DelegateCommand<object>(async param =>
             {
                 var tab = ToTab(param);
                 switch (tab)
                 {
                     case ListTab.Items:
-                        LogAndStatus("Copy structure + data [tab: Items]");
+                        await CopySelectedItemsAsync();
                         break;
                     case ListTab.Fields:
                         LogAndStatus("Copy fields to target site [tab: Fields]");
@@ -160,6 +171,99 @@ namespace SPUtil.App.ViewModels
         /// </summary>
         private ListTab ToTab(object param) =>
             param is ListTab t ? t : ActiveTab;
+
+        /// <summary>
+        /// Collects checked items (IsSelected == true), verifies the target list
+        /// exists, warns the user that data will be appended, then hands off to
+        /// the copy service.
+        /// </summary>
+        private async Task CopySelectedItemsAsync()
+        {
+            // ── 1. Collect selected items ────────────────────────────────────
+            var selectedItems = Items.Where(i => i.IsSelected).ToList();
+            if (selectedItems.Count == 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "No items selected.\nCheck at least one row in the Items tab.",
+                    "Nothing Selected",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+                return;
+            }
+
+            // ── 2. Validate target site URL is known ─────────────────────────
+            if (string.IsNullOrEmpty(_targetSiteUrl))
+            {
+                System.Windows.MessageBox.Show(
+                    "Target site URL is not set. Please connect to the target site first.",
+                    "No Target Site",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            // ── 3. Check target list existence ───────────────────────────────
+            bool targetExists;
+            try
+            {
+                targetExists = await _spService.ListExistsAsync(_targetSiteUrl, _listTitle);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "ERROR checking target list existence: {ExType} — {Message}",
+                    ex.GetType().Name, ex.Message);
+                System.Windows.MessageBox.Show(
+                    $"Could not check target list:\n{ex.Message}",
+                    "Error",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+                return;
+            }
+
+            if (!targetExists)
+            {
+                System.Windows.MessageBox.Show(
+                    $"List \"{_listTitle}\" does not exist on the target site:\n{_targetSiteUrl}\n\n" +
+                    "You can create it first using the left panel menu\n" +
+                    "(select the list → Copy structure to target).",
+                    "List Not Found",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            // ── 4. Confirm: data will be appended ────────────────────────────
+            var idList = string.Join(", ", selectedItems.Select(i => i.Id));
+            var confirm = System.Windows.MessageBox.Show(
+                $"{selectedItems.Count} item(s) will be APPENDED to\n" +
+                $"list \"{_listTitle}\" on:\n{_targetSiteUrl}\n\n" +
+                $"IDs: {idList}\n\n" +
+                "Existing items on the target will NOT be modified.\nContinue?",
+                "Confirm Append",
+                System.Windows.MessageBoxButton.OKCancel,
+                System.Windows.MessageBoxImage.Question);
+
+            if (confirm != System.Windows.MessageBoxResult.OK)
+                return;
+
+            // ── DEBUG ────────────────────────────────────────────────────────
+            Debug.WriteLine($">>> [List100] CopySelectedItemsAsync — IDs: [{idList}]");
+            _log.Information("CopySelectedItemsAsync — count: {Count}, IDs: [{Ids}]",
+                selectedItems.Count, idList);
+            LogAndStatus($"Copying {selectedItems.Count} item(s)... IDs: [{idList}]");
+
+            // ── 5. TODO: call service ────────────────────────────────────────
+            // await _spService.CopyListItemsAsync(
+            //     sourceUrl     : _lastSiteUrl,
+            //     targetUrl     : _targetSiteUrl,
+            //     sourceTitle   : _listTitle,
+            //     targetListName: _listTitle,
+            //     action        : "Append",
+            //     progress      : new Progress<CopyProgressArgs>(a => LogAndStatus(a.Message)),
+            //     ct            : CancellationToken.None,
+            //     itemIds       : selectedItems.Select(i => i.Id));
+            await Task.CompletedTask;
+        }
 
         private void LogAndStatus(string message)
         {
