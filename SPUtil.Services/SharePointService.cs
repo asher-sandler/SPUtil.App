@@ -969,6 +969,37 @@ namespace SPUtil.Services
                 }
             }
         }
+
+        // 2026-06-09: public wrapper around the private CreateListViewsAsync.
+        // Called from List100ViewModel.CopyViewsCommand after the user confirms
+        // which missing views to copy. DefaultView flag is forced to false so
+        // the target's existing default view is not silently overwritten.
+        public async Task CopyMissingViewsAsync(
+            string targetUrl,
+            string targetListTitle,
+            IEnumerable<SPViewData> viewsToCopy)
+        {
+            var views = viewsToCopy.ToList();
+            if (views.Count == 0) return;
+
+            // Force DefaultView = false on all incoming views —
+            // the target list already has its own default view and we must
+            // not silently change it. The user can set a new default manually.
+            foreach (var v in views)
+                v.DefaultView = false;
+
+            using var ctx = await GetContextAsync(targetUrl);
+            var list = ctx.Web.Lists.GetByTitle(targetListTitle);
+            ctx.Load(list);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            await CreateListViewsAsync(ctx, list, views);
+
+            _log.Information(
+                "CopyMissingViewsAsync — copied {Count} view(s) to list '{List}' on {Url}",
+                views.Count, targetListTitle, targetUrl);
+        }
+
         private async Task CreateCalculatedFieldsAsync(ClientContext ctx, Microsoft.SharePoint.Client.List newList, List<FieldInfo> calculatedFields)
         {
             int maxAttempts = 5;
@@ -1745,7 +1776,7 @@ namespace SPUtil.Services
 			string action,
 			IProgress<CopyProgressArgs> progress,
 			CancellationToken ct,
-			IEnumerable<int> itemIds = null)
+			IEnumerable<int>? itemIds = null)
 		{
 			// Clear target only when copying ALL items with Overwrite.
 			// When itemIds is set we always append — clearing makes no sense.

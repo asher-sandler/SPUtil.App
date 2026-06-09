@@ -4,6 +4,7 @@ using SPUtil.Services;
 using SPUtil.Infrastructure;
 using SPUtil.App.Views;
 using SPUtil.Views;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Linq;
@@ -41,15 +42,15 @@ namespace SPUtil.App.ViewModels
         public ObservableCollection<SPViewData>     Views  { get => _views;  set => SetProperty(ref _views,  value); }
 
         // ── Scalar state ─────────────────────────────────────────────────────
-        private string     _listTitle     = string.Empty;
-        private string     _statusMessage = "Ready";
-        private bool       _isSourceMode;
-        private SPViewData _selectedView;
+        private string      _listTitle     = string.Empty;
+        private string      _statusMessage = "Ready";
+        private bool        _isSourceMode;
+        private SPViewData? _selectedView;
 
-        public string     ListTitle     { get => _listTitle;     set => SetProperty(ref _listTitle,     value); }
-        public string     StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
-        public bool       IsSourceMode  { get => _isSourceMode;  set => SetProperty(ref _isSourceMode,  value); }
-        public SPViewData SelectedView  { get => _selectedView;  set => SetProperty(ref _selectedView,  value); }
+        public string      ListTitle     { get => _listTitle;     set => SetProperty(ref _listTitle,     value); }
+        public string      StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
+        public bool        IsSourceMode  { get => _isSourceMode;  set => SetProperty(ref _isSourceMode,  value); }
+        public SPViewData? SelectedView  { get => _selectedView;  set => SetProperty(ref _selectedView,  value); }
 
         // ── Active tab ───────────────────────────────────────────────────────
         // ActiveTab (enum) is the source of truth.
@@ -67,6 +68,12 @@ namespace SPUtil.App.ViewModels
                     // 2026-06-09: re-evaluate button enabled state on every tab switch
                     CopyWithDataCommand.RaiseCanExecuteChanged();
                     CopyViewsCommand.RaiseCanExecuteChanged();
+
+                    // 2026-06-09: when user switches to Views tab, load target status
+                    // in the background so checkboxes reflect availability immediately.
+                    // Fire-and-forget — errors handled inside LoadViewsStatusAsync.
+                    if (value == ListTab.Views)
+                        _ = LoadViewsStatusAsync();
                 }
             }
         }
@@ -91,6 +98,13 @@ namespace SPUtil.App.ViewModels
         /// </summary>
         public void SetTargetSiteUrl(string targetSiteUrl) =>
             _targetSiteUrl = targetSiteUrl ?? string.Empty;
+
+        // 2026-06-09: cached target-side state for Views tab.
+        // Populated once by LoadViewsStatusAsync when the user switches to Views tab.
+        // Used by the checkbox click handler to give instant feedback without network calls.
+        private bool _targetListExists     = false;
+        private bool _targetSchemaMatch    = false;
+        private HashSet<string> _targetViewTitles = new(StringComparer.OrdinalIgnoreCase);
 
         // ── Commands ─────────────────────────────────────────────────────────
         // DelegateCommand<object> — XAML passes CommandParameter="{Binding ActiveTab}"
@@ -129,12 +143,15 @@ namespace SPUtil.App.ViewModels
                 },
                 canExecuteMethod: param => ToTab(param) == ListTab.Items);
 
+            // 2026-06-09: CopyViews wired to CopySelectedViewsAsync.
+            // CanExecute keeps the button grey on other tabs.
             // CopyViews is only meaningful on Views tab
             CopyViewsCommand = new DelegateCommand<object>(
-                executeMethod: param =>
+                executeMethod: async param =>
                 {
                     var tab = ToTab(param);
-                    LogAndStatus($"Copy views [active tab: {tab}]");
+                    if (tab == ListTab.Views)
+                        await CopySelectedViewsAsync();
                 },
                 canExecuteMethod: param => ToTab(param) == ListTab.Views);
 
@@ -291,6 +308,220 @@ namespace SPUtil.App.ViewModels
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Error);
                 LogAndStatus($"Copy error: {ex.Message}");
+            }
+        }
+
+        // 2026-06-09: ── Views-tab status loading ────────────────────────────
+        // Called fire-and-forget when user switches to Views tab.
+        // Runs two network requests (ListExists + GetListViews) to populate
+        // the three cached flags used by OnViewCheckboxChanged.
+        private async Task LoadViewsStatusAsync()
+        {
+            // Reset all flags and checkboxes before every load
+            _targetListExists  = false;
+            _targetSchemaMatch = false;
+            _targetViewTitles.Clear();
+
+            foreach (var v in Views)
+            {
+                v.ExistsOnTarget = false;
+                v.IsSelected     = false;
+            }
+
+            if (string.IsNullOrEmpty(_targetSiteUrl))
+            {
+                LogAndStatus("Views: connect to target site to see copy availability.");
+                return;
+            }
+
+            LogAndStatus("Views: checking target...");
+
+            // ── Step 1: does the list exist on target? ───────────────────────
+            try
+            {
+                _targetListExists = await _spService.ListExistsAsync(_targetSiteUrl, _listTitle);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "LoadViewsStatusAsync — ListExistsAsync failed: {Message}", ex.Message);
+                LogAndStatus("Views: could not reach target site.");
+                return;
+            }
+
+            if (!_targetListExists)
+            {
+                LogAndStatus($"Views: list \"{_listTitle}\" not found on target — copy unavailable.");
+                return;
+            }
+
+            // ── Step 2: compare field schemas source vs target ───────────────
+            // Views contain CAML that references InternalNames. If schemas differ
+            // the copied view may be broken, so we block copy when they diverge.
+            try
+            {
+                var targetFields = await _spService.GetListFieldsAsync(_targetSiteUrl, _listTitle);
+                var sourceNames  = Fields.Select(f => f.InternalName)
+                                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var targetNames  = targetFields.Select(f => f.InternalName)
+                                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                // Schema matches when every source field exists on target
+                _targetSchemaMatch = sourceNames.IsSubsetOf(targetNames);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "LoadViewsStatusAsync — GetListFieldsAsync failed: {Message}", ex.Message);
+                LogAndStatus("Views: could not compare field schemas.");
+                return;
+            }
+
+            if (!_targetSchemaMatch)
+            {
+                LogAndStatus("Views: field schema mismatch — copy unavailable. Ensure target list has the same fields.");
+                return;
+            }
+
+            // ── Step 3: load target views, build title set ───────────────────
+            try
+            {
+                var targetViews = await _spService.GetListViewsAsync(_targetSiteUrl, _listTitle);
+                _targetViewTitles = targetViews
+                    .Select(v => v.Title)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "LoadViewsStatusAsync — GetListViewsAsync failed: {Message}", ex.Message);
+                LogAndStatus("Views: could not load target views.");
+                return;
+            }
+
+            // ── Step 4: mark each source view ────────────────────────────────
+            int missing = 0;
+            foreach (var v in Views)
+            {
+                v.ExistsOnTarget = _targetViewTitles.Contains(v.Title);
+                v.IsSelected     = !v.ExistsOnTarget; // pre-check missing ones
+                if (!v.ExistsOnTarget) missing++;
+            }
+
+            LogAndStatus(missing > 0
+                ? $"Views: {missing} missing on target — ready to copy."
+                : "Views: all views already exist on target.");
+
+            _log.Information(
+                "LoadViewsStatusAsync — source: {Total}, missing on target: {Missing}",
+                Views.Count, missing);
+        }
+
+        // 2026-06-09: ── Checkbox click guard ────────────────────────────────
+        // Called from XAML code-behind when user clicks a view checkbox.
+        // Validates the cached flags and blocks the check with a message if needed.
+        // No network calls here — all state was loaded by LoadViewsStatusAsync.
+        public void OnViewCheckboxChanged(SPViewData view, bool newValue)
+        {
+            if (!newValue) return; // unchecking is always allowed
+
+            if (!_targetListExists)
+            {
+                view.IsSelected = false;
+                System.Windows.MessageBox.Show(
+                    $"List \"{_listTitle}\" does not exist on the target site.\n\n" +
+                    "Create it first using the left panel menu.",
+                    "Cannot Copy View",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!_targetSchemaMatch)
+            {
+                view.IsSelected = false;
+                System.Windows.MessageBox.Show(
+                    "The field schema on the target list differs from the source.\n\n" +
+                    "View CAML queries reference field names that may not exist on target.\n" +
+                    "Copy the list structure first.",
+                    "Cannot Copy View",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            if (view.ExistsOnTarget)
+            {
+                view.IsSelected = false;
+                System.Windows.MessageBox.Show(
+                    $"View \"{view.Title}\" already exists on the target list.\n\n" +
+                    "Only missing views can be copied.",
+                    "Cannot Copy View",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            // All checks passed — allow the check
+            view.IsSelected = true;
+        }
+
+        // 2026-06-09: ── Copy selected (missing) views to target ─────────────
+        private async Task CopySelectedViewsAsync()
+        {
+            var selectedViews = Views.Where(v => v.IsSelected && !v.ExistsOnTarget).ToList();
+
+            if (selectedViews.Count == 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "No views selected.\nCheck at least one missing view.",
+                    "Nothing Selected",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+                return;
+            }
+
+            var titles  = string.Join(", ", selectedViews.Select(v => v.Title));
+            var confirm = System.Windows.MessageBox.Show(
+                $"{selectedViews.Count} view(s) will be copied to\n" +
+                $"list \"{_listTitle}\" on:\n{_targetSiteUrl}\n\n" +
+                $"Views: {titles}\n\n" +
+                "Continue?",
+                "Confirm Copy Views",
+                System.Windows.MessageBoxButton.OKCancel,
+                System.Windows.MessageBoxImage.Question);
+
+            if (confirm != System.Windows.MessageBoxResult.OK) return;
+
+            LogAndStatus($"Copying {selectedViews.Count} view(s)...");
+            _log.Information("CopySelectedViewsAsync start — views: [{Titles}]", titles);
+
+            try
+            {
+                await _spService.CopyMissingViewsAsync(
+                    _targetSiteUrl,
+                    _listTitle,
+                    selectedViews);
+
+                // Refresh target status so copied views are now shown as ExistsOnTarget
+                await LoadViewsStatusAsync();
+
+                System.Windows.MessageBox.Show(
+                    $"{selectedViews.Count} view(s) successfully copied to:\n{_targetSiteUrl}\n\n" +
+                    "Refresh the right panel to see the changes.",
+                    "Copy Complete",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+
+                _log.Information("CopySelectedViewsAsync complete — {Count} views", selectedViews.Count);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "ERROR in CopySelectedViewsAsync: {ExType} — {Message}",
+                    ex.GetType().Name, ex.Message);
+                System.Windows.MessageBox.Show(
+                    $"Copy error:\n{ex.Message}",
+                    "Error",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+                LogAndStatus($"View copy error: {ex.Message}");
             }
         }
 

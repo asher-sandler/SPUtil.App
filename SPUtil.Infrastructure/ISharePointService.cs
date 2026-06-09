@@ -55,6 +55,14 @@ namespace SPUtil.Services
 
         Task<List<SPFieldData>> GetListFieldsAsync(string siteUrl, string listPath);
         Task<List<SPViewData>> GetListViewsAsync(string siteUrl, string listPath);
+
+        // 2026-06-09: copies only the supplied views to the target list.
+        // Caller is responsible for passing only views that are missing on target.
+        // Uses the same CreateListViewsAsync logic internally (create-or-update by Title).
+        Task CopyMissingViewsAsync(
+            string targetUrl,
+            string targetListTitle,
+            IEnumerable<SPViewData> viewsToCopy);
         Task<List<SPFileData>> GetLibraryItemsAsync(string siteUrl, string listId);
         Task<List<SPFileData>> GetPageItemsAsync(string siteUrl, string listId);
         Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl);
@@ -85,7 +93,7 @@ namespace SPUtil.Services
 			string action,         // "Overwrite" или "Append"
 			IProgress<CopyProgressArgs> progress, 
 			CancellationToken ct,
-			IEnumerable<int> itemIds = null);
+			IEnumerable<int>? itemIds = null);
 			
 		Task ClearListItemsAsync(string siteUrl, string listTitle);
         Task<SPListInfo> GetListDetailedInfoAsync(string siteUrl, string listTitle);
