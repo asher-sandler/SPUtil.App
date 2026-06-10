@@ -173,8 +173,11 @@
                     <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
                                   Background="#EEE" Cursor="SizeNS"/>
 
-                    <GroupBox Grid.Row="2" Header="CAML Query (XML)">
-                        <TextBox Text="{Binding SelectedView.ViewQuery, Mode=OneWay}"
+                    <!-- 2026-06-10: changed from ViewQuery (OrderBy/Where only)
+                         to SchemaXml — shows full view definition including
+                         ViewFields, RowLimit, Query, Aggregations. -->
+                    <GroupBox Grid.Row="2" Header="View Schema (XML)">
+                        <TextBox Text="{Binding SelectedView.SchemaXml, Mode=OneWay}"
                                  IsReadOnly="True"
                                  TextWrapping="Wrap"
                                  AcceptsReturn="True"
