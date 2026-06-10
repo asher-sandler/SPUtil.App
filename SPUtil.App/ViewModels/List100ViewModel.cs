@@ -485,25 +485,97 @@ namespace SPUtil.App.ViewModels
         // 2026-06-09: ── Copy selected (missing) views to target ─────────────
         private async Task CopySelectedViewsAsync()
         {
-            // 2026-06-09: pre-flight checks — show MessageBox here (on button click),
-            // not during LoadViewsStatusAsync which only updates StatusMessage silently.
+            // 2026-06-09: cached flags (_targetListExists, _targetSchemaMatch) are for UX only.
+            // Before the real operation we re-verify everything live — the target could have
+            // changed since the tab was opened (list deleted, fields modified, etc.).
 
-            if (!_targetListExists)
+            LogAndStatus("Verifying target before copy...");
+
+            // ── Live check 1: target site URL ────────────────────────────────
+            if (string.IsNullOrEmpty(_targetSiteUrl))
             {
                 System.Windows.MessageBox.Show(
-                    $"List \"{_listTitle}\" does not exist on the target site:\n{_targetSiteUrl}\n\n" +
-                    "Create it first using the left panel menu\n" +
-                    "(select the list → Copy structure to target).",
-                    "List Not Found",
+                    "Target site URL is not set. Please connect to the target site first.",
+                    "No Target Site",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
                 return;
             }
 
-            if (!_targetSchemaMatch)
+            // ── Live check 2: list exists on target ──────────────────────────
+            bool listExists;
+            try
+            {
+                listExists = await _spService.ListExistsAsync(_targetSiteUrl, _listTitle);
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "CopySelectedViewsAsync — ListExistsAsync failed: {Message}", ex.Message);
+                System.Windows.MessageBox.Show(
+                    $"Could not reach target site:\n{ex.Message}",
+                    "Connection Error",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+                LogAndStatus("View copy cancelled — could not reach target.");
+                return;
+            }
+
+            if (!listExists)
             {
                 System.Windows.MessageBox.Show(
-                    $"The field schema of list \"{_listTitle}\" differs between source and target.\n\n" +
+                    $"List \"{_listTitle}\" no longer exists on the target site:\n{_targetSiteUrl}\n\n" +
+                    "It may have been deleted. Create it first using the left panel menu.",
+                    "List Not Found",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                // Refresh Views tab status to reflect current state
+                _ = LoadViewsStatusAsync();
+                return;
+            }
+
+            // ── Live check 3: field schema still matches ─────────────────────
+            bool schemaMatch;
+            try
+            {
+                var targetListId = await _spService.GetListIdByTitleAsync(_targetSiteUrl, _listTitle);
+                var targetFields = await _spService.GetListFieldsAsync(_targetSiteUrl, targetListId.ToString());
+
+                var sourceNames = Fields.Select(f => f.InternalName)
+                                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var targetNames = targetFields
+                    .Where(f =>
+                        (f.InternalName.StartsWith("_x") || !f.InternalName.StartsWith("_")) &&
+                        f.TypeAsString != "Computed" &&
+                        f.InternalName != "ContentTypeId" &&
+                        f.InternalName != "Attachments")
+                    .Select(f => f.InternalName)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                schemaMatch = sourceNames.IsSubsetOf(targetNames);
+
+                if (!schemaMatch)
+                {
+                    var missingFields = sourceNames.Except(targetNames).ToList();
+                    _log.Warning("CopySelectedViewsAsync — live schema check failed, missing: {Fields}",
+                        string.Join(", ", missingFields));
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex, "CopySelectedViewsAsync — schema check failed: {Message}", ex.Message);
+                System.Windows.MessageBox.Show(
+                    $"Could not verify field schema on target:\n{ex.Message}",
+                    "Verification Error",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+                LogAndStatus("View copy cancelled — schema verification failed.");
+                return;
+            }
+
+            if (!schemaMatch)
+            {
+                System.Windows.MessageBox.Show(
+                    $"The field schema of list \"{_listTitle}\" has changed on the target site.\n\n" +
                     "View CAML queries reference field names that may not exist on the target —\n" +
                     "copying views could produce broken or empty results.\n\n" +
                     "Run the Compare function from the left panel menu to see\n" +
@@ -511,9 +583,11 @@ namespace SPUtil.App.ViewModels
                     "Schema Mismatch — Copy Unavailable",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
+                _ = LoadViewsStatusAsync();
                 return;
             }
 
+            // ── Select views to copy ─────────────────────────────────────────
             var selectedViews = Views.Where(v => v.IsSelected && !v.ExistsOnTarget).ToList();
 
             if (selectedViews.Count == 0)
@@ -526,6 +600,7 @@ namespace SPUtil.App.ViewModels
                 return;
             }
 
+            // ── Confirm ──────────────────────────────────────────────────────
             var titles  = string.Join(", ", selectedViews.Select(v => v.Title));
             var confirm = System.Windows.MessageBox.Show(
                 $"{selectedViews.Count} view(s) will be copied to\n" +
@@ -548,7 +623,7 @@ namespace SPUtil.App.ViewModels
                     _listTitle,
                     selectedViews);
 
-                // Refresh target status so copied views are now shown as ExistsOnTarget
+                // Refresh Views tab — copied views now show as ExistsOnTarget
                 await LoadViewsStatusAsync();
 
                 System.Windows.MessageBox.Show(
