@@ -15,23 +15,14 @@ namespace SPUtil.Infrastructure
         // Добавляем это свойство для счетчиков и сумм
         public string Aggregations { get; set; } = string.Empty;
 
-        // 2026-06-09: added for Views-tab copy workflow.
-        // IsSelected   — user checkbox; only enabled when !ExistsOnTarget.
-        // ExistsOnTarget — set by LoadViewsStatusAsync once per tab open;
-        //                  true = view already exists on target, checkbox disabled.
+        // 2026-06-10: IsSelected — user checkbox for selecting views to copy.
+        // All checks happen at copy time (CopySelectedViewsAsync), not on checkbox click.
         private bool _isSelected;
-        private bool _existsOnTarget;
 
         public bool IsSelected
         {
             get => _isSelected;
             set => SetProperty(ref _isSelected, value);
-        }
-
-        public bool ExistsOnTarget
-        {
-            get => _existsOnTarget;
-            set => SetProperty(ref _existsOnTarget, value);
         }
     }
 }

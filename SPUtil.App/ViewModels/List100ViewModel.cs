@@ -68,12 +68,6 @@ namespace SPUtil.App.ViewModels
                     // 2026-06-09: re-evaluate button enabled state on every tab switch
                     CopyWithDataCommand.RaiseCanExecuteChanged();
                     CopyViewsCommand.RaiseCanExecuteChanged();
-
-                    // 2026-06-09: when user switches to Views tab, load target status
-                    // in the background so checkboxes reflect availability immediately.
-                    // Fire-and-forget — errors handled inside LoadViewsStatusAsync.
-                    if (value == ListTab.Views)
-                        _ = LoadViewsStatusAsync();
                 }
             }
         }
@@ -98,13 +92,6 @@ namespace SPUtil.App.ViewModels
         /// </summary>
         public void SetTargetSiteUrl(string targetSiteUrl) =>
             _targetSiteUrl = targetSiteUrl ?? string.Empty;
-
-        // 2026-06-09: cached target-side state for Views tab.
-        // Populated once by LoadViewsStatusAsync when the user switches to Views tab.
-        // Used by the checkbox click handler to give instant feedback without network calls.
-        private bool _targetListExists     = false;
-        private bool _targetSchemaMatch    = false;
-        private HashSet<string> _targetViewTitles = new(StringComparer.OrdinalIgnoreCase);
 
         // ── Commands ─────────────────────────────────────────────────────────
         // DelegateCommand<object> — XAML passes CommandParameter="{Binding ActiveTab}"
@@ -311,183 +298,10 @@ namespace SPUtil.App.ViewModels
             }
         }
 
-        // 2026-06-09: ── Views-tab status loading ────────────────────────────
-        // Called fire-and-forget when user switches to Views tab.
-        // Runs two network requests (ListExists + GetListViews) to populate
-        // the three cached flags used by OnViewCheckboxChanged.
-        private async Task LoadViewsStatusAsync()
-        {
-            // Reset all flags and checkboxes before every load
-            _targetListExists  = false;
-            _targetSchemaMatch = false;
-            _targetViewTitles.Clear();
-
-            foreach (var v in Views)
-            {
-                v.ExistsOnTarget = false;
-                v.IsSelected     = false;
-            }
-
-            if (string.IsNullOrEmpty(_targetSiteUrl))
-            {
-                LogAndStatus("Views: connect to target site to see copy availability.");
-                return;
-            }
-
-            LogAndStatus("Views: checking target...");
-
-            // ── Step 1: does the list exist on target? ───────────────────────
-            try
-            {
-                _targetListExists = await _spService.ListExistsAsync(_targetSiteUrl, _listTitle);
-            }
-            catch (Exception ex)
-            {
-                _log.Error(ex, "LoadViewsStatusAsync — ListExistsAsync failed: {Message}", ex.Message);
-                LogAndStatus("Views: could not reach target site.");
-                return;
-            }
-
-            if (!_targetListExists)
-            {
-                LogAndStatus($"Views: list \"{_listTitle}\" not found on target — copy unavailable.");
-                return;
-            }
-
-            // ── Step 2: compare field schemas source vs target ───────────────
-            // Views contain CAML that references InternalNames. If schemas differ
-            // the copied view may be broken, so we block copy when they diverge.
-            // 2026-06-09 fix: apply the same filter to targetFields that LoadDataAsync
-            // uses when building Fields — without it, raw system fields on target
-            // (e.g. _UIVersionString, _ModerationStatus) inflate targetNames and
-            // make IsSubsetOf unreliable. Both sides must be filtered identically.
-            try
-            {
-                var targetFields = await _spService.GetListFieldsAsync(_targetSiteUrl, _listTitle);
-
-                var sourceNames = Fields.Select(f => f.InternalName)
-                                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                var targetNames = targetFields
-                    .Where(f =>
-                        (f.InternalName.StartsWith("_x") || !f.InternalName.StartsWith("_")) &&
-                        f.TypeAsString != "Computed" &&
-                        f.InternalName != "ContentTypeId" &&
-                        f.InternalName != "Attachments")
-                    .Select(f => f.InternalName)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                // Schema matches when every source field exists on target
-                _targetSchemaMatch = sourceNames.IsSubsetOf(targetNames);
-
-                if (!_targetSchemaMatch)
-                {
-                    var missingFields = sourceNames.Except(targetNames).ToList();
-                    _log.Warning("LoadViewsStatusAsync — schema mismatch, missing on target: {Fields}",
-                        string.Join(", ", missingFields));
-                }
-            }
-            catch (Exception ex)
-            {
-                _log.Error(ex, "LoadViewsStatusAsync — GetListFieldsAsync failed: {Message}", ex.Message);
-                LogAndStatus("Views: could not compare field schemas.");
-                return;
-            }
-
-            if (!_targetSchemaMatch)
-            {
-                LogAndStatus("Views: field schema mismatch — copy unavailable. Run Compare from the left panel menu.");
-                return;
-            }
-
-            // ── Step 3: load target views, build title set ───────────────────
-            try
-            {
-                var targetViews = await _spService.GetListViewsAsync(_targetSiteUrl, _listTitle);
-                _targetViewTitles = targetViews
-                    .Select(v => v.Title)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            }
-            catch (Exception ex)
-            {
-                _log.Error(ex, "LoadViewsStatusAsync — GetListViewsAsync failed: {Message}", ex.Message);
-                LogAndStatus("Views: could not load target views.");
-                return;
-            }
-
-            // ── Step 4: mark each source view ────────────────────────────────
-            int missing = 0;
-            foreach (var v in Views)
-            {
-                v.ExistsOnTarget = _targetViewTitles.Contains(v.Title);
-                v.IsSelected     = !v.ExistsOnTarget; // pre-check missing ones
-                if (!v.ExistsOnTarget) missing++;
-            }
-
-            LogAndStatus(missing > 0
-                ? $"Views: {missing} missing on target — ready to copy."
-                : "Views: all views already exist on target.");
-
-            _log.Information(
-                "LoadViewsStatusAsync — source: {Total}, missing on target: {Missing}",
-                Views.Count, missing);
-        }
-
-        // 2026-06-09: ── Checkbox click guard ────────────────────────────────
-        // Called from XAML code-behind when user clicks a view checkbox.
-        // Validates the cached flags and blocks the check with a message if needed.
-        // No network calls here — all state was loaded by LoadViewsStatusAsync.
-        public void OnViewCheckboxChanged(SPViewData view, bool newValue)
-        {
-            if (!newValue) return; // unchecking is always allowed
-
-            if (!_targetListExists)
-            {
-                view.IsSelected = false;
-                System.Windows.MessageBox.Show(
-                    $"List \"{_listTitle}\" does not exist on the target site.\n\n" +
-                    "Create it first using the left panel menu.",
-                    "Cannot Copy View",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
-                return;
-            }
-
-            if (!_targetSchemaMatch)
-            {
-                view.IsSelected = false;
-                System.Windows.MessageBox.Show(
-                    "The field schema on the target list differs from the source.\n\n" +
-                    "View CAML queries reference field names that may not exist on target.\n" +
-                    "Copy the list structure first.",
-                    "Cannot Copy View",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
-                return;
-            }
-
-            if (view.ExistsOnTarget)
-            {
-                view.IsSelected = false;
-                System.Windows.MessageBox.Show(
-                    $"View \"{view.Title}\" already exists on the target list.\n\n" +
-                    "Only missing views can be copied.",
-                    "Cannot Copy View",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
-                return;
-            }
-
-            // All checks passed — allow the check
-            view.IsSelected = true;
-        }
-
-        // 2026-06-09: ── Copy selected (missing) views to target ─────────────
+        // 2026-06-10: all pre-flight checks moved here — single place, live network calls.
+        // No background status loading, no cached flags, no checkbox guards.
         private async Task CopySelectedViewsAsync()
         {
-            // 2026-06-09: cached flags (_targetListExists, _targetSchemaMatch) are for UX only.
-            // Before the real operation we re-verify everything live — the target could have
-            // changed since the tab was opened (list deleted, fields modified, etc.).
 
             LogAndStatus("Verifying target before copy...");
 
@@ -528,8 +342,6 @@ namespace SPUtil.App.ViewModels
                     "List Not Found",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
-                // Refresh Views tab status to reflect current state
-                _ = LoadViewsStatusAsync();
                 return;
             }
 
@@ -583,12 +395,11 @@ namespace SPUtil.App.ViewModels
                     "Schema Mismatch — Copy Unavailable",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
-                _ = LoadViewsStatusAsync();
                 return;
             }
 
             // ── Select views to copy ─────────────────────────────────────────
-            var selectedViews = Views.Where(v => v.IsSelected && !v.ExistsOnTarget).ToList();
+            var selectedViews = Views.Where(v => v.IsSelected).ToList();
 
             if (selectedViews.Count == 0)
             {
@@ -623,9 +434,6 @@ namespace SPUtil.App.ViewModels
                     _listTitle,
                     selectedViews);
 
-                // Refresh Views tab — copied views now show as ExistsOnTarget
-                await LoadViewsStatusAsync();
-
                 System.Windows.MessageBox.Show(
                     $"{selectedViews.Count} view(s) successfully copied to:\n{_targetSiteUrl}\n\n" +
                     "Refresh the right panel to see the changes.",
@@ -659,11 +467,6 @@ namespace SPUtil.App.ViewModels
         {
             _lastSiteUrl  = siteUrl;
             _lastListPath = listPath;
-
-            // 2026-06-09: reset per-list flags so Views tab re-checks for a new list
-            _targetListExists    = false;
-            _targetSchemaMatch   = false;
-            _targetViewTitles.Clear();
 
             LogAndStatus($"Loading list data: {listPath}...");
             Fields.Clear();
