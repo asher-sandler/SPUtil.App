@@ -894,10 +894,19 @@ namespace SPUtil.Services
                     }
                     else
                     {
+                        // 2026-06-10 fix: pass Query and ViewFields directly in
+                        // ViewCreationInformation so SharePoint sets them atomically
+                        // on creation. Assigning targetView.ViewQuery after multiple
+                        // intermediate ExecuteQuery() calls caused the value to be
+                        // lost before Update() was reached.
                         var vInfo = new ViewCreationInformation
                         {
-                            Title = viewData.Title,
-                            PersonalView = false
+                            Title        = viewData.Title,
+                            PersonalView = false,
+                            Query        = viewData.ViewQuery ?? string.Empty,
+                            ViewFields   = viewData.ViewFields ?? Array.Empty<string>(),
+                            RowLimit     = 30,
+                            Paged        = true
                         };
                         targetView = newList.Views.Add(vInfo);
                         ctx.Load(targetView);
@@ -907,33 +916,21 @@ namespace SPUtil.Services
                         allExistingViews.Add(targetView);
                     }
 
-                    targetView.ViewQuery = viewData.ViewQuery ?? "";
-                    targetView.DefaultView = viewData.DefaultView;
-
-                    if (!string.IsNullOrEmpty(viewData.Aggregations))
-                        targetView.Aggregations = viewData.Aggregations;
-
                     // ── Rebuild ViewFields ──────────────────────────────────────
                     // Load current fields on the view
                     ctx.Load(targetView.ViewFields);
                     await Task.Run(() => ctx.ExecuteQuery());
 
                     // Load all fields that actually exist on the target list
-                    // so we can validate before adding to the view.
-                    // SharePoint throws ServerException if you add a field that
-                    // doesn't exist — even if it's just a casing mismatch.
                     ctx.Load(newList.Fields, fs => fs.Include(f => f.InternalName));
                     await Task.Run(() => ctx.ExecuteQuery());
 
-                    // Build a case-insensitive set of existing field internal names
                     var existingFieldNames = newList.Fields
                         .Select(f => f.InternalName)
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                    // RemoveAll() clears the entire field list in one server call
                     targetView.ViewFields.RemoveAll();
 
-                    // Add fields in source order — skip any that don't exist on target
                     if (viewData.ViewFields != null)
                     {
                         foreach (var fName in viewData.ViewFields)
@@ -941,7 +938,6 @@ namespace SPUtil.Services
                             if (string.IsNullOrWhiteSpace(fName))
                                 continue;
 
-                            // Case-insensitive check — find the actual name on target
                             var actualName = existingFieldNames
                                 .FirstOrDefault(n => n.Equals(fName, StringComparison.OrdinalIgnoreCase));
 
@@ -952,14 +948,33 @@ namespace SPUtil.Services
                             }
                             else
                             {
-                                // Field doesn't exist on target — skip and log warning
                                 _log.Warning("Field '{Field}' not found on target list — skipped for view '{View}'", fName, viewData.Title);
                             }
                         }
                     }
 
+                    // 2026-06-10 fix: assign ViewQuery and DefaultView immediately
+                    // before Update() — after all intermediate ExecuteQuery() calls —
+                    // to prevent SharePoint from resetting them during field loading.
+                    targetView.ViewQuery   = viewData.ViewQuery ?? string.Empty;
+                    targetView.DefaultView = viewData.DefaultView;
+
+                    if (!string.IsNullOrEmpty(viewData.Aggregations))
+                        targetView.Aggregations = viewData.Aggregations;
+
                     targetView.Update();
                     await Task.Run(() => ctx.ExecuteQuery());
+
+                    // 2026-06-10: log copied view schema for diagnostics
+                    _log.Information(
+                        "[SP_SERVICE] View '{View}' saved — " +
+                        "DefaultView: {Default} | " +
+                        "Fields: [{Fields}] | " +
+                        "ViewQuery: {Query}",
+                        viewData.Title,
+                        viewData.DefaultView,
+                        viewData.ViewFields != null ? string.Join(", ", viewData.ViewFields) : "(none)",
+                        string.IsNullOrEmpty(viewData.ViewQuery) ? "(empty)" : viewData.ViewQuery);
 
                     System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] View created/updated: '{viewData.Title}'");
                 }
