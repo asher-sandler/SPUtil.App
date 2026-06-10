@@ -357,16 +357,35 @@ namespace SPUtil.App.ViewModels
             // ── Step 2: compare field schemas source vs target ───────────────
             // Views contain CAML that references InternalNames. If schemas differ
             // the copied view may be broken, so we block copy when they diverge.
+            // 2026-06-09 fix: apply the same filter to targetFields that LoadDataAsync
+            // uses when building Fields — without it, raw system fields on target
+            // (e.g. _UIVersionString, _ModerationStatus) inflate targetNames and
+            // make IsSubsetOf unreliable. Both sides must be filtered identically.
             try
             {
                 var targetFields = await _spService.GetListFieldsAsync(_targetSiteUrl, _listTitle);
-                var sourceNames  = Fields.Select(f => f.InternalName)
-                                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var targetNames  = targetFields.Select(f => f.InternalName)
-                                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var sourceNames = Fields.Select(f => f.InternalName)
+                                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var targetNames = targetFields
+                    .Where(f =>
+                        (f.InternalName.StartsWith("_x") || !f.InternalName.StartsWith("_")) &&
+                        f.TypeAsString != "Computed" &&
+                        f.InternalName != "ContentTypeId" &&
+                        f.InternalName != "Attachments")
+                    .Select(f => f.InternalName)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 // Schema matches when every source field exists on target
                 _targetSchemaMatch = sourceNames.IsSubsetOf(targetNames);
+
+                if (!_targetSchemaMatch)
+                {
+                    var missingFields = sourceNames.Except(targetNames).ToList();
+                    _log.Warning("LoadViewsStatusAsync — schema mismatch, missing on target: {Fields}",
+                        string.Join(", ", missingFields));
+                }
             }
             catch (Exception ex)
             {
@@ -377,7 +396,7 @@ namespace SPUtil.App.ViewModels
 
             if (!_targetSchemaMatch)
             {
-                LogAndStatus("Views: field schema mismatch — copy unavailable. Ensure target list has the same fields.");
+                LogAndStatus("Views: field schema mismatch — copy unavailable. Run Compare from the left panel menu.");
                 return;
             }
 
@@ -466,6 +485,35 @@ namespace SPUtil.App.ViewModels
         // 2026-06-09: ── Copy selected (missing) views to target ─────────────
         private async Task CopySelectedViewsAsync()
         {
+            // 2026-06-09: pre-flight checks — show MessageBox here (on button click),
+            // not during LoadViewsStatusAsync which only updates StatusMessage silently.
+
+            if (!_targetListExists)
+            {
+                System.Windows.MessageBox.Show(
+                    $"List \"{_listTitle}\" does not exist on the target site:\n{_targetSiteUrl}\n\n" +
+                    "Create it first using the left panel menu\n" +
+                    "(select the list → Copy structure to target).",
+                    "List Not Found",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!_targetSchemaMatch)
+            {
+                System.Windows.MessageBox.Show(
+                    $"The field schema of list \"{_listTitle}\" differs between source and target.\n\n" +
+                    "View CAML queries reference field names that may not exist on the target —\n" +
+                    "copying views could produce broken or empty results.\n\n" +
+                    "Run the Compare function from the left panel menu to see\n" +
+                    "exactly which fields are missing, then copy the list structure first.",
+                    "Schema Mismatch — Copy Unavailable",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
             var selectedViews = Views.Where(v => v.IsSelected && !v.ExistsOnTarget).ToList();
 
             if (selectedViews.Count == 0)
@@ -536,6 +584,11 @@ namespace SPUtil.App.ViewModels
         {
             _lastSiteUrl  = siteUrl;
             _lastListPath = listPath;
+
+            // 2026-06-09: reset per-list flags so Views tab re-checks for a new list
+            _targetListExists    = false;
+            _targetSchemaMatch   = false;
+            _targetViewTitles.Clear();
 
             LogAndStatus($"Loading list data: {listPath}...");
             Fields.Clear();
