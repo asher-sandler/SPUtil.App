@@ -397,14 +397,17 @@ namespace SPUtil.Services
                         {
                             viewDataList.Add(new SPViewData
                             {
-                                Title = v.Title,
-                                Id = v.Id.ToString(),
-                                ViewQuery = v.ViewQuery,
-                                DefaultView = v.DefaultView,
-                                ViewFields = v.ViewFields.ToArray(),
+                                Title             = v.Title,
+                                Id                = v.Id.ToString(),
+                                ViewQuery         = v.ViewQuery,
+                                DefaultView       = v.DefaultView,
+                                // 2026-06-10 fix: ViewFieldCollection.ToArray() returns object[]
+                                // and loses the field names. Cast<string>() enumerates the
+                                // collection correctly and produces string[] of InternalNames.
+                                ViewFields        = v.ViewFields.Cast<string>().ToArray(),
                                 ServerRelativeUrl = v.ServerRelativeUrl,
-                                Aggregations = v.Aggregations, // Сохраняем агрегации
-                                SchemaXml = v.ListViewXml // Сохраняем схему для клонирования
+                                Aggregations      = v.Aggregations,
+                                SchemaXml         = v.ListViewXml
                             });
                         }
 					}

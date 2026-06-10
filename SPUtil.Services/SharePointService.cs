@@ -965,6 +965,10 @@ namespace SPUtil.Services
                 }
                 catch (Exception ex)
                 {
+                    // 2026-06-10: added _log.Error — previously only Debug.WriteLine,
+                    // so view creation failures were invisible in the log file.
+                    _log.Error(ex, "[SP_SERVICE] Error creating view '{ViewTitle}': {Message}",
+                        viewData.Title, ex.Message);
                     System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] Error creating view '{viewData.Title}': {ex.Message}");
                 }
             }
