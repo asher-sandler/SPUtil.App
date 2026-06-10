@@ -6,6 +6,7 @@ using SPUtil.App.Views;
 using SPUtil.Views;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Text;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Diagnostics;
@@ -302,7 +303,7 @@ namespace SPUtil.App.ViewModels
         // No background status loading, no cached flags, no checkbox guards.
         private async Task CopySelectedViewsAsync()
         {
-
+            // 2026-06-10: all checks are live — cached flags are for UX only.
             LogAndStatus("Verifying target before copy...");
 
             // ── Live check 1: target site URL ────────────────────────────────
@@ -345,42 +346,45 @@ namespace SPUtil.App.ViewModels
                 return;
             }
 
-            // ── Live check 3: field schema still matches ─────────────────────
+            // ── Live check 3: schema + load target views ─────────────────────
+            // We load target views here (not just schema) so we can split
+            // selectedViews into toCreate vs toUpdate for the confirmation dialog,
+            // and to detect default views that must not be overwritten.
             bool schemaMatch;
+            HashSet<string> targetViewTitles;
+            List<SPViewData> targetViewsData;
+            List<SPFieldData> targetFieldsList;
             try
             {
                 var targetListId = await _spService.GetListIdByTitleAsync(_targetSiteUrl, _listTitle);
-                var targetFields = await _spService.GetListFieldsAsync(_targetSiteUrl, targetListId.ToString());
+                targetFieldsList = await _spService.GetListFieldsAsync(_targetSiteUrl, targetListId.ToString());
 
-                var sourceNames = Fields.Select(f => f.InternalName)
-                                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var targetNames = targetFields
-                    .Where(f =>
-                        (f.InternalName.StartsWith("_x") || !f.InternalName.StartsWith("_")) &&
-                        f.TypeAsString != "Computed" &&
-                        f.InternalName != "ContentTypeId" &&
-                        f.InternalName != "Attachments")
-                    .Select(f => f.InternalName)
+                // Load full target view data — needed for DefaultView check and create/update split
+                targetViewsData = await _spService.GetListViewsAsync(_targetSiteUrl, _listTitle);
+                targetViewTitles = targetViewsData
+                    .Select(v => v.Title)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                schemaMatch = sourceNames.IsSubsetOf(targetNames);
+                _log.Information(
+                    "CopySelectedViewsAsync — target views loaded: [{Views}]",
+                    string.Join(", ", targetViewsData.Select(v =>
+                        $"{v.Title}{(v.DefaultView ? " (default)" : "")}")));
 
-                if (!schemaMatch)
-                {
-                    var missingFields = sourceNames.Except(targetNames).ToList();
-                    _log.Warning("CopySelectedViewsAsync — live schema check failed, missing: {Fields}",
-                        string.Join(", ", missingFields));
-                }
+                // Schema check is deferred until after selectedViews is known —
+                // we check only the fields actually used in selected views, not all list fields.
+                // This avoids false positives where list fields differ in InternalName
+                // (e.g. csyk vs filesNumberAlternative) but are not referenced by any view.
+                schemaMatch = true; // will be re-evaluated below after selectedViews
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "CopySelectedViewsAsync — schema check failed: {Message}", ex.Message);
+                _log.Error(ex, "CopySelectedViewsAsync — schema/view check failed: {Message}", ex.Message);
                 System.Windows.MessageBox.Show(
-                    $"Could not verify field schema on target:\n{ex.Message}",
+                    $"Could not verify target list state:\n{ex.Message}",
                     "Verification Error",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Error);
-                LogAndStatus("View copy cancelled — schema verification failed.");
+                LogAndStatus("View copy cancelled — verification failed.");
                 return;
             }
 
@@ -398,34 +402,163 @@ namespace SPUtil.App.ViewModels
                 return;
             }
 
-            // ── Select views to copy ─────────────────────────────────────────
+            // ── Select views ─────────────────────────────────────────────────
             var selectedViews = Views.Where(v => v.IsSelected).ToList();
 
             if (selectedViews.Count == 0)
             {
                 System.Windows.MessageBox.Show(
-                    "No views selected.\nCheck at least one missing view.",
+                    "No views selected.\nCheck at least one view in the list.",
                     "Nothing Selected",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Information);
                 return;
             }
 
-            // ── Confirm ──────────────────────────────────────────────────────
-            var titles  = string.Join(", ", selectedViews.Select(v => v.Title));
+            // ── Schema check — only fields used in selected views ─────────────
+            // 2026-06-10 fix: check only ViewFields of selected views, not all list
+            // fields. Avoids false positives where list fields have different
+            // InternalNames (e.g. 'csyk' vs 'filesNumberAlternative') but are not
+            // referenced by any view CAML.
+            // NOTE: GetListFieldsAsync filters out Computed fields (LinkTitle, Edit,
+            // DocIcon etc.) but these are always present on every SharePoint list.
+            // We add them explicitly so they never cause a false mismatch.
+            var targetFieldNames = targetFieldsList
+                .Select(f => f.InternalName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // System Computed fields always present on every SP list — never block on these
+            var alwaysPresentFields = new[]
+            {
+                "LinkTitle", "LinkTitleNoMenu", "LinkTitle2",
+                "Edit", "DocIcon", "SelectTitle",
+                "LinkFilename", "LinkFilenameNoMenu", "LinkFilename2",
+                "ServerUrl", "EncodedAbsUrl", "BaseName",
+                "PermMask", "HTML_x0020_File_x0020_Type",
+                "_EditMenuTableStart", "_EditMenuTableStart2", "_EditMenuTableEnd",
+                "ContentType", "FSObjType", "SortBehavior"
+            };
+            foreach (var f in alwaysPresentFields)
+                targetFieldNames.Add(f);
+
+            var viewFieldsUsed = selectedViews
+                .Where(v => v.ViewFields != null)
+                .SelectMany(v => v.ViewFields!)
+                .Where(f => !string.IsNullOrWhiteSpace(f))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var missingInViews = viewFieldsUsed
+                .Where(f => !targetFieldNames.Contains(f))
+                .ToList();
+
+            schemaMatch = missingInViews.Count == 0;
+
+            if (!schemaMatch)
+            {
+                _log.Warning(
+                    "CopySelectedViewsAsync — view fields missing on target: [{Fields}]",
+                    string.Join(", ", missingInViews));
+
+                System.Windows.MessageBox.Show(
+                    $"The following fields are used in the selected view(s)\n" +
+                    $"but do not exist on the target list:\n\n" +
+                    $"{string.Join("\n", missingInViews.Select(f => $"  • {f}"))}\n\n" +
+                    "Copying these views would produce broken or empty results.\n\n" +
+                    "Run the Compare function from the left panel menu,\n" +
+                    "then copy the list structure first.",
+                    "View Fields Missing on Target",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            _log.Information(
+                "CopySelectedViewsAsync — schema OK, view fields checked: [{Fields}]",
+                string.Join(", ", viewFieldsUsed));
+
+            // ── Split: new views vs existing views to overwrite ───────────────
+            var toCreate = selectedViews
+                .Where(v => !targetViewTitles.Contains(v.Title))
+                .ToList();
+            var toUpdate = selectedViews
+                .Where(v => targetViewTitles.Contains(v.Title))
+                .ToList();
+
+            _log.Information(
+                "CopySelectedViewsAsync — to create: [{Create}] | to update: [{Update}]",
+                string.Join(", ", toCreate.Select(v => v.Title)),
+                string.Join(", ", toUpdate.Select(v => v.Title)));
+
+            // ── Block overwrite of default view(s) on target ─────────────────
+            // SharePoint requires exactly one default view per list.
+            // Overwriting the default view risks leaving the list in a broken state
+            // if anything fails mid-operation. Instruct user to do it via SP UI.
+            var blocked = toUpdate
+                .Where(v => targetViewsData
+                    .Any(t => t.Title.Equals(v.Title, StringComparison.OrdinalIgnoreCase)
+                           && t.DefaultView))
+                .ToList();
+
+            if (blocked.Count > 0)
+            {
+                var blockedNames = string.Join("\n", blocked.Select(v => $"  • {v.Title}"));
+                _log.Warning(
+                    "CopySelectedViewsAsync — blocked: default view(s) on target cannot be overwritten: [{Views}]",
+                    string.Join(", ", blocked.Select(v => v.Title)));
+
+                System.Windows.MessageBox.Show(
+                    $"The following view(s) are the DEFAULT view on the target list\n" +
+                    $"and cannot be overwritten by this tool:\n\n" +
+                    $"{blockedNames}\n\n" +
+                    "Overwriting the default view risks breaking the list if\n" +
+                    "anything fails mid-operation.\n\n" +
+                    "To modify the default view, use the SharePoint list settings\n" +
+                    "in the browser directly.",
+                    "Default View — Cannot Overwrite",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            // ── Build confirmation message ────────────────────────────────────
+            var sb = new StringBuilder();
+
+            if (toCreate.Count > 0)
+            {
+                sb.AppendLine($"NEW — will be created ({toCreate.Count}):");
+                foreach (var v in toCreate)
+                    sb.AppendLine($"  + {v.Title}");
+                sb.AppendLine();
+            }
+
+            if (toUpdate.Count > 0)
+            {
+                sb.AppendLine($"EXISTING — will be OVERWRITTEN ({toUpdate.Count}):");
+                foreach (var v in toUpdate)
+                    sb.AppendLine($"  ⚠ {v.Title}");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine($"Target list: \"{_listTitle}\"");
+            sb.AppendLine($"Target site: {_targetSiteUrl}");
+            sb.AppendLine();
+            sb.Append("Continue?");
+
             var confirm = System.Windows.MessageBox.Show(
-                $"{selectedViews.Count} view(s) will be copied to\n" +
-                $"list \"{_listTitle}\" on:\n{_targetSiteUrl}\n\n" +
-                $"Views: {titles}\n\n" +
-                "Continue?",
+                sb.ToString(),
                 "Confirm Copy Views",
                 System.Windows.MessageBoxButton.OKCancel,
-                System.Windows.MessageBoxImage.Question);
+                toUpdate.Count > 0
+                    ? System.Windows.MessageBoxImage.Warning
+                    : System.Windows.MessageBoxImage.Question);
 
             if (confirm != System.Windows.MessageBoxResult.OK) return;
 
-            LogAndStatus($"Copying {selectedViews.Count} view(s)...");
-            _log.Information("CopySelectedViewsAsync start — views: [{Titles}]", titles);
+            LogAndStatus($"Copying {selectedViews.Count} view(s) ({toCreate.Count} new, {toUpdate.Count} overwrite)...");
+            _log.Information(
+                "CopySelectedViewsAsync start — create: [{Create}] | overwrite: [{Update}]",
+                string.Join(", ", toCreate.Select(v => v.Title)),
+                string.Join(", ", toUpdate.Select(v => v.Title)));
 
             try
             {
@@ -434,14 +567,24 @@ namespace SPUtil.App.ViewModels
                     _listTitle,
                     selectedViews);
 
+                var resultMsg = new StringBuilder();
+                if (toCreate.Count > 0)
+                    resultMsg.AppendLine($"Created: {string.Join(", ", toCreate.Select(v => v.Title))}");
+                if (toUpdate.Count > 0)
+                    resultMsg.AppendLine($"Overwritten: {string.Join(", ", toUpdate.Select(v => v.Title))}");
+                resultMsg.AppendLine();
+                resultMsg.Append("Refresh the right panel to see the changes.");
+
                 System.Windows.MessageBox.Show(
-                    $"{selectedViews.Count} view(s) successfully copied to:\n{_targetSiteUrl}\n\n" +
-                    "Refresh the right panel to see the changes.",
+                    resultMsg.ToString(),
                     "Copy Complete",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Information);
 
-                _log.Information("CopySelectedViewsAsync complete — {Count} views", selectedViews.Count);
+                LogAndStatus($"Done. {toCreate.Count} created, {toUpdate.Count} overwritten.");
+                _log.Information(
+                    "CopySelectedViewsAsync complete — created: {Created}, overwritten: {Updated}",
+                    toCreate.Count, toUpdate.Count);
             }
             catch (Exception ex)
             {

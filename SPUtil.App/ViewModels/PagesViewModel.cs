@@ -1015,6 +1015,10 @@ namespace SPUtil.App.ViewModels
             // ── Section 1: Header + config ────────────────────────────────────────
             script.AppendLine($@"
 # ──────────────────────────────────────────────────────────────────────────────
+# You need to save this script in UTF16-BE BOM encoding. This is best done in Notepad++.
+# To Install CSOM driver:
+# dotnet add package Microsoft.SharePointOnline.CSOM --version 16.1.21812.12000
+# ──────────────────────────────────────────────────────────────────────────────
 # All functions are declared BEFORE Add-Type so their parameter type
 # annotations resolve at call-time from the DLLs loaded below.
 # ──────────────────────────────────────────────────────────────────────────────
