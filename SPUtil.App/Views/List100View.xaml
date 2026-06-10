@@ -174,10 +174,10 @@
                                   Background="#EEE" Cursor="SizeNS"/>
 
                     <!-- 2026-06-10: changed from ViewQuery (OrderBy/Where only)
-                         to SchemaXml — shows full view definition including
-                         ViewFields, RowLimit, Query, Aggregations. -->
+                         to FormattedSchemaXml — shows full view definition including
+                         ViewFields, RowLimit, Query, Aggregations, indented via SPUsingUtils.FormatXml. -->
                     <GroupBox Grid.Row="2" Header="View Schema (XML)">
-                        <TextBox Text="{Binding SelectedView.SchemaXml, Mode=OneWay}"
+                        <TextBox Text="{Binding SelectedView.FormattedSchemaXml, Mode=OneWay}"
                                  IsReadOnly="True"
                                  TextWrapping="Wrap"
                                  AcceptsReturn="True"
