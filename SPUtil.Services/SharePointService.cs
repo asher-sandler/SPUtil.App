@@ -1,7 +1,8 @@
 using Microsoft.SharePoint.Client;
 using Microsoft.SharePoint.Client.WebParts;
-using Microsoft.SharePoint.DesignTime.Activities;
-using Microsoft.SharePoint.JSGrid;
+// 2026-06-10: removed Microsoft.SharePoint.DesignTime.Activities and
+// Microsoft.SharePoint.JSGrid — not available in Microsoft.SharePoint2016.CSOM
+// and were never used in the codebase (dead using directives from 15.x package).
 using Microsoft.Win32;
 using SPUtil.Infrastructure;
 using System;

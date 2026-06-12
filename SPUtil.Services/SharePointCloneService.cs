@@ -1,4 +1,5 @@
-using Microsoft.SharePoint.Administration;
+// 2026-06-10: removed Microsoft.SharePoint.Administration —
+// not available in Microsoft.SharePoint2016.CSOM, never used in code.
 using Microsoft.SharePoint.Client;
 using SPUtil.Infrastructure;
 using System;

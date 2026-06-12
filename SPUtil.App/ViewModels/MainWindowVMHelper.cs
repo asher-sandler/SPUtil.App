@@ -1,4 +1,5 @@
-using Microsoft.SharePoint.Portal.WebControls.WSRPWebService;
+// 2026-06-10: removed Microsoft.SharePoint.Portal.WebControls.WSRPWebService —
+// not available in Microsoft.SharePoint2016.CSOM, never used in code.
 using SPUtil.Infrastructure;
 using System;
 using System.Collections.Generic;

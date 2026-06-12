@@ -1,4 +1,5 @@
-using Microsoft.SharePoint.ApplicationPages.MetaWeblog;
+// 2026-06-10: removed Microsoft.SharePoint.ApplicationPages.MetaWeblog —
+// not available in Microsoft.SharePoint2016.CSOM, never used in code.
 using Microsoft.SharePoint.Client;
 using Microsoft.SharePoint.Client.WebParts;
 using Microsoft.Win32;

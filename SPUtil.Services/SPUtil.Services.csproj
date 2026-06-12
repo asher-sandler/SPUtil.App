@@ -7,9 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SharePoint.Client.Online.CSOM" Version="15.0.4919.1000" />
+	<!-- было -->
+	<!--PackageReference Include="Microsoft.SharePoint.Client.Online.CSOM" Version="15.0.4919.1000" /-->
+
+	<!-- стало -->
+	<PackageReference Include="Microsoft.SharePoint2016.CSOM" Version="16.0.4690.1000" />
+  
+  
     <PackageReference Include="Serilog" Version="4.3.1" />
   </ItemGroup>
+
 
   <ItemGroup>
     <ProjectReference Include="..\SPUtil.Infrastructure\SPUtil.Infrastructure.csproj" />
