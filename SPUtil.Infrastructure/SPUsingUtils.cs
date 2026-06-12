@@ -28,29 +28,49 @@ namespace SPUtil.Infrastructure
 		*/
         public static NetworkCredential? GetCredentials()
         {
-            
-
             using (var key = Registry.CurrentUser.OpenSubKey(regPath))
             {
-                // Если ключа в реестре вообще нет
                 if (key == null) return null;
 
-                var userName = key.GetValue("Param1")?.ToString();
+                var userName     = key.GetValue("Param1")?.ToString();
                 var encryptedHex = key.GetValue("Param")?.ToString();
 
-                // Если значения отсутствуют или пусты
                 if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(encryptedHex))
-                {
                     return null;
+
+                // 2026-06-10: domain is no longer hardcoded to "ekmd".
+                // Resolved from the current Windows login session so the app works
+                // on any domain (ekmd, ada, etc.) without code changes.
+                //
+                // WindowsIdentity.GetCurrent().Name returns "DOMAIN\username"
+                // e.g. "EKMD\ashersa" → domain = "EKMD"
+                //
+                // This matches what PowerShell PSCredential does implicitly —
+                // the reason C# previously required an explicit domain is that
+                // NetworkCredential with empty domain sends "\username" in the
+                // NTLM Type-3 message which SharePoint cannot map to an AD account.
+                string domain;
+                try
+                {
+                    var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+                    // Name is "DOMAIN\user" — take everything before the backslash
+                    var parts = identity.Name.Split('\\');
+                    domain = parts.Length == 2 ? parts[0] : string.Empty;
+                    _log.Debug("GetCredentials — resolved domain '{Domain}' from Windows identity '{Identity}'",
+                        domain, identity.Name);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning(ex, "GetCredentials — could not resolve domain from Windows identity, falling back to empty domain");
+                    domain = string.Empty;
                 }
 
                 try
                 {
-                    return new NetworkCredential(userName, DecryptFromPowerShell(encryptedHex), "ekmd");
+                    return new NetworkCredential(userName, DecryptFromPowerShell(encryptedHex), domain);
                 }
                 catch
                 {
-                    // Если ошибка дешифровки (например, ключ поврежден)
                     return null;
                 }
             }
