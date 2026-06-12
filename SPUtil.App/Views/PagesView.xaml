@@ -96,10 +96,10 @@
                             <MenuItem Header="Export WebParts as PowerShell script"
                                       Command="{Binding ExportWpToPowerShellCommand}"
                                       Icon="{StaticResource IconMenuExport}"/>
-                            <Separator/>
+                            <!-- Separator/ -->
                             <!-- Debug -->
-                            <MenuItem Header="Dump all properties to Output"
-                                      Command="{Binding GetAllPropertiesCommand}"/>
+                            <!-- MenuItem Header="Dump all properties to Output"
+                                      Command="{Binding GetAllPropertiesCommand}"/ -->
                         </ContextMenu>
                     </Button.ContextMenu>
                     <!-- Open ContextMenu on left-click too -->
