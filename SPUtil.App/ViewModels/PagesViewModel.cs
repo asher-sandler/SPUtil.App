@@ -267,7 +267,45 @@ namespace SPUtil.App.ViewModels
                     }
                 }
             }
+// SPUtil.App/ViewModels/PagesViewModel.cs — inside ExecuteCopyPageAsync
 
+            // ── Step 2b: Pre-flight — is the source page layout available on target? ──
+            // layOutName is filled by GetPageItemsAsync. It is empty for wiki page
+            // libraries (template 119) and when Publishing Infrastructure is off —
+            // in that case there is nothing to verify and the check is skipped.
+            if (!string.IsNullOrWhiteSpace(SelectedPage.layOutName))
+            {
+                infoWin.UpdateMessage($"Checking page layout '{SelectedPage.layOutName}' on target...");
+
+                bool layoutAvailable = true;
+                try
+                {
+                    layoutAvailable = await _spService.PageLayoutExistsAsync(
+                        _targetSiteUrl, SelectedPage.layOutName);
+                }
+                catch (Exception ex)
+                {
+                    // A failed check must not block a copy that might still succeed —
+                    // CreatePageFromSnapshotAsync validates the layout again anyway.
+                    _log.Warning(ex, "Page layout pre-flight check failed for {Layout} on {Site}",
+                        SelectedPage.layOutName, _targetSiteUrl);
+                }
+
+                if (!layoutAvailable)
+                {
+                    _log.Warning("Copy aborted — layout {Layout} missing on {Site}",
+                        SelectedPage.layOutName, _targetSiteUrl);
+                    infoWin.Close();
+                    MessageBox.Show(
+                        $"Page layout '{SelectedPage.layOutName}' does not exist in the Master Page " +
+                        $"Gallery of the target site collection:\n{_targetSiteUrl}\n\n" +
+                        $"Copy the layout there first, or choose a page that uses an available layout.",
+                        "Page Layout Missing",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+            }
             // ── Step 3: Read snapshot from source ─────────────────────────────
             infoWin.UpdateMessage("Reading source page (layout + WebParts)...");
             PageSnapshot snapshot;
@@ -952,6 +990,7 @@ namespace SPUtil.App.ViewModels
             jsonSb.AppendLine($"  \"Site\": \"{EscapeJson(_targetSiteUrl)}\",");
             jsonSb.AppendLine($"  \"Path\": \"{EscapeJson(SelectedPage.FullPath)}\",");
             jsonSb.AppendLine($"  \"Subfolder\": \"{EscapeJson(subfolder)}\",");
+            jsonSb.AppendLine($"  \"Layout\": \"{EscapeJson(SelectedPage.layOutName)}\",");
             jsonSb.AppendLine($"  \"Exported\": \"{now}\",");
             jsonSb.AppendLine("  \"WebParts\": [");
 
@@ -1738,11 +1777,6 @@ Add-Type -Path ""C:\Program Files\Common Files\Microsoft Shared\Web Server Exten
 Add-Type -Path ""C:\Program Files\Common Files\Microsoft Shared\Web Server Extensions\16\ISAPI\Microsoft.SharePoint.Client.UserProfiles.dll""
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Entry point
-# ══════════════════════════════════════════════════════════════════════════════
-#. ""..\Utils-Request.ps1""
-#. ""..\Utils-DualLanguage.ps1""
 
 start-transcript ""1.AddPages.log""
 

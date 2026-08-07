@@ -181,7 +181,7 @@
                   IsReadOnly="True" Background="White"
                   HorizontalScrollBarVisibility="Visible"
                   ColumnWidth="Auto">
-            <DataGrid.Columns>
+             <DataGrid.Columns>
                 <DataGridTextColumn Binding="{Binding Name}" Width="250" MinWidth="150">
                     <DataGridTextColumn.Header>
                         <StackPanel Orientation="Horizontal">
@@ -192,9 +192,11 @@
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
+                <DataGridTextColumn Header="Layout" Binding="{Binding layOutName}"
+                                    Width="180" MinWidth="120"/>
                 <DataGridTextColumn Header="Path" Binding="{Binding FullPath}" Width="600" MinWidth="200"/>
             </DataGrid.Columns>
-        </DataGrid>
+		</DataGrid>
 
         <!-- Row 3 — Splitter -->
         <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"

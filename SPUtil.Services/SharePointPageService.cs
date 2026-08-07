@@ -931,18 +931,36 @@ namespace SPUtil.Services
                     targetFolder = await EnsureSubfolderAsync(ctx, pagesRoot, subfolderPath);
                 }
 
-                // Find the layout in Master Page Gallery
-                var rootWeb = ctx.Site.RootWeb;
-                var layoutFile = rootWeb.GetFileByServerRelativeUrl(snapshot.LayoutRelativeUrl);
-                ctx.Load(layoutFile, f => f.ListItemAllFields);
-                await Task.Run(() => ctx.ExecuteQuery());
+                // SPUtil.Services/SharePointPageService.cs — inside CreatePageFromSnapshotAsync
+
+                // Find the layout in the target Master Page Gallery BY FILE NAME.
+                // The snapshot carries the SOURCE server-relative URL
+                // (e.g. /home/_catalogs/masterpage/NoMenuPage.aspx), which does not
+                // resolve on a different site collection. GetFileByServerRelativeUrl
+                // silently returns an object whose ListItemAllFields is null, and the
+                // failure only surfaces later inside AddPublishingPage as
+                // "Cannot invoke method or retrieve property from null object".
+                string layoutFileName = GetLayoutFileName(snapshot.LayoutRelativeUrl);
+                if (string.IsNullOrWhiteSpace(layoutFileName))
+                    throw new InvalidOperationException(
+                        "The source page snapshot contains no page layout — cannot create the target page.");
+
+                var layoutItem = await FindPageLayoutItemAsync(ctx, layoutFileName);
+                if (layoutItem == null)
+                    throw new InvalidOperationException(
+                        $"Page layout '{layoutFileName}' was not found in the Master Page Gallery " +
+                        $"of {targetSiteUrl}. Copy the layout to the target site collection first.");
+
+                _logPage.Information(
+                    "Layout resolved on target: '{Layout}' (source URL was '{SourceUrl}')",
+                    layoutFileName, snapshot.LayoutRelativeUrl);
 
                 var pageInfo = new PublishingPageInformation
                 {
-                    Name               = targetPageName.EndsWith(".aspx")
+                    Name = targetPageName.EndsWith(".aspx")
                                          ? targetPageName
                                          : targetPageName + ".aspx",
-                    PageLayoutListItem = layoutFile.ListItemAllFields
+                    PageLayoutListItem = layoutItem
                 };
 
                 if (targetFolder != null)
@@ -1867,7 +1885,89 @@ namespace SPUtil.Services
             return ctx.Web.ServerRelativeUrl.TrimEnd('/') + "/Pages/" + name;
         }
 
+       /// <summary>
+        /// Looks up a page layout in the Master Page Gallery of the target site
+        /// collection by file name (e.g. "NoMenuPage.aspx").
+        /// Returns null when the layout is not present.
+        /// </summary>
+        /// <remarks>
+        /// The gallery is resolved by URL rather than by title on purpose: the
+        /// display name is localized (for example "גלריית דפי אב" on Hebrew sites),
+        /// so GetByTitle would fail there.
+        /// </remarks>
+        private async Task<ListItem?> FindPageLayoutItemAsync(
+            ClientContext ctx,
+            string layoutFileName)
+        {
+            if (string.IsNullOrWhiteSpace(layoutFileName)) return null;
 
+            var rootWeb = ctx.Site.RootWeb;
+            ctx.Load(rootWeb, w => w.ServerRelativeUrl);
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            string galleryUrl = rootWeb.ServerRelativeUrl.TrimEnd('/') + "/_catalogs/masterpage";
+            var gallery = rootWeb.GetList(galleryUrl);
+
+            // Scope='RecursiveAll' — layouts may live in subfolders of the gallery.
+            var query = new CamlQuery
+            {
+                ViewXml =
+                    "<View Scope='RecursiveAll'><Query><Where><Eq>" +
+                    "<FieldRef Name='FileLeafRef' />" +
+                    "<Value Type='Text'>" +
+                    System.Security.SecurityElement.Escape(layoutFileName) +
+                    "</Value>" +
+                    "</Eq></Where></Query><RowLimit>1</RowLimit></View>"
+            };
+
+            var items = gallery.GetItems(query);
+            ctx.Load(items, icol => icol.Include(
+                i => i["FileLeafRef"],
+                i => i["FileRef"]));
+            await Task.Run(() => ctx.ExecuteQuery());
+
+            return items.Count > 0 ? items[0] : null;
+        }
+
+        /// <summary>
+        /// Extracts the layout file name from a server-relative layout URL,
+        /// undoing the percent-encoding produced by Uri.AbsolutePath.
+        /// </summary>
+        private static string GetLayoutFileName(string layoutRelativeUrl)
+        {
+            if (string.IsNullOrWhiteSpace(layoutRelativeUrl)) return string.Empty;
+
+            int lastSlash = layoutRelativeUrl.LastIndexOf('/');
+            string name = lastSlash >= 0
+                ? layoutRelativeUrl.Substring(lastSlash + 1)
+                : layoutRelativeUrl;
+
+            return Uri.UnescapeDataString(name);
+        }
+		
+
+        /// <summary>
+        /// Checks whether a page layout with the given file name exists in the
+        /// Master Page Gallery of the site collection that owns <paramref name="siteUrl"/>.
+        /// Used as a pre-flight check before the expensive snapshot step.
+        /// </summary>
+        public async Task<bool> PageLayoutExistsAsync(string siteUrl, string layoutFileName)
+        {
+            if (string.IsNullOrWhiteSpace(layoutFileName)) return false;
+
+            return await Task.Run(async () =>
+            {
+                using var ctx = await GetContextAsync(siteUrl);
+                var item = await FindPageLayoutItemAsync(ctx, layoutFileName);
+
+                bool found = item != null;
+                _logPage.Information(
+                    "PageLayoutExists: '{Layout}' on {Site} → {Found}",
+                    layoutFileName, siteUrl, found);
+
+                return found;
+            });
+        }		
         // ═══════════════════════════════════════════════════════════════════════
         //  EnsureSubfolderAsync
         //  Creates the subfolder hierarchy under the Pages library if it doesn't

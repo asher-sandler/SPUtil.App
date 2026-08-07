@@ -300,6 +300,13 @@ namespace SPUtil.Services
             string targetPageRelativeUrl);
 
         Task<string> GetPageRelativeUrlAsync(string siteUrl, string pageName);
+		// SPUtil.Infrastructure/ISharePointService.cs — add near the other page members
+
+        /// <summary>
+        /// True when the given page layout file name is present in the Master Page
+        /// Gallery of the target site collection.
+        /// </summary>
+        Task<bool> PageLayoutExistsAsync(string siteUrl, string layoutFileName);
 
 
     }

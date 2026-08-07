@@ -282,35 +282,111 @@ namespace SPUtil.Services
 			return secureString;
 		}
 		*/
+// SPUtil.Services/SharePointService.cs
+
+		/// <summary>Internal name of the page layout field in a Publishing Pages library.</summary>
+		private const string LayoutFieldName = "PublishingPageLayout";
+
 		public async Task<List<SPFileData>> GetPageItemsAsync(string siteUrl, string listId)
 		{
+			_log.Debug("GetPageItems: site={Site} list={List}", siteUrl, listId);
+
 			return await Task.Run(async () =>
 			{
 				using var context = await GetContextAsync(siteUrl);
 				var list = context.Web.Lists.GetById(new Guid(listId));
 
+				// ── Round trip 1: probe the list schema (field names only) ──────
+				// PublishingPageLayout is absent in wiki page libraries (template 119)
+				// and in 850 libraries with Publishing Infrastructure deactivated.
+				// Including a missing field in Include(...) throws a ServerException
+				// that fails the whole batch, so the schema must be checked first.
+				context.Load(list, l => l.Fields.Include(f => f.InternalName));
+				context.ExecuteQuery();
+
+				bool hasLayoutField = list.Fields.Any(f =>
+					string.Equals(f.InternalName, LayoutFieldName, StringComparison.OrdinalIgnoreCase));
+
+				if (!hasLayoutField)
+					_log.Warning(
+						"GetPageItems: field {Field} is not present in list {List} — layout values will be empty",
+						LayoutFieldName, listId);
+
+				// ── Round trip 2: items ─────────────────────────────────────────
 				CamlQuery query = new CamlQuery();
 				// Recursive file and folder search
 				query.ViewXml = @"<View Scope='RecursiveAll'><Query></Query></View>";
 
 				ListItemCollection items = list.GetItems(query);
-				context.Load(items, icol => icol.Include(
-					i => i.FileSystemObjectType,
-					i => i["FileLeafRef"],
-					i => i["FileRef"],
-					i => i["Modified"]));
+
+				// Two literal Load calls instead of one runtime-built expression array:
+				// the CSOM query translator does not reliably parse Include(...) when its
+				// argument is a variable instead of an inline expression list.
+				if (hasLayoutField)
+				{
+					context.Load(items, icol => icol.Include(
+						i => i.FileSystemObjectType,
+						i => i["FileLeafRef"],
+						i => i["FileRef"],
+						i => i["Modified"],
+						i => i[LayoutFieldName]));
+				}
+				else
+				{
+					context.Load(items, icol => icol.Include(
+						i => i.FileSystemObjectType,
+						i => i["FileLeafRef"],
+						i => i["FileRef"],
+						i => i["Modified"]));
+				}
 				context.ExecuteQuery();
 
-				return items.ToList().Select(item => new SPFileData
+				var result = items.ToList().Select(item => new SPFileData
 				{
 					Name = item["FileLeafRef"]?.ToString() ?? "",
 					FullPath = item["FileRef"]?.ToString() ?? "",
 					IsFolder = item.FileSystemObjectType == FileSystemObjectType.Folder,
-					Modified = item["Modified"] is DateTime dt ? dt : DateTime.MinValue
+					Modified = item["Modified"] is DateTime dt ? dt : DateTime.MinValue,
+					layOutName = hasLayoutField ? ExtractLayoutFileName(item) : string.Empty
 				}).ToList();
+
+				_log.Information(
+					"GetPageItems: {Total} item(s), {WithLayout} with a resolved layout",
+					result.Count, result.Count(f => !string.IsNullOrEmpty(f.layOutName)));
+
+				return result;
 			});
 		}
 
+		/// <summary>
+		/// Extracts the page layout file name (e.g. "ArticleLeft.aspx") from the
+		/// PublishingPageLayout field of a Pages library item.
+		/// Returns an empty string for folders, for items without a layout, and
+		/// when the stored value is not a FieldUrlValue.
+		/// </summary>
+		private static string ExtractLayoutFileName(ListItem item)
+		{
+			if (item.FileSystemObjectType == FileSystemObjectType.Folder)
+				return string.Empty;
+
+			// TryGetValue instead of item[...] — avoids PropertyOrFieldNotInitializedException
+			// when the field was not part of the Include list.
+			if (!item.FieldValues.TryGetValue(LayoutFieldName, out var rawValue)
+				|| rawValue is not FieldUrlValue layoutUrl
+				|| string.IsNullOrWhiteSpace(layoutUrl.Url))
+				return string.Empty;
+
+			// The field normally stores an absolute URL, but a server-relative
+			// value is possible on some layouts — handle both.
+			string path = Uri.TryCreate(layoutUrl.Url, UriKind.Absolute, out var absolute)
+				? absolute.AbsolutePath
+				: layoutUrl.Url;
+
+			int lastSlash = path.LastIndexOf('/');
+			string fileName = lastSlash >= 0 ? path.Substring(lastSlash + 1) : path;
+
+			return Uri.UnescapeDataString(fileName);
+		}
 		public async Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl)
 		{
 			_log.Debug("GetWebParts: {File}", fileRelativeUrl);
