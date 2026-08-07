@@ -300,7 +300,28 @@
                         </DataGridTextColumn>
 
                         <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*"/>
-
+							<DataGridTextColumn Header="Export"
+                                            Binding="{Binding ExportModeDisplay}"
+                                            Width="70" MinWidth="55">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="ToolTip" Value="{Binding ExportMode}"/>
+                                    <Style.Triggers>
+                                        <!-- Export refused — the WebPart cannot be copied at all -->
+                                        <DataTrigger Binding="{Binding CanExport}" Value="False">
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="#CC0000"/>
+                                        </DataTrigger>
+                                        <!-- Unknown — treated as allowed, shown dimmed -->
+                                        <DataTrigger Binding="{Binding CanExport}" Value="{x:Null}">
+                                            <Setter Property="Foreground" Value="Gray"/>
+                                            <Setter Property="FontStyle" Value="Italic"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </GroupBox>

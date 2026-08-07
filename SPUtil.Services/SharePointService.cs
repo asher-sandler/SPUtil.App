@@ -282,7 +282,7 @@ namespace SPUtil.Services
 			return secureString;
 		}
 		*/
-// SPUtil.Services/SharePointService.cs
+
 
 		/// <summary>Internal name of the page layout field in a Publishing Pages library.</summary>
 		private const string LayoutFieldName = "PublishingPageLayout";
@@ -425,6 +425,12 @@ namespace SPUtil.Services
 						.ToDictionary(
 							kv => kv.Key,
 							kv => kv.Value?.ToString() ?? "");
+							
+					// ExportMode is an ASP.NET WebPart property. It is absent for WebParts
+					// derived from the legacy Microsoft.SharePoint.WebPartPages.WebPart model,
+					// so a missing key means "unknown", not "refused".
+					string exportModeRaw = props.TryGetValue("ExportMode", out var em) ? em : string.Empty;
+							
 
 					var wp = new SPWebPartData
 					{
@@ -437,7 +443,8 @@ namespace SPUtil.Services
 						Title   = definition.WebPart.Title,
 						Type    = typeName,
 						ZoneId  = definition.ZoneId,
-
+						ExportMode = exportModeRaw,
+						CanExport  = ParseExportMode(exportModeRaw),
 						Properties = props
 					};
 
@@ -447,6 +454,30 @@ namespace SPUtil.Services
 				return result;
 			});
 		}
+
+/// <summary>
+		/// Maps a raw ExportMode value to tri-state export capability.
+		/// The property bag may carry either the enum name ("All", "None",
+		/// "NonSensitiveData") or its numeric value, so both forms are accepted.
+		/// WebPartExportMode ordering is None = 0, All = 1, NonSensitiveData = 2 —
+		/// note that All comes before NonSensitiveData, not after it.
+		/// Returns null when the value is missing or unrecognized.
+		/// </summary>
+		private static bool? ParseExportMode(string raw)
+		{
+			if (string.IsNullOrWhiteSpace(raw)) return null;
+
+			return raw.Trim() switch
+			{
+				var v when v.Equals("None", StringComparison.OrdinalIgnoreCase)             => false,
+				var v when v.Equals("All", StringComparison.OrdinalIgnoreCase)              => true,
+				var v when v.Equals("NonSensitiveData", StringComparison.OrdinalIgnoreCase) => true,
+				"0" => false,  // None
+				"1" => true,   // All
+				"2" => true,   // NonSensitiveData
+				_   => null
+			};
+		}		
 /*
 		 public async Task<List<SPListItemData>> GetListItemsByTitleAsync(string siteUrl, string listTitle, IProgress<int> progress)
 		{

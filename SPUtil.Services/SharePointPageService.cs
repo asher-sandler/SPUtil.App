@@ -931,8 +931,7 @@ namespace SPUtil.Services
                     targetFolder = await EnsureSubfolderAsync(ctx, pagesRoot, subfolderPath);
                 }
 
-                // SPUtil.Services/SharePointPageService.cs — inside CreatePageFromSnapshotAsync
-
+ 
                 // Find the layout in the target Master Page Gallery BY FILE NAME.
                 // The snapshot carries the SOURCE server-relative URL
                 // (e.g. /home/_catalogs/masterpage/NoMenuPage.aspx), which does not
@@ -1895,6 +1894,7 @@ namespace SPUtil.Services
         /// display name is localized (for example "גלריית דפי אב" on Hebrew sites),
         /// so GetByTitle would fail there.
         /// </remarks>
+
         private async Task<ListItem?> FindPageLayoutItemAsync(
             ClientContext ctx,
             string layoutFileName)
@@ -1922,11 +1922,21 @@ namespace SPUtil.Services
 
             var items = gallery.GetItems(query);
             ctx.Load(items, icol => icol.Include(
+                i => i.Id,
                 i => i["FileLeafRef"],
                 i => i["FileRef"]));
             await Task.Run(() => ctx.ExecuteQuery());
 
-            return items.Count > 0 ? items[0] : null;
+            if (items.Count == 0) return null;
+
+            // Return the item by a stable object path instead of items[0].
+            // The path of a query result is "List.GetItems(caml)[0]" — the server
+            // re-executes the CAML query every time that path is resolved in a later
+            // batch. AddPublishingPage resolves PageLayoutListItem in its own batch,
+            // so a re-resolvable-by-Id path is safer and cheaper.
+            // The returned item is intentionally not loaded: callers only use it as
+            // an object path (PageLayoutListItem) or test it for null.
+            return gallery.GetItemById(items[0].Id);
         }
 
         /// <summary>

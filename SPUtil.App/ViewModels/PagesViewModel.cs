@@ -267,7 +267,6 @@ namespace SPUtil.App.ViewModels
                     }
                 }
             }
-// SPUtil.App/ViewModels/PagesViewModel.cs — inside ExecuteCopyPageAsync
 
             // ── Step 2b: Pre-flight — is the source page layout available on target? ──
             // layOutName is filled by GetPageItemsAsync. It is empty for wiki page

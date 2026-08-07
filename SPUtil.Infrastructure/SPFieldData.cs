@@ -44,7 +44,20 @@ namespace SPUtil.Infrastructure
         public string Title { get; set; } = string.Empty;
         public string Type  { get; set; } = string.Empty;
         public string ZoneId { get; set; } = string.Empty;
-
+        public string ExportMode { get; set; } = string.Empty;
+        public bool? CanExport { get; set; }
+		/// <summary>Display text for the Export column in the WebParts grid.</summary>
+		public string ExportModeDisplay => CanExport switch
+        {
+            // WebPartExportMode: None = 0, All = 1, NonSensitiveData = 2.
+            // Only NonSensitiveData ("2") strips sensitive properties on export.
+            true when ExportMode.Trim() == "2"
+                   || ExportMode.Equals("NonSensitiveData", StringComparison.OrdinalIgnoreCase)
+                  => "Partial",
+            true  => "Yes",
+            false => "No",
+            _     => "?"
+        };
         /// <summary>Visual position on the page (1-based). Used for matching duplicates.</summary>
         public int VisualPosition { get; set; }
 
@@ -90,6 +103,8 @@ namespace SPUtil.Infrastructure
 		// Для Number / Currency
 		public double? MinValue { get; set; }
 		public double? MaxValue { get; set; }
+
+
 
 		/// <summary>
 		/// Generates SharePoint Field XML.
