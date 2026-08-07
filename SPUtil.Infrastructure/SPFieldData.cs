@@ -20,6 +20,7 @@ namespace SPUtil.Infrastructure
         public bool IsSelected { get; set; }
         public string Name { get; set; } = string.Empty;
         public string FullPath { get; set; } = string.Empty;
+        public string layOutName { get; set; } = string.Empty;
         public long Size { get; set; }
         public DateTime Modified { get; set; }
         public bool IsFolder { get; set; }

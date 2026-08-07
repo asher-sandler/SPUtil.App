@@ -37,7 +37,7 @@ namespace SPUtil.App.ViewModels
             PreviewText   = script;
             StatusMessage = $"Page: {pageName}  |  WebParts: {webPartCount}  |  " +
                             $"Script length: {script.Length} chars  |  " +
-                            $"Click 'Copy script' to copy to clipboard";
+                            $"Click 'Copy script' to copy to clipboard and save file as PowerShell (.ps1) type and encoding UTF16 BOM.";
             DialogButtons = buttons;
         }
     }

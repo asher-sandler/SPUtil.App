@@ -1269,7 +1269,7 @@ function Remove-Page() {{
         [Parameter(Mandatory=$true)] [string] $FileRelativeURL
     )
     Try {{
-        write-host 507 $FileRelativeURL
+        write-host ""MSG 257: File Relative URL:"" $FileRelativeURL
         $File = $Ctx.Web.GetFileByServerRelativeUrl($FileRelativeURL)
         $Ctx.Load($File)
         $Ctx.ExecuteQuery()
@@ -1392,6 +1392,17 @@ try {{
         Write-Host ""ERROR in Update-WebPartsProps: $($_.Exception.Message)"" -ForegroundColor Red
         Write-Host ""  Line: $($_.InvocationInfo.ScriptLineNumber)"" -ForegroundColor Yellow
     }}
+}}
+function Get-CredentialFromConsole {{
+    param(
+        [string]$Message = ""Enter credentials""
+    )
+
+    Write-Host $Message -ForegroundColor Yellow
+    $userName = Read-Host ""User name""
+    $securePassword = Read-Host ""Password"" -AsSecureString
+
+    return New-Object System.Management.Automation.PSCredential($userName, $securePassword)
 }}
 
 function Add-WebPartToPage {{
@@ -1619,11 +1630,11 @@ Function Create-FolderX($ctx, $LibName, $pathToCreate)
         return $null
     }}
 
-    # Санация: удаление недопустимых символов
+    # Delete illegal chars
     $illegalChars = '[#%&*:<>?{{|}}~]'
     if ($LibName -match $illegalChars) {{ Write-Host ""ERROR: LibName contains illegal characters"" -ForegroundColor Red; return $null }}
     
-    # Если путь пустой, возвращаем корневую папку библиотеки
+    # If path is empty return root library
     if ([string]::IsNullOrWhiteSpace($pathToCreate)) {{
         $rootFolder = $ctx.Web.GetFolderByServerRelativeUrl($LibName.Trim())
         $ctx.Load($rootFolder)
@@ -1636,26 +1647,26 @@ Function Create-FolderX($ctx, $LibName, $pathToCreate)
         return $null 
     }}
 
-    # Нормализуем слеши и разбиваем путь на массив каталогов
-    # Используем как прямой, так и обратный слеш для разделения
+    # normalize slashes
+    #
     $folderParts = $pathToCreate.Trim().Replace('\', '/').Split('/', [System.StringSplitOptions]::RemoveEmptyEntries)
 
-    # Начинаем от корня библиотеки
+    # Begin from root
     $currentPath = $LibName.Trim()
     
-    # Переменная для хранения ссылки на последнюю созданную папку
+    # 
     $lastFolder = $null
 
     try {{
-        # Идем по каждому элементу пути сверху вниз
+        # pass throu every folder
         foreach ($part in $folderParts) {{
-            # Формируем путь для текущего уровня
+            # Path for current level
             $currentPath = ($currentPath + ""/"" + $part).Replace('//', '/')
             #Write-Host ""Checking/Creating folder level: $currentPath"" -ForegroundColor Yellow
 
-            # Используем встроенный механизм CSOM для добавления папки по относительному пути.
-            # Метод .Add() на коллекции Folders веб-сайта умеет создавать элемент, 
-            # но для цепочки безопаснее создавать их последовательно в цикле.
+            # We use the built-in CSOM mechanism to add a folder by relative path.
+			# The .Add() method on the website's Folders collection can create an element,
+			# but for a chain, it's safer to create them sequentially in a loop.
             $lastFolder = $ctx.Web.Folders.Add($currentPath)
             $ctx.Load($lastFolder)
             $ctx.ExecuteQuery()
@@ -1735,7 +1746,8 @@ Add-Type -Path ""C:\Program Files\Common Files\Microsoft Shared\Web Server Exten
 
 start-transcript ""1.AddPages.log""
 
-$Credentials = Get-Credential
+#$Credentials = Get-Credential
+$Credentials = Get-CredentialFromConsole -Message ""Enter SharePoint credentials""
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 #$pageName    = ""candidate_add_reviewer""
