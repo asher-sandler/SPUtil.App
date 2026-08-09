@@ -35,6 +35,29 @@ namespace SPUtil.Infrastructure
         /// </summary>
         public List<WebPartSnapshot> WebParts { get; set; } = new();
 
+		/// <summary>
+        /// Position of the WebPart inside its layout zone (0-based).
+        /// Numbering restarts in every zone, so the value is only meaningful
+        /// together with ZoneId. Not to be confused with VisualPosition, which
+        /// orders WebParts embedded in PublishingPageContent.
+        /// </summary>
+        public int ZoneIndex { get; set; }
+
+
+        /// <summary>
+        /// True when the WebPart is present on the page but not rendered.
+        /// Hidden WebParts still run their code — they are part of the page
+        /// lifecycle, so they must be copied to preserve behaviour.
+        /// </summary>
+        public bool IsHidden { get; set; }
+
+        /// <summary>
+        /// True when the WebPart was removed from the page but kept in its
+        /// storage. Read-only in CSOM: to reproduce this state on the target,
+        /// call WebPartDefinition.CloseWebPart() after adding the WebPart.
+        /// </summary>
+        public bool IsClosed { get; set; }
+
         /// <summary>Когда был сделан снимок</summary>
         public DateTime SnapshotTime { get; set; } = DateTime.Now;
     }
@@ -75,6 +98,30 @@ namespace SPUtil.Infrastructure
         /// Используется для ImportWebPart при клонировании.
         /// </summary>
         public string ExportXml { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Position of the WebPart inside its layout zone (0-based).
+        /// Numbering restarts in every zone, so the value is only meaningful
+        /// together with ZoneId. Not to be confused with VisualPosition, which
+        /// orders WebParts embedded in PublishingPageContent.
+        /// </summary>
+        public int ZoneIndex { get; set; }
+
+
+        /// <summary>
+        /// True when the WebPart is present on the page but not rendered.
+        /// Hidden WebParts still run their code — they are part of the page
+        /// lifecycle, so they must be copied to preserve behaviour.
+        /// </summary>
+        public bool IsHidden { get; set; }
+
+        /// <summary>
+        /// True when the WebPart was removed from the page but kept in its
+        /// storage. Read-only in CSOM: to reproduce this state on the target,
+        /// call WebPartDefinition.CloseWebPart() after adding the WebPart.
+        /// </summary>
+        public bool IsClosed { get; set; }
+
 
         /// <summary>
         /// Properties из LimitedWebPartManager.WebPart.Properties.

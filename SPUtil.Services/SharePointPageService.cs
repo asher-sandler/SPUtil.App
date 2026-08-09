@@ -276,9 +276,26 @@ namespace SPUtil.Services
                     d => d.ZoneId,
                     d => d.WebPart.Title,
                     d => d.WebPart.Hidden,
+					d => d.WebPart.ZoneIndex,
+					d => d.WebPart.IsClosed,
                     d => d.WebPart.Properties));
                 await Task.Run(() => ctx.ExecuteQuery());
+				/*
+				foreach (var probe in wpm.WebParts)
+                {
+                    // Each value is read separately: the server may return one
+                    // property and omit another, and an unguarded access would
+                    // throw PropertyOrFieldNotInitializedException and abort the copy.
+                    string zoneIndexText = SafeRead(() => probe.WebPart.ZoneIndex.ToString());
+                    string hiddenText    = SafeRead(() => probe.WebPart.Hidden.ToString());
+                    string closedText    = SafeRead(() => probe.WebPart.IsClosed.ToString());
 
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[ZONEPROBE] zone='{probe.ZoneId}' index={zoneIndexText} " +
+                        $"hidden={hiddenText} closed={closedText} " +
+                        $"title='{probe.WebPart.Title}' key={probe.Id:D}");
+                }
+				*/
                 // Build StorageKey → properties dictionary
                 var wpByStorageKey = new Dictionary<string, (WebPartDefinition def, Dictionary<string, string> props)>(
                     StringComparer.OrdinalIgnoreCase);
@@ -333,6 +350,13 @@ namespace SPUtil.Services
                         ZoneKey        = zoneKey,
                         VisualPosition = position++,
                         ZoneId         = wpEntry.def.ZoneId,
+                        // ZoneIndex carries no meaning for WebParts embedded in
+                        // PublishingPageContent — their order comes from the position
+                        // of the ms-rte-wpbox placeholder in the HTML, not from the zone.
+                        // Zeroed deliberately so later code cannot be tempted to use it.
+                        ZoneIndex      = 0,
+                        IsHidden       = SafeValue(() => wpEntry.def.WebPart.Hidden,   false),
+                        IsClosed       = SafeValue(() => wpEntry.def.WebPart.IsClosed, false),
                         Title          = wpEntry.def.WebPart.Title,
                         ExportXml      = exportXml,
                         Properties     = wpEntry.props
@@ -351,21 +375,35 @@ namespace SPUtil.Services
 
                     string exportXml = await GetWebPartExportXmlAsync(siteUrl, pageRelativeUrl, kv.Key);
 
-                    snapshot.WebParts.Add(new WebPartSnapshot
+					snapshot.WebParts.Add(new WebPartSnapshot
                     {
                         StorageKey     = kv.Key,
                         ZoneKey        = string.Empty,   // was in named zone, no placeholder in PublishingContent
                         VisualPosition = position++,     // sequential — not 0
                         ZoneId         = kv.Value.def.ZoneId,
+                        ZoneIndex      = SafeValue(() => kv.Value.def.WebPart.ZoneIndex, 0),
+                        IsHidden       = SafeValue(() => kv.Value.def.WebPart.Hidden,   false),
+                        IsClosed       = SafeValue(() => kv.Value.def.WebPart.IsClosed, false),
                         Title          = kv.Value.def.WebPart.Title,
                         ExportXml      = exportXml,
                         Properties     = kv.Value.props
                     });
-                }
+				}
 
                 System.Diagnostics.Debug.WriteLine(
                     $"[PageSnapshot] Done. {snapshot.WebParts.Count} WebParts, " +
                     $"{zoneKeysInOrder.Count} in PublishingContent.");
+
+
+                // STEP 0.5 VERIFY — confirm the model carries the zone placement data
+                foreach (var w in snapshot.WebParts.OrderBy(w => w.ZoneId).ThenBy(w => w.ZoneIndex))
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SNAP] zone='{w.ZoneId}' idx={w.ZoneIndex} zoneKey='{w.ZoneKey}' " +
+                        $"vis={w.VisualPosition} hidden={w.IsHidden} closed={w.IsClosed} " +
+                        $"xml={(string.IsNullOrEmpty(w.ExportXml) ? "EMPTY" : w.ExportXml.Length + "b")} " +
+                        $"title='{w.Title}'");
+                }
 
                 return snapshot;
             });
@@ -1977,6 +2015,22 @@ namespace SPUtil.Services
 
                 return found;
             });
+        }
+		/*
+		/// <summary>
+        /// Reads a CSOM property, returning a marker instead of throwing when the
+        /// server did not initialize it despite the Include.
+        /// </summary>
+        private static string SafeRead(Func<string> read)
+        {
+            try   { return read(); }
+            catch (Exception ex) { return "<n/a:" + ex.GetType().Name + ">"; }
+        }
+		*/
+		private static T SafeValue<T>(Func<T> read, T fallback)
+        {
+            try   { return read(); }
+            catch { return fallback; }
         }		
         // ═══════════════════════════════════════════════════════════════════════
         //  EnsureSubfolderAsync
