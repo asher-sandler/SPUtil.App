@@ -267,16 +267,11 @@ namespace SPUtil.Services
 		/// Используется для массового клонирования или аудита.
 		/// </summary>
 		Task<List<PageSnapshot>> GetAllPagesSnapshotsAsync(string siteUrl);
-        Task<bool> PageExistsAsync(string siteUrl, string pageName);
+        Task<bool> PageExistsAsync(string siteUrl, string pageName, string subfolderPath = "");
 
-        /// <summary>Deletes a Publishing page by name. Discards checkout before deletion.</summary>
-        Task DeletePageAsync(string siteUrl, string pageName);
+        Task DeletePageAsync(string siteUrl, string pageName, string subfolderPath = "");
 
-        /// <summary>
-        /// Renames a Publishing page by changing its FileLeafRef (filename).
-        /// The Title field is left unchanged.
-        /// </summary>
-        Task RenamePageAsync(string siteUrl, string currentName, string newName);
+        Task RenamePageAsync(string siteUrl, string currentName, string newName, string subfolderPath = "");
 
         // ── Page comparison and sync ──────────────────────────────────────────
 
@@ -300,13 +295,14 @@ namespace SPUtil.Services
             string targetPageRelativeUrl);
 
         Task<string> GetPageRelativeUrlAsync(string siteUrl, string pageName);
-		// SPUtil.Infrastructure/ISharePointService.cs — add near the other page members
 
         /// <summary>
         /// True when the given page layout file name is present in the Master Page
         /// Gallery of the target site collection.
         /// </summary>
         Task<bool> PageLayoutExistsAsync(string siteUrl, string layoutFileName);
+
+
 
 
     }

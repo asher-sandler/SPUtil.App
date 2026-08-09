@@ -129,7 +129,7 @@ namespace SPUtil.App.ViewModels
             });
 
             CopyPageCommand   = new DelegateCommand(async () => await ExecuteCopyPageAsync());
-            DeletePageCommand = new DelegateCommand(async () => await ExecuteDeletePageAsync());
+            //DeletePageCommand = new DelegateCommand(async () => await ExecuteDeletePageAsync());
             RenamePageCommand = new DelegateCommand(async () => await ExecuteRenamePageAsync());
             ComparePageCommand    = new DelegateCommand(async () => await ExecuteComparePageAsync());
             SyncPropertiesCommand = new DelegateCommand(async () => await ExecuteSyncPropertiesAsync());
@@ -157,6 +157,7 @@ namespace SPUtil.App.ViewModels
 
         // ── Called by MainWindowViewModel after creating this VM ──────────────
         public void SetTargetSiteUrl(string url) => _targetSiteUrl = url;
+
 
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -198,77 +199,16 @@ namespace SPUtil.App.ViewModels
             string subfolderPath = (dialog.KeepFolderPath && !string.IsNullOrEmpty(sourceSubfolder))
                                    ? sourceSubfolder : string.Empty;
 
-            // ── Step 2: Check if page already exists on target ────────────────
             var infoWin = new SPUtil.Views.OperationInfoWindow
             {
                 Owner = Application.Current.MainWindow
             };
             infoWin.Show();
-            infoWin.UpdateMessage("Checking target site...");
 
-            bool exists = await _spService.PageExistsAsync(_targetSiteUrl, targetName);
-            _log.Information("PageExists check: {Page} exists={Exists} on {Site}",
-                targetName, exists, _targetSiteUrl);
-
-            if (exists)
-            {
-                // Page exists — ask what to do (Replace or Rename)
-                infoWin.Close();
-
-                var existsDialog = MessageBox.Show(
-                    $"Page '{targetName}.aspx' already exists on target site.\n\n" +
-                    $"Replace — delete existing page and create from source\n" +
-                    $"No — rename existing to '{targetName}_old' first, then create",
-                    "Page Already Exists",
-                    MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Warning);
-
-                if (existsDialog == MessageBoxResult.Cancel) return;
-
-                infoWin = new SPUtil.Views.OperationInfoWindow
-                {
-                    Owner = Application.Current.MainWindow
-                };
-                infoWin.Show();
-
-                if (existsDialog == MessageBoxResult.Yes)
-                {
-                    // Replace — delete existing
-                    infoWin.UpdateMessage($"Deleting existing page '{targetName}'...");
-                    try
-                    {
-                        await _spService.DeletePageAsync(_targetSiteUrl, targetName);
-                    }
-                    catch (Exception ex)
-                    {
-                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
-                        infoWin.Close();
-                        MessageBox.Show($"Error deleting existing page:\n{ex.Message}",
-                            "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-                }
-                else
-                {
-                    // No — rename existing to _old first
-                    string oldName = targetName + "_old";
-                    infoWin.UpdateMessage($"Renaming '{targetName}' → '{oldName}'...");
-                    try
-                    {
-                        await _spService.RenamePageAsync(_targetSiteUrl, targetName, oldName);
-                    }
-                    catch (Exception ex)
-                    {
-                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
-                        infoWin.Close();
-                        MessageBox.Show($"Error renaming existing page:\n{ex.Message}",
-                            "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-                }
-            }
-
-            // ── Step 2b: Pre-flight — is the source page layout available on target? ──
+            // ── Step 2: Pre-flight — is the source page layout available on target? ──
+            // Runs BEFORE the target page is touched. Deleting or renaming an existing
+            // page and only then discovering the layout is missing would destroy the
+            // target without producing a replacement.
             // layOutName is filled by GetPageItemsAsync. It is empty for wiki page
             // libraries (template 119) and when Publishing Infrastructure is off —
             // in that case there is nothing to verify and the check is skipped.
@@ -305,7 +245,73 @@ namespace SPUtil.App.ViewModels
                     return;
                 }
             }
-            // ── Step 3: Read snapshot from source ─────────────────────────────
+
+            // ── Step 3: Check if page already exists on target ────────────────
+            infoWin.UpdateMessage("Checking target site...");
+
+			bool exists = await _spService.PageExistsAsync(_targetSiteUrl, targetName, subfolderPath);
+            _log.Information("PageExists check: {Page} exists={Exists} on {Site}",
+                targetName, exists, _targetSiteUrl);
+
+            if (exists)
+            {
+                // Page exists — ask what to do (Replace or Rename)
+                infoWin.Close();
+
+                var existsDialog = MessageBox.Show(
+                    $"Page '{targetName}.aspx' already exists on target site.\n\n" +
+                    $"Replace — delete existing page and create from source\n" +
+                    $"No — rename existing to '{targetName}_old' first, then create",
+                    "Page Already Exists",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Warning);
+
+                if (existsDialog == MessageBoxResult.Cancel) return;
+
+                infoWin = new SPUtil.Views.OperationInfoWindow
+                {
+                    Owner = Application.Current.MainWindow
+                };
+                infoWin.Show();
+
+                if (existsDialog == MessageBoxResult.Yes)
+                {
+                    // Replace — delete existing
+                    infoWin.UpdateMessage($"Deleting existing page '{targetName}'...");
+                    try
+                    {
+						await _spService.DeletePageAsync(_targetSiteUrl, targetName, subfolderPath);	
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                        infoWin.Close();
+                        MessageBox.Show($"Error deleting existing page:\n{ex.Message}",
+                            "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    // No — rename existing to _old first
+                    string oldName = targetName + "_old";
+                    infoWin.UpdateMessage($"Renaming '{targetName}' → '{oldName}'...");
+                    try
+                    {
+						await _spService.RenamePageAsync(_targetSiteUrl, targetName, oldName, subfolderPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                        infoWin.Close();
+                        MessageBox.Show($"Error renaming existing page:\n{ex.Message}",
+                            "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+            }
+
+            // ── Step 4: Read snapshot from source ─────────────────────────────
             infoWin.UpdateMessage("Reading source page (layout + WebParts)...");
             PageSnapshot snapshot;
             try
@@ -323,7 +329,7 @@ namespace SPUtil.App.ViewModels
                 return;
             }
 
-            // ── Step 4: Create page on target (with optional subfolder) ────────
+            // ── Step 5: Create page on target (with optional subfolder) ────────
             int wpCount = snapshot.WebParts.Count;
             string pathLabel = string.IsNullOrEmpty(subfolderPath)
                 ? "" : $" in Pages/{subfolderPath}";
@@ -361,7 +367,8 @@ namespace SPUtil.App.ViewModels
         // ═══════════════════════════════════════════════════════════════════════
         //  Delete Page
         // ═══════════════════════════════════════════════════════════════════════
-        private async Task ExecuteDeletePageAsync()
+        /*
+		private async Task ExecuteDeletePageAsync()
         {
             _log.Debug("DeletePage started. Page={Page}", SelectedPage?.Name);
             if (SelectedPage == null)
@@ -386,7 +393,9 @@ namespace SPUtil.App.ViewModels
             try
             {
                 _log.Information("Deleting page {Page} from {Site}", SelectedPage.Name, _siteUrl);
-                await _spService.DeletePageAsync(_siteUrl, SelectedPage.Name);
+
+				await _spService.DeletePageAsync(
+                    _siteUrl, SelectedPage.Name, ComputeSubfolderPath(SelectedPage.FullPath));
                 _log.Information("Page deleted: {Page}", SelectedPage.Name);
 
                 var removed = Pages.FirstOrDefault(p => p.FullPath == SelectedPage.FullPath);
@@ -404,7 +413,7 @@ namespace SPUtil.App.ViewModels
             }
             finally { infoWin.Close(); }
         }
-
+		*/
 
         // ═══════════════════════════════════════════════════════════════════════
         //  Rename Page
@@ -447,8 +456,8 @@ namespace SPUtil.App.ViewModels
 
             try
             {
-                await _spService.RenamePageAsync(_siteUrl, currentName, newName);
-
+				await _spService.RenamePageAsync(
+                    _siteUrl, currentName, newName, ComputeSubfolderPath(SelectedPage.FullPath));
                 // Update local collection
                 if (SelectedPage != null)
                 {
