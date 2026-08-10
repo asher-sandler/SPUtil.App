@@ -116,11 +116,11 @@ namespace SPUtil.Services
 		/// Создаёт новую Publishing-страницу и воспроизводит на ней все WebParts
 		/// из снимка с сохранением визуального порядка и всех свойств.
 		/// </summary>
-		Task CreatePageFromSnapshotAsync(
-			string targetSiteUrl,
-			string targetPageName,       // без .aspx
-			PageSnapshot snapshot,
-			string subfolderPath = "");  // "" = Pages root; "Dean" = Pages/Dean/
+		Task<PageCopyReport> CreatePageFromSnapshotAsync(
+            string targetSiteUrl,
+            string targetPageName,
+            PageSnapshot snapshot,
+            string subfolderPath = "");   // "" = Pages root; "Dean" or "FacultyAdmin/Sub" = subfolder
 
 		// ── 3. Изменить один WebPart ─────────────────────────────────────────────────
 
@@ -157,7 +157,26 @@ namespace SPUtil.Services
 			string pageRelativeUrl,
 			string webPartXml,
 			int position = 0);            // 0 = append
-
+        // ═══════════════════════════════════════════════════════════════════════
+        //  5a. AddWebPartToZoneAsync
+        //      Adds a WebPart from its ExportXml into a NAMED LAYOUT ZONE
+        //      (Header, RightColumn, CenterLeftColumn_2 …).
+        //
+        //      Unlike AddWebPartAsync this method deliberately does NOT touch
+        //      PublishingPageContent and does NOT fetch the rendered page:
+        //      a zone WebPart is rendered by the layout's WebPartZone control and
+        //      needs no ms-rte-wpbox placeholder. Writing one would be harmful —
+        //      the final rewrite of PublishingPageContent erases such placeholders,
+        //      which is exactly how zone WebParts became invisible before.
+        //
+        //      Returns the StorageKey of the added WebPart.
+        // ═══════════════════════════════════════════════════════════════════════
+       Task<string> AddWebPartToZoneAsync(
+            string siteUrl,
+            string pageRelativeUrl,
+            string webPartXml,
+            string zoneId,
+            int zoneIndex = 0);
 		// ── 6. Удалить WebPart ───────────────────────────────────────────────────────
 
 		/// <summary>

@@ -84,15 +84,23 @@ namespace SPUtil.App.ViewModels
         private string _lastListPath = string.Empty;
 
         // ── Target site URL (set by MainWindowViewModel, same pattern as PagesViewModel) ──
-        private string _targetSiteUrl = string.Empty;
+        //private string _targetSiteUrl = string.Empty;
+
+        // Provider instead of a captured string: the target site URL must be read at
+        // the moment of the operation, not when the library was picked in the tree.
+        private Func<string>? _targetSiteUrlProvider;
+
+        private string _targetSiteUrl => _targetSiteUrlProvider?.Invoke() ?? string.Empty;		
 
         /// <summary>
         /// Called by MainWindowViewModel right after resolving this VM.
         /// Always the right-pane site URL — toolbar is hidden when IsSourceMode=false,
         /// so copy commands can only ever fire from the left pane.
         /// </summary>
-        public void SetTargetSiteUrl(string targetSiteUrl) =>
-            _targetSiteUrl = targetSiteUrl ?? string.Empty;
+        //public void SetTargetSiteUrl(string targetSiteUrl) =>
+        //    _targetSiteUrl = targetSiteUrl ?? string.Empty;
+			
+		public void SetTargetSiteUrlProvider(Func<string> provider) => _targetSiteUrlProvider = provider;			
 
         // ── Commands ─────────────────────────────────────────────────────────
         // DelegateCommand<object> — XAML passes CommandParameter="{Binding ActiveTab}"

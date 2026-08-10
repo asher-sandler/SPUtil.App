@@ -104,6 +104,8 @@ namespace SPUtil.Services
         //  current folder.
         //  Used to move an existing page aside before creating a fresh copy.
         // ═══════════════════════════════════════════════════════════════════════
+// SPUtil.Services/SharePointPageManagementService.cs
+
         public async Task RenamePageAsync(string siteUrl, string currentName, string newName, string subfolderPath = "")
         {
             await Task.Run(async () =>
@@ -121,14 +123,8 @@ namespace SPUtil.Services
                     ctx.Web.ServerRelativeUrl, currentName, subfolderPath);
 
                 var file = ctx.Web.GetFileByServerRelativeUrl(pageRelUrl);
-                // Level is read BEFORE checking out — afterwards it always reports
-                // Checkout and the original publication state would be lost.
-                ctx.Load(file, f => f.ListItemAllFields, f => f.CheckOutType, f => f.Level);
+                ctx.Load(file, f => f.ListItemAllFields, f => f.CheckOutType);
                 await Task.Run(() => ctx.ExecuteQuery());
-
-                FileLevel originalLevel = file.Level;
-                System.Diagnostics.Debug.WriteLine(
-                    $"[RenamePage] Original level of {pageRelUrl}: {originalLevel}");
 
                 // CheckOut is required to change FileLeafRef
                 await SafeCheckOutAsync(ctx, file);
@@ -149,43 +145,32 @@ namespace SPUtil.Services
                     ctx.Web.ServerRelativeUrl, target, subfolderPath);
                 var renamedFile = ctx.Web.GetFileByServerRelativeUrl(renamedRelUrl);
 
-                // Restore the publication state the page had before the rename.
-                // Renaming is a technical operation and must not silently take a
-                // published page offline, nor publish a draft the user never approved.
-                if (originalLevel == FileLevel.Published)
-                {
-                    renamedFile.CheckIn($"Renamed from {currentName} to {target}",
-                        CheckinType.MajorCheckIn);
-                    await Task.Run(() => ctx.ExecuteQuery());
+                // Rename always leaves the page checked in and published. Restoring the
+                // previous state is not reliable: a page that was already checked out
+                // reports Level=Checkout, and its pre-checkout publication state cannot
+                // be recovered from it. The dialog warns the user before the operation.
+                renamedFile.CheckIn($"Renamed from {currentName} to {target}",
+                    CheckinType.MajorCheckIn);
+                await Task.Run(() => ctx.ExecuteQuery());
 
-                    try
-                    {
-                        renamedFile.Publish($"Republished after rename to {target}");
-                        await Task.Run(() => ctx.ExecuteQuery());
-                    }
-                    catch (ServerException ex)
-                    {
-                        // A major check-in already publishes the file in libraries
-                        // without content approval — Publish then reports that there
-                        // is nothing to publish. Harmless.
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[RenamePage] Publish skipped: {ex.Message}");
-                    }
-                }
-                else
+                try
                 {
-                    // Draft, or the page was already checked out when we started and
-                    // the pre-checkout state is unknowable — stay minor, which is the
-                    // safer of the two.
-                    renamedFile.CheckIn($"Renamed from {currentName} to {target}",
-                        CheckinType.MinorCheckIn);
+                    renamedFile.Publish($"Published after rename to {target}");
                     await Task.Run(() => ctx.ExecuteQuery());
+                }
+                catch (ServerException ex)
+                {
+                    // In libraries without content approval a major check-in already
+                    // publishes the file, and Publish then reports nothing to publish.
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[RenamePage] Publish skipped: {ex.Message}");
                 }
 
                 System.Diagnostics.Debug.WriteLine(
-                    $"[RenamePage] {pageRelUrl} → {renamedRelUrl} (level {originalLevel})");
+                    $"[RenamePage] {pageRelUrl} → {renamedRelUrl} (checked in and published)");
             });
         }
+
         // ═══════════════════════════════════════════════════════════════════════
         //  Private helpers
         // ═══════════════════════════════════════════════════════════════════════

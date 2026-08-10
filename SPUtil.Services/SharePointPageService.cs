@@ -772,8 +772,70 @@ namespace SPUtil.Services
                 await CheckInAndPublishAsync(ctx, pageFile, "Updated WebParts");
             });
         }
+        // ═══════════════════════════════════════════════════════════════════════
+        //  5a. AddWebPartToZoneAsync
+        //      Adds a WebPart from its ExportXml into a NAMED LAYOUT ZONE
+        //      (Header, RightColumn, CenterLeftColumn_2 …).
+        //
+        //      Unlike AddWebPartAsync this method deliberately does NOT touch
+        //      PublishingPageContent and does NOT fetch the rendered page:
+        //      a zone WebPart is rendered by the layout's WebPartZone control and
+        //      needs no ms-rte-wpbox placeholder. Writing one would be harmful —
+        //      the final rewrite of PublishingPageContent erases such placeholders,
+        //      which is exactly how zone WebParts became invisible before.
+        //
+        //      Returns the StorageKey of the added WebPart.
+        // ═══════════════════════════════════════════════════════════════════════
+        public async Task<string> AddWebPartToZoneAsync(
+            string siteUrl,
+            string pageRelativeUrl,
+            string webPartXml,
+            string zoneId,
+            int zoneIndex = 0)
+        {
+            if (string.IsNullOrWhiteSpace(webPartXml))
+                throw new ArgumentException("WebPart XML is empty — nothing to add.", nameof(webPartXml));
 
+            if (string.IsNullOrWhiteSpace(zoneId))
+                throw new ArgumentException("Zone id is empty.", nameof(zoneId));
 
+            return await Task.Run(async () =>
+            {
+                using var ctx = await GetContextAsync(siteUrl);
+
+                var pageFile = ctx.Web.GetFileByServerRelativeUrl(pageRelativeUrl);
+                ctx.Load(pageFile, f => f.ListItemAllFields);
+                await Task.Run(() => ctx.ExecuteQuery());
+
+                await SafeCheckOutAsync(ctx, pageFile);
+
+                // ── Register the WebPart in the requested layout zone ──
+                // CSOM cannot enumerate the zones of a page: LimitedWebPartManager
+                // never instantiates the layout. AddWebPart therefore accepts any
+                // zoneId without validation — an unknown zone yields a WebPart that
+                // is stored on the page but rendered nowhere. Detection of that case
+                // is done once per page after all WebParts are added, not here.
+                var wpm        = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
+                var imported   = wpm.ImportWebPart(webPartXml);
+                var definition = wpm.AddWebPart(imported.WebPart, zoneId, zoneIndex);
+                ctx.Load(definition, d => d.Id);
+                await Task.Run(() => ctx.ExecuteQuery());
+
+                string storageKey = definition.Id.ToString("D");
+
+                await CheckInAndPublishAsync(ctx, pageFile,
+                    $"Added WebPart {storageKey} to zone {zoneId}[{zoneIndex}]");
+
+                _logPage.Information(
+                    "AddWebPartToZone: {Page} zone={Zone}[{Index}] storageKey={Key}",
+                    pageRelativeUrl, zoneId, zoneIndex, storageKey);
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[AddWebPartToZone] OK. Zone={zoneId}[{zoneIndex}] StorageKey={storageKey}");
+
+                return storageKey;
+            });
+        }
         // ═══════════════════════════════════════════════════════════════════════
         //  7. UpdateWebPartPropertyAsync — shortcut для одного свойства
         // ═══════════════════════════════════════════════════════════════════════
@@ -938,17 +1000,21 @@ namespace SPUtil.Services
         }
 
 
-        // ═══════════════════════════════════════════════════════════════════════
-        //  2. CreatePageFromSnapshotAsync
-        //     Создаёт новую страницу и воспроизводит все WebParts из снимка.
-        // ═══════════════════════════════════════════════════════════════════════
-        public async Task CreatePageFromSnapshotAsync(
+			// ═══════════════════════════════════════════════════════════════════════
+			//  2. CreatePageFromSnapshotAsync
+			//     Creates a new publishing page and reproduces every WebPart from the
+			//     snapshot. WebParts are split into two groups by ZoneKey: those that
+			//     came from PublishingPageContent go back into the content via wpz,
+			//     those that came from named layout zones go into their own zones.
+			//     Returns a report: what was added, what was skipped, what failed.
+			// ═══════════════════════════════════════════════════════════════════════ 
+			public async Task<PageCopyReport> CreatePageFromSnapshotAsync(
             string targetSiteUrl,
             string targetPageName,
             PageSnapshot snapshot,
             string subfolderPath = "")   // "" = Pages root; "Dean" or "FacultyAdmin/Sub" = subfolder
-        {
-            await Task.Run(async () =>
+			{
+            return await Task.Run(async () =>
             {
                 using var ctx = await GetContextAsync(targetSiteUrl);
 
@@ -969,7 +1035,6 @@ namespace SPUtil.Services
                     targetFolder = await EnsureSubfolderAsync(ctx, pagesRoot, subfolderPath);
                 }
 
- 
                 // Find the layout in the target Master Page Gallery BY FILE NAME.
                 // The snapshot carries the SOURCE server-relative URL
                 // (e.g. /home/_catalogs/masterpage/NoMenuPage.aspx), which does not
@@ -1031,42 +1096,162 @@ namespace SPUtil.Services
                 System.Diagnostics.Debug.WriteLine(
                     $"[CreatePage] Page created: {newPageRelUrl}");
 
-                // ── Add WebParts in visual order ──
-                // We need to track old ZoneKey → new StorageKey/ZoneKey mapping
-                // to rebuild PublishingHtml with new GUIDs.
-                var oldZoneKeyToNew = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                // ── Report ────────────────────────────────────────────────────
+                var report = new PageCopyReport
+                {
+                    SourcePageUrl = snapshot.PageRelativeUrl,
+                    TargetPageUrl = newPageRelUrl,
+                    LayoutName    = layoutFileName
+                };
 
-                // Copy ALL WebParts in visual order — including those that were in
-                // named zones on source (they also get sequential VisualPosition now).
+                // ── Split WebParts into two groups ────────────────────────────
+                // ZoneKey is the discriminator, not ZoneId: a non-empty ZoneKey means
+                // the WebPart was found through its ms-rte-wpbox placeholder inside
+                // PublishingPageContent. An empty one means it lives in a named layout
+                // zone and has no placeholder at all.
+                var inZones = snapshot.WebParts
+                    .Where(wp => string.IsNullOrEmpty(wp.ZoneKey))
+                    .OrderBy(wp => wp.ZoneId)
+                    .ThenBy(wp => wp.ZoneIndex)
+                    .ToList();
+
                 var inContent = snapshot.WebParts
-                    .Where(wp => !string.IsNullOrEmpty(wp.ExportXml))
+                    .Where(wp => !string.IsNullOrEmpty(wp.ZoneKey))
                     .OrderBy(wp => wp.VisualPosition)
                     .ToList();
 
-                foreach (var wp in inContent)
+                _logPage.Information(
+                    "CreatePage: {Total} WebPart(s) — {Zones} in layout zones, {Content} in page content",
+                    snapshot.WebParts.Count, inZones.Count, inContent.Count);
+
+                // ── Group 1: WebParts in named layout zones ───────────────────
+                // Sorted by (ZoneId, ZoneIndex). VisualPosition is meaningless here:
+                // it is assigned by the order in which the snapshot happened to walk
+                // the WebPart collection, which CSOM does not guarantee.
+                foreach (var wp in inZones)
                 {
-                    _log.Debug("Adding WebPart [{Pos}] {Title}", wp.VisualPosition, wp.Title);
-                    string newStorageKey = await AddWebPartAsync(
-                        targetSiteUrl, newPageRelUrl, wp.ExportXml, 0);
+                    var entry = new WebPartCopyEntry
+                    {
+                        Placement        = WebPartPlacement.LayoutZone,
+                        Title            = wp.Title,
+                        ZoneId           = wp.ZoneId,
+                        Position         = wp.ZoneIndex,
+                        SourceStorageKey = wp.StorageKey
+                    };
 
-                    // Get new ZoneKey from rendered HTML
-                    string renderedHtml       = await FetchPageHtmlAsync(targetSiteUrl, newPageRelUrl);
-                    var zoneKeyToStorageKey   = ParseZoneKeyToStorageKey(renderedHtml);
-                    string newZoneKey         = zoneKeyToStorageKey
-                        .FirstOrDefault(kv =>
-                            kv.Value.Equals(newStorageKey, StringComparison.OrdinalIgnoreCase))
-                        .Key ?? string.Empty;
+                    if (string.IsNullOrEmpty(wp.ExportXml))
+                    {
+                        entry.Status = WebPartCopyStatus.Skipped;
+                        entry.Reason = "Export returned no XML";
+                        _logPage.Warning(
+                            "CreatePage: SKIPPED '{Title}' zone={Zone}[{Index}] key={Key} — empty ExportXml",
+                            wp.Title, wp.ZoneId, wp.ZoneIndex, wp.StorageKey);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            entry.TargetStorageKey = await AddWebPartToZoneAsync(
+                                targetSiteUrl, newPageRelUrl, wp.ExportXml, wp.ZoneId, wp.ZoneIndex);
+                            entry.Status = WebPartCopyStatus.Ok;
 
-                    if (!string.IsNullOrEmpty(wp.ZoneKey) && !string.IsNullOrEmpty(newZoneKey))
-                        oldZoneKeyToNew[wp.ZoneKey] = newZoneKey;
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[CreatePage] Zone WP '{wp.Title}' → {wp.ZoneId}[{wp.ZoneIndex}] " +
+                                $"key={entry.TargetStorageKey}");
+                        }
+                        catch (Exception ex)
+                        {
+                            // A single WebPart must not abort the whole page:
+                            // record the failure and move on to the next one.
+                            entry.Status = WebPartCopyStatus.Failed;
+                            entry.Reason = ex.Message;
+                            _logPage.Error(ex,
+                                "CreatePage: FAILED '{Title}' zone={Zone}[{Index}] key={Key}",
+                                wp.Title, wp.ZoneId, wp.ZoneIndex, wp.StorageKey);
+                        }
+                    }
 
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[CreatePage] WP '{wp.Title}' added. " +
-                        $"OldZK={wp.ZoneKey} NewZK={newZoneKey}");
+                    report.Entries.Add(entry);
                 }
 
-                // ── Rebuild PublishingHtml with new ZoneKeys ──
-                // Replace all old ZoneKey GUIDs in the snapshot HTML with new ones
+                // ── Group 2: WebParts inside PublishingPageContent ────────────
+                // Every one of them needs its placeholder GUID remapped: SharePoint
+                // assigns a new ZoneKey server-side and it cannot be predicted, so the
+                // page has to be rendered after each insertion.
+                var oldZoneKeyToNew = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var wp in inContent)
+                {
+                    var entry = new WebPartCopyEntry
+                    {
+                        Placement        = WebPartPlacement.PageContent,
+                        Title            = wp.Title,
+                        ZoneId           = "wpz",
+                        Position         = wp.VisualPosition,
+                        SourceStorageKey = wp.StorageKey
+                    };
+
+                    if (string.IsNullOrEmpty(wp.ExportXml))
+                    {
+                        entry.Status = WebPartCopyStatus.Skipped;
+                        entry.Reason = "Export returned no XML";
+                        _logPage.Warning(
+                            "CreatePage: SKIPPED '{Title}' content position {Pos} key={Key} — empty ExportXml",
+                            wp.Title, wp.VisualPosition, wp.StorageKey);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            string newStorageKey = await AddWebPartAsync(
+                                targetSiteUrl, newPageRelUrl, wp.ExportXml, 0);
+
+                            entry.TargetStorageKey = newStorageKey;
+                            entry.Status           = WebPartCopyStatus.Ok;
+
+                            // Resolve the new ZoneKey from the rendered page
+                            string renderedHtml     = await FetchPageHtmlAsync(targetSiteUrl, newPageRelUrl);
+                            var zoneKeyToStorageKey = ParseZoneKeyToStorageKey(renderedHtml);
+                            string newZoneKey       = zoneKeyToStorageKey
+                                .FirstOrDefault(kv =>
+                                    kv.Value.Equals(newStorageKey, StringComparison.OrdinalIgnoreCase))
+                                .Key ?? string.Empty;
+
+                            if (!string.IsNullOrEmpty(newZoneKey))
+                            {
+                                oldZoneKeyToNew[wp.ZoneKey] = newZoneKey;
+                            }
+                            else
+                            {
+                                // The WebPart exists on the page but its placeholder
+                                // cannot be remapped — it will not be visible.
+                                _logPage.Warning(
+                                    "CreatePage: '{Title}' added but its new ZoneKey was not found in " +
+                                    "the rendered page — placeholder will not be remapped",
+                                    wp.Title);
+                            }
+
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[CreatePage] Content WP '{wp.Title}' added. " +
+                                $"OldZK={wp.ZoneKey} NewZK={newZoneKey}");
+                        }
+                        catch (Exception ex)
+                        {
+                            entry.Status = WebPartCopyStatus.Failed;
+                            entry.Reason = ex.Message;
+                            _logPage.Error(ex,
+                                "CreatePage: FAILED '{Title}' content position {Pos} key={Key}",
+                                wp.Title, wp.VisualPosition, wp.StorageKey);
+                        }
+                    }
+
+                    report.Entries.Add(entry);
+                }
+
+                // ── Rebuild PublishingHtml with new ZoneKeys ──────────────────
+                // Replace all old ZoneKey GUIDs in the snapshot HTML with new ones.
+                // Placeholders of WebParts that were skipped or failed keep their old
+                // GUIDs and will render as empty boxes — the report lists them.
                 string newHtml = snapshot.PublishingHtml;
                 foreach (var kv in oldZoneKeyToNew)
                     newHtml = newHtml.Replace(kv.Key, kv.Value, StringComparison.OrdinalIgnoreCase);
@@ -1091,8 +1276,12 @@ namespace SPUtil.Services
                 await CheckInAndPublishAsync(ctx2, pageFile2,
                     $"Created from snapshot of {snapshot.PageRelativeUrl}");
 
+                _logPage.Information("CreatePage: done. {Summary}", report.Summary);
+
                 System.Diagnostics.Debug.WriteLine(
-                    $"[CreatePage] Done. {inContent.Count} WebParts placed.");
+                    $"[CreatePage] Done. {report.Summary}");
+
+                return report;
             });
         }
 

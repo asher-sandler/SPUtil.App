@@ -47,6 +47,19 @@ namespace SPUtil.Views
             }
         }
 
+
+		/// <summary>
+        /// Caption of the confirmation button. The dialog is shared by the copy,
+        /// rename and compare scenarios, so the caller adjusts the wording.
+        /// Defaults to the value set in XAML ("Copy Page").
+        /// </summary>
+        public string ConfirmButtonText
+        {
+            get => BtnConfirm.Content?.ToString() ?? string.Empty;
+            set => BtnConfirm.Content = value;
+        }
+		
+		
         private void BtnCopy_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(TargetPageName))

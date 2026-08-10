@@ -18,7 +18,17 @@ namespace SPUtil.App.ViewModels
 
         private readonly ISharePointService _spService;
         private string  _siteUrl       = string.Empty;
-        private string  _targetSiteUrl = string.Empty;
+		
+        
+	    // Provider instead of a captured string: the target site URL must be read at
+        // the moment of the operation. It used to be a snapshot taken when the user
+        // picked a library in the tree, so changing the target site afterwards had no
+        // effect — the copy silently went to the previously selected site.
+        private Func<string>? _targetSiteUrlProvider;
+
+        private string _targetSiteUrl => _targetSiteUrlProvider?.Invoke() ?? string.Empty;		
+		
+        
         private string  _statusMessage = "Ready";
         private ObservableCollection<SPFileData>    _pages    = new();
         private ObservableCollection<SPWebPartData> _webParts = new();
@@ -155,9 +165,8 @@ namespace SPUtil.App.ViewModels
                 .ObservesProperty(() => WebParts);
         }
 
-        // ── Called by MainWindowViewModel after creating this VM ──────────────
-        public void SetTargetSiteUrl(string url) => _targetSiteUrl = url;
-
+		// ── Called by MainWindowViewModel after creating this VM ──────────────
+        public void SetTargetSiteUrlProvider(Func<string> provider) => _targetSiteUrlProvider = provider;
 
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -260,7 +269,7 @@ namespace SPUtil.App.ViewModels
 
                 var existsDialog = MessageBox.Show(
                     $"Page '{targetName}.aspx' already exists on target site.\n\n" +
-                    $"Replace — delete existing page and create from source\n" +
+                    $"Yes — delete existing page and create from source\n" +
                     $"No — rename existing to '{targetName}_old' first, then create",
                     "Page Already Exists",
                     MessageBoxButton.YesNoCancel,
@@ -427,18 +436,23 @@ namespace SPUtil.App.ViewModels
                     "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             string currentName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
 
+            // The warning is passed through sourceInfo because CopyPageDialog is shared
+            // by copy / rename / compare — a block in its XAML would leak into the other
+            // two scenarios. See the RenamePageDialog item in the backlog.
             var dialog = new SPUtil.Views.CopyPageDialog(
                 currentName, _siteUrl,
-                $"Rename page: {SelectedPage.Name}\nSite: {_siteUrl}")
+                $"Rename page: {SelectedPage.Name}\n" +
+                $"Site: {_siteUrl}\n\n" +
+                $"⚠ After renaming, the page will be checked in and published.\n" +
+                $"   Unpublished changes become visible to all visitors.")
             {
                 Title = "Rename Page",
+				ConfirmButtonText = "Rename",
                 Owner = Application.Current.MainWindow
             };
             if (dialog.ShowDialog() != true) return;
-
             string newName = dialog.TargetPageName;
             if (newName.Equals(currentName, StringComparison.OrdinalIgnoreCase))
             {
@@ -446,18 +460,17 @@ namespace SPUtil.App.ViewModels
                     "No Change", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             var infoWin = new SPUtil.Views.OperationInfoWindow
             {
                 Owner = Application.Current.MainWindow
             };
             infoWin.Show();
             infoWin.UpdateMessage($"Renaming '{currentName}' → '{newName}'...");
-
             try
             {
-				await _spService.RenamePageAsync(
+                await _spService.RenamePageAsync(
                     _siteUrl, currentName, newName, ComputeSubfolderPath(SelectedPage.FullPath));
+
                 // Update local collection
                 if (SelectedPage != null)
                 {
@@ -465,12 +478,12 @@ namespace SPUtil.App.ViewModels
                     SelectedPage.FullPath = SelectedPage.FullPath.Replace(
                         currentName + ".aspx", newName + ".aspx",
                         StringComparison.OrdinalIgnoreCase);
+
                     // Force grid refresh
                     var tmp = new ObservableCollection<SPFileData>(Pages);
                     Pages = tmp;
                 }
-
-                StatusMessage = $"Renamed: {currentName} → {newName}";
+                StatusMessage = $"Renamed: {currentName} → {newName} (checked in and published)";
             }
             catch (Exception ex)
             {
@@ -480,8 +493,7 @@ namespace SPUtil.App.ViewModels
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally { infoWin.Close(); }
-        }
-
+        } 
 
         // ═══════════════════════════════════════════════════════════════════════
         //  Compare Page

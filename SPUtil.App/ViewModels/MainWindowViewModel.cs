@@ -173,7 +173,7 @@ namespace SPUtil.App.ViewModels
 				if (IsUrlEmpty(LeftSiteUrl)) return;
 				
 				IsLeftConnected = false;
-				ConnectionStatus = "Connecting...";
+				ConnectionStatus = "Connecting Target...";
 
 				try
 				{
@@ -184,11 +184,35 @@ namespace SPUtil.App.ViewModels
 						IsLeftConnected = true;
 						ConnectionStatus = "Connected";
 					}
+					else
+					{
+						LeftSiteNodes    = new ObservableCollection<SPNode>();
+						IsLeftConnected  = false;
+						ConnectionStatus = "Not Connected";
+
+						_log.Warning("Connect left: {Url} returned no nodes", LeftSiteUrl);
+
+						MessageBox.Show(
+							$"No content could be read from:\n{LeftSiteUrl}\n\n" +
+							$"Check the URL and your permissions on that site.",
+							"Connection Failed",
+							MessageBoxButton.OK,
+							MessageBoxImage.Warning);
+					}
 				}
 				catch (Exception ex)
 				{
-				    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
-					ConnectionStatus = $"Error: {ex.Message}";
+					_log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+
+					LeftSiteNodes    = new ObservableCollection<SPNode>();
+					IsLeftConnected  = false;
+					ConnectionStatus = "Not Connected";
+
+					MessageBox.Show(
+						$"Could not connect to:\n{LeftSiteUrl}\n\n{ex.Message}",
+						"Connection Failed",
+						MessageBoxButton.OK,
+						MessageBoxImage.Error);
 				}
 				finally
 				{
@@ -202,7 +226,7 @@ namespace SPUtil.App.ViewModels
 				if (IsUrlEmpty(RightSiteUrl)) return; 
 
 				IsRightConnected = false;
-				ConnectionStatus = "Connecting...";
+				ConnectionStatus = "Connecting Source...";
 
 				try
 				{
@@ -213,11 +237,42 @@ namespace SPUtil.App.ViewModels
 						IsRightConnected = true;
 						ConnectionStatus = "Connected";
 					}
+					else
+					{
+						// The call succeeded but returned nothing — treat it as a failure.
+						// Previously neither branch ran here and the panel kept showing the
+						// tree of the previously connected site while the status stayed
+						// stuck on "Connecting...".
+						RightSiteNodes   = new ObservableCollection<SPNode>();
+						IsRightConnected = false;
+						ConnectionStatus = "Not Connected";
+
+						_log.Warning("Connect right: {Url} returned no nodes", RightSiteUrl);
+
+						MessageBox.Show(
+							$"No content could be read from:\n{RightSiteUrl}\n\n" +
+							$"Check the URL and your permissions on that site.",
+							"Connection Failed",
+							MessageBoxButton.OK,
+							MessageBoxImage.Warning);
+					}
 				}
 				catch (Exception ex)
 				{
-				    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
-					ConnectionStatus = $"Error: {ex.Message}";
+					_log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+
+					// Clear the tree: leaving the previous site's nodes on screen makes the
+					// panel look connected, and any operation started from it would target
+					// a site the user is no longer connected to.
+					RightSiteNodes   = new ObservableCollection<SPNode>();
+					IsRightConnected = false;
+					ConnectionStatus = "Not Connected";
+
+					MessageBox.Show(
+						$"Could not connect to:\n{RightSiteUrl}\n\n{ex.Message}",
+						"Connection Failed",
+						MessageBoxButton.OK,
+						MessageBoxImage.Error);
 				}
 				finally
 				{
@@ -570,9 +625,8 @@ namespace SPUtil.App.ViewModels
                         // Toolbar buttons are hidden when IsSourceMode=false (right pane),
                         // so copy commands only ever fire from the left pane.
                         // Target is therefore always the right site.
-                        vm.SetTargetSiteUrl(
-                            SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl));
-                        await vm.LoadDataAsync(siteUrl, node.Path);
+						vm.SetTargetSiteUrlProvider(
+                            () => SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl));                        await vm.LoadDataAsync(siteUrl, node.Path);
                         newView = vm;
                     }
                     else if (templateId == 101) // Библиотека документов
@@ -593,10 +647,11 @@ namespace SPUtil.App.ViewModels
 						// where to copy. Source (left) pane targets the right site, and vice-versa.
 						// isLeftPane=true  → source is left  → target is RightSiteUrl
 						// isLeftPane=false → source is right → target is LeftSiteUrl  (less common)
-						vm.SetTargetSiteUrl(isLeftPane
-							? SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl)
-							: SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(LeftSiteUrl));
 
+						// A provider is passed rather than the value itself: the user may switch
+						// the target site after picking the library, and the copy must follow.
+						vm.SetTargetSiteUrlProvider(() => SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(
+							isLeftPane ? RightSiteUrl : LeftSiteUrl));
 						await vm.LoadDataAsync(siteUrl, node.Path);
 						newView = vm;
 
