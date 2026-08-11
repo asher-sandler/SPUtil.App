@@ -1,0 +1,47 @@
+<Window x:Class="SPUtil.Views.CopyCompleteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Copy Complete"
+        Height="300" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- message -->
+            <RowDefinition Height="Auto"/>  <!-- summary -->
+            <RowDefinition Height="Auto"/>  <!-- warning -->
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>  <!-- footer -->
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TxtMessage" Grid.Row="0"
+                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+        <Border Grid.Row="1" Background="#F5F7FA" BorderBrush="#DDD" BorderThickness="1"
+                Padding="10,8" Margin="0,0,0,12" CornerRadius="3">
+            <TextBlock x:Name="TxtSummary" TextWrapping="Wrap" FontWeight="SemiBold"/>
+        </Border>
+
+        <TextBlock x:Name="TxtWarning" Grid.Row="2"
+                   TextWrapping="Wrap" Foreground="#B36B00" FontSize="11"/>
+
+        <!-- Footer: OK on the right, report link on the left -->
+        <Border Grid.Row="4" BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+            <Grid>
+                <TextBlock VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <Hyperlink x:Name="LnkReport" Click="LnkReport_Click">
+                        <TextBlock x:Name="TxtReportLink" FontSize="11" Text="View detailed report"/>
+                    </Hyperlink>
+                </TextBlock>
+
+                <Button Content="OK" Width="110" Height="28"
+                        HorizontalAlignment="Right"
+                        Click="BtnOk_Click" IsDefault="True" IsCancel="True"
+                        Background="#E1F5FE" BorderBrush="#039BE5"
+                        FontWeight="SemiBold"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

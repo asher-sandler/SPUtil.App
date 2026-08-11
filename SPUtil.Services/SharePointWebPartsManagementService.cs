@@ -97,11 +97,20 @@ namespace SPUtil.Services
             return SortByPosition(webParts);
         }
 
-        /// <summary>Sort: positioned WPs first (by position), then unpositioned (zone WPs)</summary>
+		/// <summary>
+        /// Grid order: WebParts embedded in PublishingPageContent first, in visual order,
+        /// then WebParts in layout zones grouped by zone and ordered inside each zone.
+        /// The order in which CSOM returns the WebPart collection is not deterministic,
+        /// so it must not be relied upon.
+        /// </summary>
         private static List<SPWebPartData> SortByPosition(List<SPWebPartData> list) =>
-            list.OrderBy(w => w.VisualPosition == 0 ? int.MaxValue : w.VisualPosition)
+            list.OrderBy(w => w.IsInPageContent ? 0 : 1)
+                .ThenBy(w => w.IsInPageContent ? w.VisualPosition : 0)
+                .ThenBy(w => w.ZoneId, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(w => w.ZoneIndex)
                 .ToList();
-
+				
+				
         // ── Static parsing helpers ─────────────────────────────────────────────
         // These duplicate the logic from the private methods in SharePointPageService
         // so we don't need to change their visibility.

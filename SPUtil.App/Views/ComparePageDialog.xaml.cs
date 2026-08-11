@@ -8,12 +8,31 @@ namespace SPUtil.Views
         public string TargetPageName => TxtTargetPageName.Text.Trim()
             .Replace(".aspx", "", System.StringComparison.OrdinalIgnoreCase);
 
-        public ComparePageDialog(string sourcePageName, string targetSiteUrl, string sourceInfo)
+
+        /// <summary>
+        /// Subfolder inside the Pages library, without the "Pages/" prefix.
+        /// Empty means the library root. Nested paths are allowed ("Admin/Sub").
+        /// </summary>
+        public string TargetSubfolder => TxtTargetSubfolder.Text.Trim();
+
+		public ComparePageDialog(
+            string sourcePageName,
+            string targetSiteUrl,
+            string sourceInfo,
+            string sourceSubfolder = "")
         {
             InitializeComponent();
-            TxtTargetPageName.Text = sourcePageName;
-            TxtTargetUrl.Text      = targetSiteUrl;
-            TxtInfo.Text           = sourceInfo;
+
+            TxtTargetPageName.Text  = sourcePageName;
+            TxtTargetUrl.Text       = targetSiteUrl;
+            TxtInfo.Text            = sourceInfo;
+
+            // Defaults to the source page's folder, so the previous behaviour is
+            // preserved when the user does not touch the field.
+            TxtTargetSubfolder.Text = sourceSubfolder;
+
+            TxtTargetPageName.Focus();
+            TxtTargetPageName.SelectAll();
         }
 
         private void BtnCompare_Click(object sender, RoutedEventArgs e)

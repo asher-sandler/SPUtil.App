@@ -252,9 +252,19 @@ namespace SPUtil.Services
 
                 // ── A: Read page list item (Title, Layout, PublishingContent) ──
                 var pageFile = ctx.Web.GetFileByServerRelativeUrl(pageRelativeUrl);
-                ctx.Load(pageFile, f => f.ListItemAllFields);
+                ctx.Load(pageFile, f => f.ListItemAllFields, f => f.Exists);
                 await Task.Run(() => ctx.ExecuteQuery());
 
+                // A missing file does not fail here: CSOM returns an object whose
+                // ListItemAllFields is never initialized, and the failure surfaces a few
+                // lines below as "The property or field has not been initialized" —
+                // a message that says nothing about the actual cause.
+                if (!pageFile.Exists)
+                {
+                    _logPage.Warning("GetPageSnapshot: page not found — {Url}", pageRelativeUrl);
+                    throw new System.IO.FileNotFoundException(
+                        $"Page not found:\n{pageRelativeUrl}", pageRelativeUrl);
+                }
                 var fields = pageFile.ListItemAllFields;
                 ctx.Load(fields);
                 await Task.Run(() => ctx.ExecuteQuery());
@@ -1724,7 +1734,92 @@ namespace SPUtil.Services
             });
         }
 
+        // ═══════════════════════════════════════════════════════════════════════
+        //  FormatCopyReport
+        //  Renders a PageCopyReport as plain text for UniversalPreviewWindow.
+        //  Shown to the user only when something went wrong; the log always keeps
+        //  the full picture.
+        // ═══════════════════════════════════════════════════════════════════════
+        public string FormatCopyReport(PageCopyReport r)
+        {
+            var sb = new System.Text.StringBuilder();
 
+            sb.AppendLine("=== Page Copy Report ===");
+            sb.AppendLine($"Source : {r.SourcePageUrl}");
+            sb.AppendLine($"Target : {r.TargetPageUrl}");
+            sb.AppendLine($"Layout : {r.LayoutName}");
+            sb.AppendLine($"Time   : {r.CopyTime:dd.MM.yyyy HH:mm:ss}");
+            sb.AppendLine(new string('═', 70));
+            sb.AppendLine();
+
+            sb.AppendLine($"WebParts: {r.TotalCount} total — " +
+                          $"{r.OkCount} added, {r.SkippedCount} skipped, {r.FailedCount} failed");
+            sb.AppendLine();
+
+            // Same order as the WebParts grid: page content first, then layout zones
+            // grouped by zone. The order in which the copy processed them is different
+            // and would only confuse a side-by-side comparison with the grid.
+            var ordered = r.Entries
+                .OrderBy(e => e.Placement == WebPartPlacement.PageContent ? 0 : 1)
+                .ThenBy(e => e.Placement == WebPartPlacement.PageContent ? e.Position : 0)
+                .ThenBy(e => e.ZoneId, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(e => e.Position)
+                .ToList();
+
+            sb.AppendLine("Status   Zone                  Idx  Title");
+            sb.AppendLine("───────  ────────────────────  ───  ──────────────────────────────");
+
+            foreach (var e in ordered)
+            {
+                string status = e.Status switch
+                {
+                    WebPartCopyStatus.Ok      => "OK",
+                    WebPartCopyStatus.Skipped => "SKIPPED",
+                    _                         => "FAILED"
+                };
+
+                sb.AppendLine($"{status,-7}  {Trim(e.ZoneId, 20),-20}  {e.Position,3}  {e.Title}");
+            }
+
+            // ── Problems ──────────────────────────────────────────────────────
+            var problems = ordered
+                .Where(e => e.Status != WebPartCopyStatus.Ok)
+                .ToList();
+
+            if (problems.Count > 0)
+            {
+                sb.AppendLine(new string('═', 70));
+                sb.AppendLine();
+                sb.AppendLine("Problems:");
+
+                foreach (var e in problems)
+                {
+                    sb.AppendLine();
+                    string status = e.Status == WebPartCopyStatus.Skipped ? "SKIPPED" : "FAILED";
+                    sb.AppendLine($"  {status}  {e.Title}  ({e.ZoneId}[{e.Position}])");
+                    sb.AppendLine($"           {e.Reason}");
+
+                    // The source key locates the WebPart on the source page via
+                    // ?contents=1 or exportwp.aspx — the only reliable handle when
+                    // several WebParts share a title.
+                    sb.AppendLine($"           Source key: {e.SourceStorageKey}");
+
+                    if (!string.IsNullOrEmpty(e.TargetStorageKey))
+                        sb.AppendLine($"           Target key: {e.TargetStorageKey}");
+                }
+            }
+
+            sb.AppendLine();
+            sb.AppendLine(new string('═', 70));
+
+            return sb.ToString();
+
+            // Zone names can exceed the column width (CenterLeftColumn_2 is 18 chars,
+            // custom layouts may go further) — cut rather than break the table.
+            static string Trim(string s, int max) =>
+                string.IsNullOrEmpty(s) ? string.Empty
+                : s.Length <= max ? s : s.Substring(0, max - 1) + "…";
+        }
         // ═══════════════════════════════════════════════════════════════════════
         //  FormatCompareResult
         //  Formats PageCompareResult into readable text for UniversalPreviewWindow.
@@ -2095,20 +2190,26 @@ namespace SPUtil.Services
             await CheckInAndPublishAsync(ctx, pageFile, $"Removed placeholder {zoneKey}");
         }
 
+
         // ═══════════════════════════════════════════════════════════════════════
         //  GetPageRelativeUrlAsync
-        //  Returns the server-relative URL for a page by filename.
+        //  Returns the server-relative URL for a page by filename, optionally
+        //  inside a subfolder of the Pages library.
         // ═══════════════════════════════════════════════════════════════════════
-        public async Task<string> GetPageRelativeUrlAsync(string siteUrl, string pageName)
+        public async Task<string> GetPageRelativeUrlAsync(
+            string siteUrl,
+            string pageName,
+            string subfolderPath = "")
         {
-            string name = pageName.EndsWith(".aspx", StringComparison.OrdinalIgnoreCase)
-                ? pageName : pageName + ".aspx";
-
             using var ctx = await GetContextAsync(siteUrl);
             ctx.Load(ctx.Web, w => w.ServerRelativeUrl);
             await Task.Run(() => ctx.ExecuteQuery());
 
-            return ctx.Web.ServerRelativeUrl.TrimEnd('/') + "/Pages/" + name;
+            // Shared with PageExists / Delete / Rename: handles the .aspx suffix and
+            // subfolders of any depth. Without it the URL always pointed at the Pages
+            // root, so Compare and Sync silently looked at a page that does not exist
+            // and failed later with "The property or field has not been initialized".
+            return BuildPageRelativeUrl(ctx.Web.ServerRelativeUrl, pageName, subfolderPath);
         }
 
        /// <summary>

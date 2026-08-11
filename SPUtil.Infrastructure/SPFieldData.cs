@@ -58,9 +58,36 @@ namespace SPUtil.Infrastructure
             false => "No",
             _     => "?"
         };
+
+
+        /// <summary>
+        /// Group header text for the WebParts grid. The explanation is part of the
+        /// text because a ToolTip on the group header proved unreliable in WPF.
+        /// </summary>
+        public string PlacementGroup => IsInPageContent
+            ? "Page content — inside PublishingPageContent"
+            : "Layout zones — named zones of the page layout";
         /// <summary>Visual position on the page (1-based). Used for matching duplicates.</summary>
         public int VisualPosition { get; set; }
 
+        /// <summary>
+        /// Position of the WebPart inside its layout zone (0-based). Numbering restarts
+        /// in every zone, so the value is only meaningful together with ZoneId.
+        /// Always 0 for WebParts living in PublishingPageContent — their order comes
+        /// from the placeholder positions in the HTML, not from the zone.
+        /// </summary>
+        public int ZoneIndex { get; set; }
+
+        /// <summary>
+        /// True when the WebPart is embedded in PublishingPageContent rather than in a
+        /// named layout zone. SharePoint places such WebParts in the wpz pseudo-zone.
+        /// </summary>
+        public bool IsInPageContent =>
+            ZoneId.Equals("wpz", StringComparison.OrdinalIgnoreCase);
+
+
+        /// <summary>Position shown in the grid: visual order in content, zone index otherwise.</summary>
+        public int DisplayPosition => IsInPageContent ? VisualPosition : ZoneIndex;
         public Dictionary<string, string> Properties { get; set; } = new();
     }
 	public class FieldInfo

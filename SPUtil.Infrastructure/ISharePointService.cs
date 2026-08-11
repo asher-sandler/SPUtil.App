@@ -299,6 +299,9 @@ namespace SPUtil.Services
             PageSnapshot target,
             string sourceSiteUrl = "",
             string targetSiteUrl = "");
+			
+
+        string FormatCopyReport(PageCopyReport report);
 
         string FormatCompareResult(PageCompareResult result);
 
@@ -313,8 +316,7 @@ namespace SPUtil.Services
             string targetSiteUrl,
             string targetPageRelativeUrl);
 
-        Task<string> GetPageRelativeUrlAsync(string siteUrl, string pageName);
-
+        Task<string> GetPageRelativeUrlAsync(string siteUrl, string pageName, string subfolderPath = "");
         /// <summary>
         /// True when the given page layout file name is present in the Master Page
         /// Gallery of the target site collection.

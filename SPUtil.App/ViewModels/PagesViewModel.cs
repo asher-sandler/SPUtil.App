@@ -169,6 +169,7 @@ namespace SPUtil.App.ViewModels
         public void SetTargetSiteUrlProvider(Func<string> provider) => _targetSiteUrlProvider = provider;
 
 
+
         // ═══════════════════════════════════════════════════════════════════════
         //  Copy Page
         // ═══════════════════════════════════════════════════════════════════════
@@ -258,7 +259,7 @@ namespace SPUtil.App.ViewModels
             // ── Step 3: Check if page already exists on target ────────────────
             infoWin.UpdateMessage("Checking target site...");
 
-			bool exists = await _spService.PageExistsAsync(_targetSiteUrl, targetName, subfolderPath);
+            bool exists = await _spService.PageExistsAsync(_targetSiteUrl, targetName, subfolderPath);
             _log.Information("PageExists check: {Page} exists={Exists} on {Site}",
                 targetName, exists, _targetSiteUrl);
 
@@ -267,7 +268,7 @@ namespace SPUtil.App.ViewModels
                 // Page exists — ask what to do (Replace or Rename)
                 infoWin.Close();
 
-				var existsDialog = MessageBox.Show(
+                var existsDialog = MessageBox.Show(
                     $"Page '{targetName}.aspx' already exists on target site.\n\n" +
                     $"Yes — delete existing page and create from source\n" +
                     $"No — rename existing to '{targetName}_old' first, then create\n" +
@@ -290,7 +291,7 @@ namespace SPUtil.App.ViewModels
                     infoWin.UpdateMessage($"Deleting existing page '{targetName}'...");
                     try
                     {
-						await _spService.DeletePageAsync(_targetSiteUrl, targetName, subfolderPath);	
+                        await _spService.DeletePageAsync(_targetSiteUrl, targetName, subfolderPath);
                     }
                     catch (Exception ex)
                     {
@@ -344,7 +345,6 @@ namespace SPUtil.App.ViewModels
                         return;
                     }
                 }
-
             }
 
             // ── Step 4: Read snapshot from source ─────────────────────────────
@@ -370,13 +370,17 @@ namespace SPUtil.App.ViewModels
             string pathLabel = string.IsNullOrEmpty(subfolderPath)
                 ? "" : $" in Pages/{subfolderPath}";
             infoWin.UpdateMessage($"Creating '{targetName}'{pathLabel} with {wpCount} WebPart(s)...");
+
+            PageCopyReport report;
             try
             {
                 _log.Information("Creating page {Name} in subfolder='{Sub}' on {Site}",
                     targetName, subfolderPath, _targetSiteUrl);
-                await _spService.CreatePageFromSnapshotAsync(
+
+                report = await _spService.CreatePageFromSnapshotAsync(
                     _targetSiteUrl, targetName, snapshot, subfolderPath);
-                _log.Information("Page created successfully: {Name}", targetName);
+
+                _log.Information("Page created: {Name} — {Summary}", targetName, report.Summary);
             }
             catch (Exception ex)
             {
@@ -387,16 +391,38 @@ namespace SPUtil.App.ViewModels
                 return;
             }
 
+            // SPUtil.App/ViewModels/PagesViewModel.cs — tail of ExecuteCopyPageAsync
+
             infoWin.Close();
             StatusMessage = $"✔ '{targetName}' copied → {_targetSiteUrl}";
 
-            MessageBox.Show(
-                $"Page '{targetName}' created successfully on:\n{_targetSiteUrl}\n\n" +
-                $"WebParts copied: {wpCount}\n\n" +
-                $"⚠ Page permissions must be configured manually on the target site.",
-                "Copy Complete",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            if (!report.IsClean)
+                _log.Warning("Copy finished with problems: {Summary}", report.Summary);
+
+            // Counts come from the report, not from the snapshot: the snapshot says how
+            // many WebParts were found on the source, which is not the same as how many
+            // actually made it onto the target page.
+            var doneWin = new SPUtil.Views.CopyCompleteWindow(
+                $"Page '{targetName}' created successfully on:\n{_targetSiteUrl}",
+                report.Summary,
+                "⚠ Page permissions must be configured manually on the target site.",
+                !report.IsClean)
+            {
+                Owner = Application.Current.MainWindow
+            };
+            doneWin.ShowDialog();
+
+            if (doneWin.ShowReportRequested)
+            {
+                var reportWin = new SPUtil.App.Views.UniversalPreviewWindow
+                {
+                    Title = $"Copy report — {targetName}",
+                    Owner = Application.Current.MainWindow
+                };
+                reportWin.DataContext = new CopyReportPreviewViewModel(
+                    _spService.FormatCopyReport(report), report, reportWin);
+                reportWin.ShowDialog();
+            }
         }
 
 
@@ -554,6 +580,26 @@ namespace SPUtil.App.ViewModels
 
             string targetPageName = dialog.TargetPageName;
 
+            // CopyPageDialog has no folder field — this method still derives the target
+            // folder from the source page. See the RenamePageDialog / ComparePageDialog
+            // item in the backlog.
+            string targetSubfolder = ComputeSubfolderPath(SelectedPage.FullPath);
+
+            // Check before the snapshot: reading a page renders it over HTTP and exports
+            // every WebPart, so failing here saves the user a long wait.
+            if (!await _spService.PageExistsAsync(
+                    _targetSiteUrl, targetPageName, targetSubfolder))
+            {
+                string missing = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName, targetSubfolder);
+
+                _log.Warning("Target page not found: {Url}", missing);
+                MessageBox.Show(
+                    $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
+                    "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var infoWin = new SPUtil.Views.OperationInfoWindow
             {
                 Owner = Application.Current.MainWindow
@@ -570,8 +616,12 @@ namespace SPUtil.App.ViewModels
                     _siteUrl, SelectedPage.FullPath);
 
                 infoWin.UpdateMessage("Reading target page snapshot...");
-                string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
-                    _targetSiteUrl, targetPageName);
+                //string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                //    _targetSiteUrl, targetPageName);
+
+				string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName, targetSubfolder);
+
                 var targetSnapshot = await _spService.GetPageSnapshotAsync(
                     _targetSiteUrl, targetRelUrl);
 
@@ -716,7 +766,8 @@ namespace SPUtil.App.ViewModels
             string sourceName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
             var dialog = new SPUtil.Views.ComparePageDialog(
                 sourceName, _targetSiteUrl,
-                $"WebPart  : {SelectedWebPart.Title}\nSource   : {SelectedPage.FullPath}\nSite     : {_siteUrl}")
+                $"WebPart  : {SelectedWebPart.Title}\nSource   : {SelectedPage.FullPath}\nSite     : {_siteUrl}",
+				ComputeSubfolderPath(SelectedPage.FullPath))				
             {
                 Title = "Compare WebPart — enter target page name",
                 Owner = Application.Current.MainWindow
@@ -724,7 +775,20 @@ namespace SPUtil.App.ViewModels
             if (dialog.ShowDialog() != true) return;
 
             string targetPageName = dialog.TargetPageName;
+            // Check before the snapshot: reading a page renders it over HTTP and exports
+            // every WebPart, so failing here saves the user a long wait.
+            if (!await _spService.PageExistsAsync(
+                    _targetSiteUrl, targetPageName, dialog.TargetSubfolder))
+            {
+                string missing = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName, dialog.TargetSubfolder);
 
+                _log.Warning("Target page not found: {Url}", missing);
+                MessageBox.Show(
+                    $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
+                    "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             var infoWin = new SPUtil.Views.OperationInfoWindow
             {
                 Owner = Application.Current.MainWindow
@@ -734,8 +798,11 @@ namespace SPUtil.App.ViewModels
 
             try
             {
-                string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
-                    _targetSiteUrl, targetPageName);
+                //string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                //    _targetSiteUrl, targetPageName);
+				string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName, dialog.TargetSubfolder);
+
                 var targetSnapshot = await _spService.GetPageSnapshotAsync(
                     _targetSiteUrl, targetRelUrl);
 
@@ -836,7 +903,8 @@ namespace SPUtil.App.ViewModels
             string sourceName = System.IO.Path.GetFileNameWithoutExtension(SelectedPage.Name);
             var dialog = new SPUtil.Views.ComparePageDialog(
                 sourceName, _targetSiteUrl,
-                $"WebPart  : {SelectedWebPart.Title}\nSource   : {SelectedPage.FullPath}\nSite     : {_siteUrl}")
+                $"WebPart  : {SelectedWebPart.Title}\nSource   : {SelectedPage.FullPath}\nSite     : {_siteUrl}",
+				 ComputeSubfolderPath(SelectedPage.FullPath))
             {
                 Title = "Copy WebPart Properties — enter target page name",
                 Owner = Application.Current.MainWindow
@@ -844,7 +912,20 @@ namespace SPUtil.App.ViewModels
             if (dialog.ShowDialog() != true) return;
 
             string targetPageName = dialog.TargetPageName;
+            // Check before the snapshot: reading a page renders it over HTTP and exports
+            // every WebPart, so failing here saves the user a long wait.
+            if (!await _spService.PageExistsAsync(
+                    _targetSiteUrl, targetPageName, dialog.TargetSubfolder))
+            {
+                string missing = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName, dialog.TargetSubfolder);
 
+                _log.Warning("Target page not found: {Url}", missing);
+                MessageBox.Show(
+                    $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
+                    "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             var confirm = MessageBox.Show(
                 $"Copy all properties of\n'{SelectedWebPart.Title}'\n" +
                 $"from source to the matching WebPart on '{targetPageName}'?\n\n" +
@@ -862,8 +943,9 @@ namespace SPUtil.App.ViewModels
 
             try
             {
-                string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
-                    _targetSiteUrl, targetPageName);
+				string targetRelUrl = await _spService.GetPageRelativeUrlAsync(
+                    _targetSiteUrl, targetPageName, dialog.TargetSubfolder);					
+					
                 var targetSnapshot = await _spService.GetPageSnapshotAsync(
                     _targetSiteUrl, targetRelUrl);
 

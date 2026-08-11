@@ -404,6 +404,7 @@ namespace SPUtil.Services
 					d => d.ZoneId,              // zone where the WebPart physically lives
 					d => d.WebPart.Title,
 					d => d.WebPart.Hidden,
+					d => d.WebPart.ZoneIndex,   // position inside the zone
 					d => d.WebPart.Properties   // all configurable properties
 				));
 				context.ExecuteQuery();
@@ -434,15 +435,14 @@ namespace SPUtil.Services
 
 					var wp = new SPWebPartData
 					{
-						// StorageKey = definition.Id  ← GUID used in ms-rte-wpbox divs
 						StorageKey = definition.Id.ToString("D"),
-
-						// Id = the WebPart object's own instance identifier
 						Id      = props.TryGetValue("ID", out var id) ? id : definition.Id.ToString("D"),
-
 						Title   = definition.WebPart.Title,
 						Type    = typeName,
 						ZoneId  = definition.ZoneId,
+						// Probing confirmed the server returns ZoneIndex reliably, but a
+						// missing value must not abort the whole listing.
+						ZoneIndex  = SafeValue(() => definition.WebPart.ZoneIndex, 0),
 						ExportMode = exportModeRaw,
 						CanExport  = ParseExportMode(exportModeRaw),
 						Properties = props
