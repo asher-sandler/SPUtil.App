@@ -267,10 +267,11 @@ namespace SPUtil.App.ViewModels
                 // Page exists — ask what to do (Replace or Rename)
                 infoWin.Close();
 
-                var existsDialog = MessageBox.Show(
+				var existsDialog = MessageBox.Show(
                     $"Page '{targetName}.aspx' already exists on target site.\n\n" +
                     $"Yes — delete existing page and create from source\n" +
-                    $"No — rename existing to '{targetName}_old' first, then create",
+                    $"No — rename existing to '{targetName}_old' first, then create\n" +
+                    $"      (a previous '{targetName}_old' will be replaced)",
                     "Page Already Exists",
                     MessageBoxButton.YesNoCancel,
                     MessageBoxImage.Warning);
@@ -302,12 +303,37 @@ namespace SPUtil.App.ViewModels
                 }
                 else
                 {
-                    // No — rename existing to _old first
+                    // No — rename existing to _old first.
+                    // A previous copy may have left an _old page behind: SharePoint
+                    // rejects the rename when the target name is taken, so the stale
+                    // backup is removed first. Only one generation is kept.
                     string oldName = targetName + "_old";
+
+                    try
+                    {
+                        if (await _spService.PageExistsAsync(_targetSiteUrl, oldName, subfolderPath))
+                        {
+                            infoWin.UpdateMessage($"Removing previous backup '{oldName}'...");
+                            _log.Information("Deleting stale backup page {Page} on {Site}",
+                                oldName, _targetSiteUrl);
+
+                            await _spService.DeletePageAsync(_targetSiteUrl, oldName, subfolderPath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                        infoWin.Close();
+                        MessageBox.Show(
+                            $"Error removing the previous backup page '{oldName}':\n{ex.Message}",
+                            "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
                     infoWin.UpdateMessage($"Renaming '{targetName}' → '{oldName}'...");
                     try
                     {
-						await _spService.RenamePageAsync(_targetSiteUrl, targetName, oldName, subfolderPath);
+                        await _spService.RenamePageAsync(_targetSiteUrl, targetName, oldName, subfolderPath);
                     }
                     catch (Exception ex)
                     {
@@ -318,6 +344,7 @@ namespace SPUtil.App.ViewModels
                         return;
                     }
                 }
+
             }
 
             // ── Step 4: Read snapshot from source ─────────────────────────────

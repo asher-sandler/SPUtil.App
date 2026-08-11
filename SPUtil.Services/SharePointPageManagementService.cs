@@ -104,7 +104,6 @@ namespace SPUtil.Services
         //  current folder.
         //  Used to move an existing page aside before creating a fresh copy.
         // ═══════════════════════════════════════════════════════════════════════
-// SPUtil.Services/SharePointPageManagementService.cs
 
         public async Task RenamePageAsync(string siteUrl, string currentName, string newName, string subfolderPath = "")
         {

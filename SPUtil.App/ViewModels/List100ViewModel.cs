@@ -97,9 +97,6 @@ namespace SPUtil.App.ViewModels
         /// Always the right-pane site URL — toolbar is hidden when IsSourceMode=false,
         /// so copy commands can only ever fire from the left pane.
         /// </summary>
-        //public void SetTargetSiteUrl(string targetSiteUrl) =>
-        //    _targetSiteUrl = targetSiteUrl ?? string.Empty;
-			
 		public void SetTargetSiteUrlProvider(Func<string> provider) => _targetSiteUrlProvider = provider;			
 
         // ── Commands ─────────────────────────────────────────────────────────

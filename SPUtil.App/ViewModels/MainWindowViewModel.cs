@@ -626,8 +626,10 @@ namespace SPUtil.App.ViewModels
                         // so copy commands only ever fire from the left pane.
                         // Target is therefore always the right site.
 						vm.SetTargetSiteUrlProvider(
-                            () => SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl));                        await vm.LoadDataAsync(siteUrl, node.Path);
-                        newView = vm;
+                            () => SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl));
+
+						await vm.LoadDataAsync(siteUrl, node.Path);
+						newView = vm;
                     }
                     else if (templateId == 101) // Библиотека документов
                     {
