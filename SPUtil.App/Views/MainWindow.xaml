@@ -73,6 +73,13 @@
                     </MenuItem.Icon>
                 </MenuItem>
 
+                <MenuItem Header="_Forget Credentials..."
+                          Command="{Binding ForgetCredentialsCommand}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+				
                 <Separator />
                 <MenuItem Header="_Exit" Command="{Binding ExitCommand}" />
             </MenuItem>

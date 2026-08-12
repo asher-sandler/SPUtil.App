@@ -13,68 +13,7 @@ namespace SPUtil.Infrastructure
     {
         private static readonly ILogger _log = Log.ForContext("SourceContext", nameof(SPUsingUtils));
 
-        private static string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate";
-        /*
-		public static 	NetworkCredential GetCredentials()
-		{
-			
-			using (var key = Registry.CurrentUser.OpenSubKey(regPath))
-			{
-				string userName = key?.GetValue("Param1")?.ToString() ?? "Unknown";
-				string encryptedHex = key?.GetValue("Param")?.ToString() ?? "";
-				return new NetworkCredential(userName, DecryptFromPowerShell(encryptedHex), "ekmd");
-			}
-		}
-		*/
-        public static NetworkCredential? GetCredentials()
-        {
-            using (var key = Registry.CurrentUser.OpenSubKey(regPath))
-            {
-                if (key == null) return null;
-
-                var userName     = key.GetValue("Param1")?.ToString();
-                var encryptedHex = key.GetValue("Param")?.ToString();
-
-                if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(encryptedHex))
-                    return null;
-
-                // 2026-06-10: domain is no longer hardcoded to "ekmd".
-                // Resolved from the current Windows login session so the app works
-                // on any domain (ekmd, ada, etc.) without code changes.
-                //
-                // WindowsIdentity.GetCurrent().Name returns "DOMAIN\username"
-                // e.g. "EKMD\ashersa" → domain = "EKMD"
-                //
-                // This matches what PowerShell PSCredential does implicitly —
-                // the reason C# previously required an explicit domain is that
-                // NetworkCredential with empty domain sends "\username" in the
-                // NTLM Type-3 message which SharePoint cannot map to an AD account.
-                string domain;
-                try
-                {
-                    var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
-                    // Name is "DOMAIN\user" — take everything before the backslash
-                    var parts = identity.Name.Split('\\');
-                    domain = parts.Length == 2 ? parts[0] : string.Empty;
-                    _log.Debug("GetCredentials — resolved domain '{Domain}' from Windows identity '{Identity}'",
-                        domain, identity.Name);
-                }
-                catch (Exception ex)
-                {
-                    _log.Warning(ex, "GetCredentials — could not resolve domain from Windows identity, falling back to empty domain");
-                    domain = string.Empty;
-                }
-
-                try
-                {
-                    return new NetworkCredential(userName, DecryptFromPowerShell(encryptedHex), domain);
-                }
-                catch
-                {
-                    return null;
-                }
-            }
-        }
+		
         private static SecureString DecryptFromPowerShell(string hexString)
 		{
 			if (string.IsNullOrEmpty(hexString)) return new SecureString();
@@ -87,21 +26,22 @@ namespace SPUtil.Infrastructure
 			secureString.MakeReadOnly();
 			return secureString;
 		}
-		public static void SaveCredentials(string userName, string password)
-		{
-			
-			
-			// Шифруем пароль (DPAPI)
-			byte[] data = Encoding.Unicode.GetBytes(password);
-			byte[] encrypted = ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
-			string hex = BitConverter.ToString(encrypted).Replace("-", "");
 
-			using (var key = Registry.CurrentUser.CreateSubKey(regPath))
-			{
-				key.SetValue("Param1", userName);
-				key.SetValue("Param", hex);
-			}
-		}		
+        /// <summary>
+        /// Splits a user name into its domain prefix and the account name.
+        /// Accepted input is either "user" or "DOMAIN\user" — anything else is rejected
+        /// by the caller. The returned domain is empty when no prefix was given.
+        /// </summary>
+        public static (string Domain, string User) SplitUserName(string input)
+        {
+            string value = (input ?? string.Empty).Trim();
+            if (value.Length == 0) return (string.Empty, string.Empty);
+
+            int slash = value.IndexOf('\\');
+            return slash < 0
+                ? (string.Empty, value)
+                : (value.Substring(0, slash).Trim(), value.Substring(slash + 1).Trim());
+        }	
         public static string NormalizeUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return url;
@@ -133,6 +73,45 @@ namespace SPUtil.Infrastructure
 
             return url.Trim();
         }
+
+
+        /// <summary>
+        /// Removes every stored credential profile. Only the Profiles subtree is
+        /// deleted — values kept directly under CrSiteAutomate belong to other tooling
+        /// and are left untouched.
+        /// Returns the number of profiles that were removed.
+        /// </summary>
+        public static int ForgetAllProfiles()
+        {
+            string profilesPath = $@"{regPath}\Profiles";
+
+            using (var key = Registry.CurrentUser.OpenSubKey(profilesPath))
+            {
+                if (key == null)
+                {
+                    _log.Debug("ForgetAllProfiles — nothing to remove");
+                    return 0;
+                }
+
+                int count = key.SubKeyCount;
+                _log.Information("ForgetAllProfiles — removing {Count} profile(s): {Names}",
+                    count, string.Join(", ", key.GetSubKeyNames()));
+
+                // The key must be closed before the tree can be deleted
+                key.Close();
+                Registry.CurrentUser.DeleteSubKeyTree(profilesPath, throwOnMissingSubKey: false);
+
+                return count;
+            }
+        }
+
+        /// <summary>Names of the domains that currently have a stored profile.</summary>
+        public static string[] GetProfileDomains()
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey($@"{regPath}\Profiles"))
+                return key?.GetSubKeyNames() ?? Array.Empty<string>();
+        }		
+		
         public static string UrlWithF5(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return url;
@@ -266,6 +245,113 @@ namespace SPUtil.Infrastructure
                 System.Diagnostics.Debug.WriteLine("XML formatting error: " + ex.Message);
                 return xml;
             }
+        }
+		
+
+        private static string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate";
+
+        /// <summary>
+        /// Registry path of the credential profile for a given SharePoint site.
+        /// Layout matches the PowerShell tooling so both share the same profiles:
+        ///   HKCU\SOFTWARE\Microsoft\CrSiteAutomate\Profiles\&lt;domain&gt;
+        /// </summary>
+        private static string ProfilePath(string domain) => $@"{regPath}\Profiles\{domain}";
+
+        /// <summary>
+        /// Resolves the AD domain from the site FQDN — the second host segment.
+        ///   https://crs.ada.huji.ac.il/...   → "ada"
+        ///   https://tss2.ekmd.huji.ac.il/... → "ekmd"
+        /// The two farms live in separate domains with no trust between them, so the
+        /// domain cannot be taken from the current Windows session: that would always
+        /// yield the domain the workstation is joined to, and the other farm answers
+        /// with 401.
+        /// </summary>
+        public static string GetDomainFromUrl(string siteUrl)
+        {
+            if (string.IsNullOrWhiteSpace(siteUrl)) return string.Empty;
+
+            try
+            {
+                var parts = new Uri(siteUrl).Host.Split('.');
+                return parts.Length > 1 ? parts[1].ToLowerInvariant() : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Reads the stored credentials for the domain that owns the given site.
+        /// Returns null when no profile exists — the caller is expected to prompt.
+        /// </summary>
+        public static NetworkCredential? GetCredentials(string siteUrl)
+        {
+            string domain = GetDomainFromUrl(siteUrl);
+            if (string.IsNullOrEmpty(domain))
+            {
+                _log.Warning("GetCredentials — cannot resolve a domain from '{Url}'", siteUrl);
+                return null;
+            }
+
+            using (var key = Registry.CurrentUser.OpenSubKey(ProfilePath(domain)))
+            {
+                if (key == null)
+                {
+                    _log.Debug("GetCredentials — no profile for domain '{Domain}'", domain);
+                    return null;
+                }
+
+                var userName     = key.GetValue("Param1")?.ToString();
+                var encryptedHex = key.GetValue("Param")?.ToString();
+
+                if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(encryptedHex))
+                {
+                    _log.Warning("GetCredentials — profile '{Domain}' is incomplete", domain);
+                    return null;
+                }
+
+                try
+                {
+                    _log.Debug("GetCredentials — '{Domain}\\{User}' → {Url}", domain, userName, siteUrl);
+                    return new NetworkCredential(userName, DecryptFromPowerShell(encryptedHex), domain);
+                }
+                catch (Exception ex)
+                {
+                    // The DPAPI blob belongs to another Windows account or machine.
+                    _log.Warning(ex, "GetCredentials — stored password for '{Domain}' cannot be decrypted", domain);
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>True when a usable profile exists for the domain of the given site.</summary>
+        public static bool HasCredentials(string siteUrl) => GetCredentials(siteUrl) != null;
+
+        /// <summary>
+        /// Stores credentials for the domain that owns the given site. The password is
+        /// protected with DPAPI in the same format PowerShell's ConvertFrom-SecureString
+        /// produces, so profiles written by either tool are readable by both.
+        /// </summary>
+        public static void SaveCredentials(string siteUrl, string userName, string password)
+        {
+            string domain = GetDomainFromUrl(siteUrl);
+            if (string.IsNullOrEmpty(domain))
+                throw new InvalidOperationException(
+                    $"Cannot determine the AD domain from the site URL:\n{siteUrl}");
+
+            byte[] data      = Encoding.Unicode.GetBytes(password);
+            byte[] encrypted = ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
+            string hex       = BitConverter.ToString(encrypted).Replace("-", "");
+
+            using (var key = Registry.CurrentUser.CreateSubKey(ProfilePath(domain)))
+            {
+                key.SetValue("Param1", userName);
+                key.SetValue("Param",  hex);
+            }
+
+            _log.Information("SaveCredentials — profile stored for domain '{Domain}', user '{User}'",
+                domain, userName);
         }
 
     }

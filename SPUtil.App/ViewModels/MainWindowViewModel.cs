@@ -80,7 +80,8 @@ namespace SPUtil.App.ViewModels
         public DelegateCommand ExitCommand { get; }
 
         public DelegateCommand ExportToUniversalWindowCommand { get; }
-
+		public DelegateCommand ForgetCredentialsCommand { get; }
+		
 		private bool _isLeftConnected;
 		public bool IsLeftConnected
 		{
@@ -283,6 +284,7 @@ namespace SPUtil.App.ViewModels
 			
 			
 			ConnectAsCommand = new DelegateCommand(OnConnectAs);
+			ForgetCredentialsCommand = new DelegateCommand(OnForgetCredentials);
 
             ExitCommand = new DelegateCommand(OnExit);
 
@@ -363,12 +365,12 @@ namespace SPUtil.App.ViewModels
 
 			while (!isAuthorized)
 			{
-				// 1. Если в реестре пусто — сразу окно
-				if (SPUsingUtils.GetCredentials() == null)
+				// no profile in regisry for this domain 
+				// prompt at once
+				if (SPUsingUtils.GetCredentials(siteUrl) == null)
 				{
-					if (!ShowLoginDialog()) return null;
+					if (!ShowLoginDialog(siteUrl)) return null;
 				}
-
 				ConnectionStatus = "Validating access...";
 				var authResult = await _spService.ValidateConnectionAsync(url);
 
@@ -380,7 +382,7 @@ namespace SPUtil.App.ViewModels
 
 					case AuthResult.InvalidCredentials:
 						MessageBox.Show("Invalid username or password.", "Auth Error", MessageBoxButton.OK, MessageBoxImage.Error);
-						if (!ShowLoginDialog()) return null;
+						if (!ShowLoginDialog(siteUrl)) return null;
 						break;
 
 					case AuthResult.AccessDenied:
@@ -426,39 +428,66 @@ namespace SPUtil.App.ViewModels
                 {
                     _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     // Error авторизации (401) или доступа
-                    var result = ShowLoginDialog();
+                    var result = ShowLoginDialog(url);
                     if (!result) return new ObservableCollection<SPNode>(); // Пользователь отменил
 
                     // Если сохранили новый пароль - цикл while попробует снова
                 }
             }
         }
-		// Сам метод реализации:
-		private void OnConnectAs()
-		{
-			// Мы просто вызываем созданный ранее метод. 
-			// Если пользователь введет данные и нажмет Save, реестр обновится.
-			if (ShowLoginDialog())
-			{
-				// После смены пользователя можно обновить имя в статусбаре
-				// Предполагается, что у вас есть свойство CurrentUserName
-				RaisePropertyChanged(nameof(CurrentUserName)); 
-				
-				ConnectionStatus = "Credentials updated. Please reconnect to sites.";
-			}
-		}		
+        // Сам метод реализации:
+        // SPUtil.App/ViewModels/MainWindowViewModel.cs
 
-        private bool ShowLoginDialog()
+        private void OnConnectAs()
+        {
+            // Credentials are stored per AD domain, and the domain is resolved from the
+            // site URL — so a URL is required. The left pane is used because that is the
+            // side the user connects first; for the other farm, enter its URL there.
+            string siteUrl = !string.IsNullOrWhiteSpace(LeftSiteUrl) ? LeftSiteUrl : RightSiteUrl;
+
+            if (string.IsNullOrWhiteSpace(siteUrl))
+            {
+                MessageBox.Show(
+                    "Enter a site URL first — credentials are stored per domain, " +
+                    "and the domain is taken from the site address.",
+                    "No site URL", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (ShowLoginDialog(siteUrl))
+            {
+                RaisePropertyChanged(nameof(CurrentUserName));
+
+                string domain = SPUsingUtils.GetDomainFromUrl(siteUrl);
+                ConnectionStatus = $"Credentials updated for domain {domain.ToUpperInvariant()}. " +
+                                   $"Please reconnect to sites.";
+            }
+        }
+
+
+        /// <summary>
+        /// Prompts for credentials and stores them under the profile of the domain that
+        /// owns <paramref name="siteUrl"/>. The two farms live in separate AD domains
+        /// with no trust between them, so a single shared profile cannot serve both —
+        /// the domain is resolved from the site FQDN.
+        /// </summary>
+        private bool ShowLoginDialog(string siteUrl)
         {
             bool isSaved = false;
+            string domain = SPUsingUtils.GetDomainFromUrl(siteUrl);
+
             // Используем Dispatcher, чтобы окно открылось в UI потоке
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var loginWin = new LoginWindow { Owner = System.Windows.Application.Current.MainWindow };
+				var loginWin = new LoginWindow(domain)
+                {
+                    Owner = System.Windows.Application.Current.MainWindow
+                };
+
                 if (loginWin.ShowDialog() == true)
                 {
-                    // Сохраняем в реестр
-                    SPUsingUtils.SaveCredentials(loginWin.UserName, loginWin.Password);
+                    // Сохраняем в реестр, в профиль домена этого сайта
+                    SPUsingUtils.SaveCredentials(siteUrl, loginWin.UserName, loginWin.Password);
                     isSaved = true;
                 }
             });
@@ -1306,6 +1335,47 @@ namespace SPUtil.App.ViewModels
 			
 			return s;
 		}
+		
+		/// <summary>
+		/// Removes every stored credential profile — used when the workstation changes
+		/// hands, or after a password change in AD.
+		/// </summary>
+		private void OnForgetCredentials()
+		{
+			var domains = SPUsingUtils.GetProfileDomains();
+
+			if (domains.Length == 0)
+			{
+				MessageBox.Show("There are no stored credentials to remove.",
+					"Nothing to forget", MessageBoxButton.OK, MessageBoxImage.Information);
+				return;
+			}
+
+
+				
+			var confirm = MessageBox.Show(
+				"Caution:\nSign-in details (user name and password)\nsaved in this app will be cleared!\n" +
+				"Your Windows account is not affected.",
+				"Forget Credentials",
+				MessageBoxButton.YesNo,
+				MessageBoxImage.Warning);				
+
+			if (confirm != MessageBoxResult.Yes) return;
+
+			try
+			{
+				int removed = SPUsingUtils.ForgetAllProfiles();
+
+				RaisePropertyChanged(nameof(CurrentUserName));
+				ConnectionStatus = $"{removed} credential profile(s) removed. Reconnect to enter new ones.";
+			}
+			catch (Exception ex)
+			{
+				_log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+				MessageBox.Show($"Could not remove the stored credentials:\n{ex.Message}",
+					"Error", MessageBoxButton.OK, MessageBoxImage.Error);
+			}
+		}		
 		/*
 		private bool CanExecuteCopy()
 		{

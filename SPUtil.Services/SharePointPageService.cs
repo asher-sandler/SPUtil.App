@@ -42,7 +42,7 @@ namespace SPUtil.Services
 
             var handler = new System.Net.Http.HttpClientHandler
             {
-                Credentials = GetCredentials()
+                Credentials = GetCredentials(siteUrl)
             };
             using var http = new System.Net.Http.HttpClient(handler);
             http.DefaultRequestHeaders.Add("Accept", "text/html");
@@ -446,7 +446,7 @@ namespace SPUtil.Services
 
             var handler = new System.Net.Http.HttpClientHandler
             {
-                Credentials = GetCredentials()
+                Credentials = GetCredentials(siteUrl)
             };
             using var http = new System.Net.Http.HttpClient(handler);
 

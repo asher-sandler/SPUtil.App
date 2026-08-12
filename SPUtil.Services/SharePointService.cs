@@ -39,7 +39,7 @@ namespace SPUtil.Services
 		{
 			try
 			{
-				string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate";
+				string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate\Profiles\EKMD";
 				using (var key = Registry.CurrentUser.OpenSubKey(regPath))
 				{
 					// Try to get Param1; return "Unknown" or default if key/value is missing
@@ -88,20 +88,12 @@ namespace SPUtil.Services
 		*/
 		
 		
-		private NetworkCredential GetCredentials()
-		{
-			/*
-			string regPath = @"SOFTWARE\Microsoft\CrSiteAutomate";
-			using (var key = Registry.CurrentUser.OpenSubKey(regPath))
-			{
-				string userName = key?.GetValue("Param1")?.ToString() ?? "Unknown";
-				string encryptedHex = key?.GetValue("Param")?.ToString() ?? "";
-				return new NetworkCredential(userName, DecryptFromPowerShell(encryptedHex), "ekmd");
-			}
-			*/
-			return SPUtil.Infrastructure.SPUsingUtils.GetCredentials();
-			
-		}
+		/// <summary>
+		/// Credentials for the farm that owns the given site. Each farm lives in its own
+		/// AD domain with no trust, so credentials are per-site, not per-session.
+		/// </summary>
+		private NetworkCredential? GetCredentials(string siteUrl)
+			=> SPUtil.Infrastructure.SPUsingUtils.GetCredentials(siteUrl);		
 
 
 
@@ -150,17 +142,19 @@ namespace SPUtil.Services
                 return AuthResult.Error;
             }
         }
-        // Helper method for creating context (fixes error CS0103)
-        private async Task<ClientContext> GetContextAsync(string siteUrl)
+		
+		
+		private async Task<ClientContext> GetContextAsync(string siteUrl)
 		{
 			return await Task.Run(() =>
 			{
-				var context = new  ClientContext(SPUsingUtils.NormalizeUrl(siteUrl));
-				context.Credentials = GetCredentials();
+				var context = new ClientContext(SPUsingUtils.NormalizeUrl(siteUrl));
+				context.Credentials = GetCredentials(siteUrl);
 				return context;
 			});
 		}
-
+		
+		
 		public async Task<ObservableCollection<SPNode>> GetSiteStructureAsync(string siteUrl)
 		{
 			return await Task.Run(async () =>

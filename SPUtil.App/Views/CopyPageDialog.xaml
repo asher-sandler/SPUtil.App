@@ -57,18 +57,29 @@
                      BorderBrush="#0078D7" Padding="5,0"/>
         </StackPanel>
 
-        <!-- Path option — visible only when source is in a subfolder -->
+
+        <!-- Target folder inside the Pages library -->
         <Border Grid.Row="3" x:Name="PnlPathOption"
                 Margin="0,0,0,0" Padding="10,8"
-                Background="White" BorderBrush="#DDD" BorderThickness="1"
-                Visibility="Collapsed">
+                Background="White" BorderBrush="#DDD" BorderThickness="1">
             <StackPanel>
                 <CheckBox x:Name="ChkKeepPath"
-                          IsChecked="True" FontSize="13" Cursor="Hand">
-                    <TextBlock Text="Copy with folder path" FontSize="13" FontWeight="SemiBold"/>
+                          IsChecked="True" FontSize="13" Cursor="Hand"
+                          Checked="ChkKeepPath_Changed" Unchecked="ChkKeepPath_Changed">
+                    <TextBlock Text="Copy into a folder" FontSize="13" FontWeight="SemiBold"/>
                 </CheckBox>
+
+                <DockPanel Margin="22,6,0,0">
+                    <TextBlock Text="Pages/" DockPanel.Dock="Left"
+                               Foreground="#777" VerticalAlignment="Center"
+                               Margin="0,0,4,0"/>
+                    <TextBox x:Name="TxtSubfolder"
+                             Height="26" VerticalContentAlignment="Center"
+                             BorderBrush="#CCC" Padding="5,0"/>
+                </DockPanel>
+
                 <TextBlock x:Name="TxtPathHint"
-                           Margin="22,4,0,0" FontSize="11"
+                           Margin="22,6,0,0" FontSize="11"
                            Foreground="#555" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>

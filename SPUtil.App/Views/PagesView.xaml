@@ -257,14 +257,14 @@
                                FontSize="15" Foreground="#856404"/>
                 </Button>
 
-                <Button DockPanel.Dock="Left"
+                <!--Button DockPanel.Dock="Left"
                         Command="{Binding CopyWebPartPropertiesCommand}"
                         Background="Transparent" BorderBrush="Transparent"
                         Cursor="Hand" Padding="5,4"
                         ToolTip="Copy WP Properties to target page">
                     <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets"
                                FontSize="15" Foreground="#0066CC"/>
-                </Button>
+                </Button-->
 
                 <Button DockPanel.Dock="Left"
                         Command="{Binding CopyWpToClipboardCommand}"

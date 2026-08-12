@@ -206,8 +206,9 @@ namespace SPUtil.App.ViewModels
             if (dialog.ShowDialog() != true) return;
 
             string targetName    = dialog.TargetPageName;
-            string subfolderPath = (dialog.KeepFolderPath && !string.IsNullOrEmpty(sourceSubfolder))
-                                   ? sourceSubfolder : string.Empty;
+            //string subfolderPath = (dialog.KeepFolderPath && !string.IsNullOrEmpty(sourceSubfolder))
+            //                       ? sourceSubfolder : string.Empty;
+			string subfolderPath = dialog.TargetSubfolder;
 
             var infoWin = new SPUtil.Views.OperationInfoWindow
             {
