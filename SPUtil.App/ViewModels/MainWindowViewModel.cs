@@ -32,12 +32,17 @@ namespace SPUtil.App.ViewModels
         private string? _detailedInfo;
 
 		private string _connectionStatus = "Not Connected";
-		private string _currentUserName;
+		private string _leftUserName = "Unknown user";
+		private string _rightUserName = "Unknown user";
+
+		public string ConnectionStatus { get => _connectionStatus; set => SetProperty(ref _connectionStatus, value); }
+		public string LeftUserName { get => _leftUserName; set => SetProperty(ref _leftUserName, value); }
+		public string RightUserName { get => _rightUserName; set => SetProperty(ref _rightUserName, value); }
+
+
 
         private readonly SharePointCloneService _cloneService;
 
-        public string ConnectionStatus { get => _connectionStatus; set => SetProperty(ref _connectionStatus, value); }
-		public string CurrentUserName { get => _currentUserName; set => SetProperty(ref _currentUserName, value); }
 
 		// Constructor
 		public SPNode? SelectedLeftNode
@@ -104,8 +109,6 @@ namespace SPUtil.App.ViewModels
 			? $"{SPUsingUtils.UrlWithF5(RightSiteUrl).TrimEnd('/')}/_layouts/15/viewlsts.aspx" 
 			: string.Empty;
 			
-		// В объявлении свойств команд:
-		public DelegateCommand ConnectAsCommand { get; }
 
 		// Constructor ViewModel:
 		
@@ -174,7 +177,8 @@ namespace SPUtil.App.ViewModels
 				if (IsUrlEmpty(LeftSiteUrl)) return;
 				
 				IsLeftConnected = false;
-				ConnectionStatus = "Connecting Target...";
+				LeftUserName    = "Unknown user";
+				ConnectionStatus = "Connecting Source...";
 
 				try
 				{
@@ -183,12 +187,14 @@ namespace SPUtil.App.ViewModels
 					{
 						LeftSiteNodes = nodes;
 						IsLeftConnected = true;
+						LeftUserName    = SPUsingUtils.GetStoredUsername(LeftSiteUrl) ?? "Unknown user";
 						ConnectionStatus = "Connected";
 					}
 					else
 					{
 						LeftSiteNodes    = new ObservableCollection<SPNode>();
 						IsLeftConnected  = false;
+						LeftUserName     = "Unknown user";
 						ConnectionStatus = "Not Connected";
 
 						_log.Warning("Connect left: {Url} returned no nodes", LeftSiteUrl);
@@ -227,7 +233,8 @@ namespace SPUtil.App.ViewModels
 				if (IsUrlEmpty(RightSiteUrl)) return; 
 
 				IsRightConnected = false;
-				ConnectionStatus = "Connecting Source...";
+				RightUserName    = "Unknown user";
+				ConnectionStatus = "Connecting Target...";
 
 				try
 				{
@@ -236,6 +243,7 @@ namespace SPUtil.App.ViewModels
 					{
 						RightSiteNodes = nodes;
 						IsRightConnected = true;
+						RightUserName    = SPUsingUtils.GetStoredUsername(RightSiteUrl) ?? "Unknown user";
 						ConnectionStatus = "Connected";
 					}
 					else
@@ -246,6 +254,7 @@ namespace SPUtil.App.ViewModels
 						// stuck on "Connecting...".
 						RightSiteNodes   = new ObservableCollection<SPNode>();
 						IsRightConnected = false;
+						RightUserName    = "Unknown user";
 						ConnectionStatus = "Not Connected";
 
 						_log.Warning("Connect right: {Url} returned no nodes", RightSiteUrl);
@@ -267,6 +276,7 @@ namespace SPUtil.App.ViewModels
 					// a site the user is no longer connected to.
 					RightSiteNodes   = new ObservableCollection<SPNode>();
 					IsRightConnected = false;
+					RightUserName = "Unknown user";
 					ConnectionStatus = "Not Connected";
 
 					MessageBox.Show(
@@ -283,13 +293,11 @@ namespace SPUtil.App.ViewModels
 			});
 			
 			
-			ConnectAsCommand = new DelegateCommand(OnConnectAs);
 			ForgetCredentialsCommand = new DelegateCommand(OnForgetCredentials);
 
             ExitCommand = new DelegateCommand(OnExit);
 
 
-            CurrentUserName = _spService.GetCurrentUsername();
             //ConnectionStatus = _spService.GetConnectionStatus();
 
             // Обработка выбора слева
@@ -433,34 +441,6 @@ namespace SPUtil.App.ViewModels
 
                     // Если сохранили новый пароль - цикл while попробует снова
                 }
-            }
-        }
-        // Сам метод реализации:
-        // SPUtil.App/ViewModels/MainWindowViewModel.cs
-
-        private void OnConnectAs()
-        {
-            // Credentials are stored per AD domain, and the domain is resolved from the
-            // site URL — so a URL is required. The left pane is used because that is the
-            // side the user connects first; for the other farm, enter its URL there.
-            string siteUrl = !string.IsNullOrWhiteSpace(LeftSiteUrl) ? LeftSiteUrl : RightSiteUrl;
-
-            if (string.IsNullOrWhiteSpace(siteUrl))
-            {
-                MessageBox.Show(
-                    "Enter a site URL first — credentials are stored per domain, " +
-                    "and the domain is taken from the site address.",
-                    "No site URL", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (ShowLoginDialog(siteUrl))
-            {
-                RaisePropertyChanged(nameof(CurrentUserName));
-
-                string domain = SPUsingUtils.GetDomainFromUrl(siteUrl);
-                ConnectionStatus = $"Credentials updated for domain {domain.ToUpperInvariant()}. " +
-                                   $"Please reconnect to sites.";
             }
         }
 
@@ -1354,9 +1334,9 @@ namespace SPUtil.App.ViewModels
 
 				
 			var confirm = MessageBox.Show(
-				"Caution:\nSign-in details (user name and password)\nsaved in this app will be cleared!\n" +
-				"Your Windows account is not affected.",
-				"Forget Credentials",
+				"Log out of all open SharePoint sites?" 
+				,
+				"Sign out",
 				MessageBoxButton.YesNo,
 				MessageBoxImage.Warning);				
 
@@ -1365,8 +1345,18 @@ namespace SPUtil.App.ViewModels
 			try
 			{
 				int removed = SPUsingUtils.ForgetAllProfiles();
+				LeftUserName  = "Unknown user";
+				RightUserName = "Unknown user";
+				LeftSiteNodes    = new ObservableCollection<SPNode>();
+				IsLeftConnected  = false;
+				RightSiteNodes   = new ObservableCollection<SPNode>();
+				IsRightConnected = false;
+				RaisePropertyChanged(nameof(IsLeftConnected));
+				RaisePropertyChanged(nameof(LeftSiteFullLink));
+				RaisePropertyChanged(nameof(IsRightConnected));
+				RaisePropertyChanged(nameof(RightSiteFullLink));
+				
 
-				RaisePropertyChanged(nameof(CurrentUserName));
 				ConnectionStatus = $"{removed} credential profile(s) removed. Reconnect to enter new ones.";
 			}
 			catch (Exception ex)

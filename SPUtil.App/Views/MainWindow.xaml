@@ -27,7 +27,19 @@
 			<RowDefinition Height="*"/>
 		</Grid.RowDefinitions>
 
-        <StatusBar Grid.Row="0" Background="#F3F3F3" BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" Height="30">
+        <StatusBar Grid.Row="0"  BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" Height="60"
+                    FontSize="14">
+            <StatusBar.Background>
+                <LinearGradientBrush EndPoint="1,1"
+                                     StartPoint="0,0">
+                    
+                    <GradientStop Color="AliceBlue"
+                                  Offset="1" />
+                    <GradientStop Color="#FFD1E8FB"
+                                  Offset="0" />
+ 
+                </LinearGradientBrush>
+            </StatusBar.Background>
             <StatusBar.ItemsPanel>
                 <ItemsPanelTemplate>
                     <Grid>
@@ -41,42 +53,58 @@
                     </Grid>
                 </ItemsPanelTemplate>
             </StatusBar.ItemsPanel>
-
-		   <StatusBarItem Grid.Column="0">
-				<TextBlock Text="Status: " FontWeight="Bold" Foreground="#555" Margin="5,0,0,0"/>
+            <StatusBarItem Grid.Column="0"
+                           >
+                <TextBlock Text="Status: "
+                           FontWeight="Bold"
+                           Foreground="#555"
+                           Margin="5,0,0,0"
+                           />
 			</StatusBarItem>
 			
 			<StatusBarItem Grid.Column="1">
-				<TextBlock Text="{Binding ConnectionStatus}" Foreground="#2B579A"/> 
+                <TextBlock Text="{Binding ConnectionStatus}"
+                           Foreground="#2B579A"
+                            /> 
 			</StatusBarItem>
-
-			<StatusBarItem Grid.Column="2">
+            <StatusBarItem Grid.Column="2"
+                           >
 				<StackPanel Orientation="Horizontal">
-					<TextBlock Text="User: " FontWeight="Bold" Foreground="#555"/>
-					<TextBlock Text="{Binding CurrentUserName}"/>
+					<TextBlock Text="Left: " FontWeight="Bold" Foreground="#555"
+                                />
+                    <TextBlock Text="{Binding LeftUserName}"
+                               Margin="0,0,15,0"
+                                />
+                    <TextBlock Text="Right: "
+                               FontWeight="Bold"
+                               Foreground="#555"
+                                />
+                    <TextBlock Text="{Binding RightUserName}"
+                                />
 				</StackPanel>
 			</StatusBarItem>
-
+			
 			<StatusBarItem Grid.Column="4">
-				<Image Source="https://new.huji.ac.il/profiles/openscholar/themes/os_bootstrap/images/logo.png" 
-					   Height="20" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+				<Image Source="/Views/Huji-BlackLogo.png"
+                       Height="55"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
 			</StatusBarItem>
 
         </StatusBar>
 
         <Menu Grid.Row="1" Background="White" BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" Padding="2">
             <MenuItem Header="_File">
-                <MenuItem Header="_Connect As..." 
+                <!--MenuItem Header="_Connect As..." 
                   Command="{Binding ConnectAsCommand}">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE77B;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
                     </MenuItem.Icon>
-                </MenuItem>
+                </MenuItem -->
 
-                <MenuItem Header="_Forget Credentials..."
+                <MenuItem Header="_Logout from all SharePoint sites..."
                           Command="{Binding ForgetCredentialsCommand}">
                     <MenuItem.Icon>
-                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
+                        <TextBlock Text="&#xe748;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
 				

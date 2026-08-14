@@ -61,7 +61,8 @@ namespace SPUtil.App.ViewModels
         private async Task ProcessListCopyAsync(SPListInfo info, string targetUrl,  bool withData, int templateId)
         {
             // --- STEP 1: Первичный диалог (Выбор имени) ---
-            var copyDialog = new SPUtil.Views.CopyListDialog(info.Title, info.URL, info.ToString())
+            
+			var copyDialog = new SPUtil.Views.CopyListDialog(info.Title, targetUrl, info.ToString())
             {
                 Owner = System.Windows.Application.Current.MainWindow
             };

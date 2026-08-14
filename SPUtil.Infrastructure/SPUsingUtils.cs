@@ -281,6 +281,25 @@ namespace SPUtil.Infrastructure
             }
         }
 
+
+		/// <summary>
+		/// Reads the stored user name (Param1) for the domain that owns the given
+		/// site — no DPAPI decryption of the password — and returns it prefixed
+		/// with the domain (e.g. "ADA\ashersa"), so the same-looking account name
+		/// on two different farms isn't ambiguous in the UI. Returns null when no
+		/// profile exists or the domain cannot be resolved from the URL.
+		/// </summary>
+		public static string? GetStoredUsername(string siteUrl)
+		{
+			string domain = GetDomainFromUrl(siteUrl);
+			if (string.IsNullOrEmpty(domain)) return null;
+
+			using (var key = Registry.CurrentUser.OpenSubKey(ProfilePath(domain)))
+			{
+				string? userName = key?.GetValue("Param1")?.ToString();
+				return string.IsNullOrEmpty(userName) ? null : $@"{domain.ToUpperInvariant()}\{userName}";
+			}
+		}
         /// <summary>
         /// Reads the stored credentials for the domain that owns the given site.
         /// Returns null when no profile exists — the caller is expected to prompt.
