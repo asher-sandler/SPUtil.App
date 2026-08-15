@@ -57,6 +57,9 @@ namespace SPUtil.Infrastructure
         /// <summary>StorageKey on the SOURCE page — lets the user locate the
         /// WebPart there via ?contents=1 or a previous report.</summary>
         public string SourceStorageKey { get; set; } = string.Empty;
+		/// <summary>ZoneKey placeholder GUID on the SOURCE page's PublishingPageContent —
+		/// needed to locate this WebPart's placeholder when patching the target HTML.</summary>
+		public string SourceZoneKey { get; set; } = string.Empty;
 
         /// <summary>StorageKey assigned on the target page. Empty unless Status is Ok.</summary>
         public string TargetStorageKey { get; set; } = string.Empty;
@@ -93,9 +96,10 @@ namespace SPUtil.Infrastructure
         /// <summary>True when every WebPart was copied — the report needs no attention.</summary>
         public bool IsClean => SkippedCount == 0 && FailedCount == 0;
 
-        /// <summary>One-line summary for the Copy Complete dialog.</summary>
-        public string Summary => IsClean
-            ? $"WebParts copied: {OkCount} ({InZonesCount} in zones, {InContentCount} in content)"
-            : $"WebParts: {TotalCount} total — {OkCount} added, {SkippedCount} skipped, {FailedCount} failed";
-    }
+		/// <summary>One-line summary for the Copy Complete dialog. Skipped and Failed
+		/// are merged for the user — the distinction matters for diagnostics
+		/// (see entry.Reason), not for a glance at the result.</summary>
+		public string Summary => IsClean
+			? $"WebParts copied: {OkCount} ({InZonesCount} in zones, {InContentCount} in content)"
+			: $"WebParts: {TotalCount} total — {OkCount} copied, {TotalCount - OkCount} failed";    }
 }

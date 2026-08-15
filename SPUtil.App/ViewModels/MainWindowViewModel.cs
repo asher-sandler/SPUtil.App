@@ -5,6 +5,8 @@ using SPUtil.Services;
 using System.Collections.ObjectModel;
 using Serilog;
 using System.Windows;
+using System.IO;
+using System.Diagnostics;
 
 
 
@@ -86,7 +88,12 @@ namespace SPUtil.App.ViewModels
 
         public DelegateCommand ExportToUniversalWindowCommand { get; }
 		public DelegateCommand ForgetCredentialsCommand { get; }
+
+
+		public DelegateCommand OpenLogsFolderCommand { get; }
+
 		
+				
 		private bool _isLeftConnected;
 		public bool IsLeftConnected
 		{
@@ -296,7 +303,7 @@ namespace SPUtil.App.ViewModels
 			ForgetCredentialsCommand = new DelegateCommand(OnForgetCredentials);
 
             ExitCommand = new DelegateCommand(OnExit);
-
+			OpenLogsFolderCommand = new DelegateCommand(OpenLogsFolder);
 
             //ConnectionStatus = _spService.GetConnectionStatus();
 
@@ -351,6 +358,25 @@ namespace SPUtil.App.ViewModels
 			
 			//ShowSchemaCommand = new DelegateCommand(async () => await ExecuteShowSchema());			
         }
+		private void OpenLogsFolder()
+		{
+			string logsPath = Path.Combine(
+				Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), 
+				@"SPUtil\Logs"
+			);
+
+			// Создаем директорию, если она еще не существует, чтобы Process.Start не выдал ошибку
+			if (!Directory.Exists(logsPath))
+			{
+				Directory.CreateDirectory(logsPath);
+			}
+
+			Process.Start(new ProcessStartInfo
+			{
+				FileName = logsPath,
+				UseShellExecute = true
+			});
+		}		
         private void OnExit()
         {
             var result = System.Windows.MessageBox.Show(

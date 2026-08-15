@@ -44,8 +44,6 @@
 
   <ItemGroup>
     <Resource Include="Views\Huji-BlackLogo.png" />
-    <Resource Include="Views\HUJI-logo.jpg" />
-    <Resource Include="Views\אחיד רוחבי שמאל.png" />
   </ItemGroup>
 
 </Project>

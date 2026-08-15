@@ -9,6 +9,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Serilog;
+using HtmlAgilityPack;
 using System.Threading.Tasks;
 
 namespace SPUtil.Services
@@ -77,6 +78,38 @@ namespace SPUtil.Services
             }
 
             return result;
+        }
+        private string ReplaceFailedWebPartPlaceholders(
+            string html, IEnumerable<WebPartCopyEntry> failedEntries)
+        {
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            foreach (var entry in failedEntries)
+            {
+                if (string.IsNullOrEmpty(entry.SourceZoneKey)) continue;
+
+                var innerDiv = doc.DocumentNode.SelectSingleNode(
+                    $"//div[contains(@class,'ms-rtestate-read') and contains(@class,'{entry.SourceZoneKey}')]");
+
+                var outerDiv = innerDiv?.ParentNode;
+                if (outerDiv == null)
+                {
+                    _logPage.Warning(
+                        "ReplaceFailedWebPartPlaceholders: placeholder not found for '{Title}' (ZoneKey={ZoneKey})",
+                        entry.Title, entry.SourceZoneKey);
+                    continue;
+                }
+
+                var warningNode = HtmlNode.CreateNode(
+                    $"<p style=\"color:#b00020;border:1px dashed #b00020;padding:4px;\">" +
+                    $"WEB PART \"{WebUtility.HtmlEncode(entry.Title)}\" NOT AVAILABLE ON THIS FARM — " +
+                    $"install/activate the corresponding feature before copying.</p>");
+
+                outerDiv.ParentNode.ReplaceChild(warningNode, outerDiv);
+            }
+
+            return doc.DocumentNode.OuterHtml;
         }
 
         /// <summary>
@@ -1197,6 +1230,7 @@ namespace SPUtil.Services
                         Placement        = WebPartPlacement.PageContent,
                         Title            = wp.Title,
                         ZoneId           = "wpz",
+						SourceZoneKey    = wp.ZoneKey,
                         Position         = wp.VisualPosition,
                         SourceStorageKey = wp.StorageKey
                     };
@@ -1258,22 +1292,36 @@ namespace SPUtil.Services
                     report.Entries.Add(entry);
                 }
 
-                // ── Rebuild PublishingHtml with new ZoneKeys ──────────────────
-                // Replace all old ZoneKey GUIDs in the snapshot HTML with new ones.
-                // Placeholders of WebParts that were skipped or failed keep their old
-                // GUIDs and will render as empty boxes — the report lists them.
-                string newHtml = snapshot.PublishingHtml;
+
+            // ── Rebuild PublishingHtml with new ZoneKeys ──────────────────
+            // Replace all old ZoneKey GUIDs in the snapshot HTML with new ones.
+            string newHtml = snapshot.PublishingHtml;
                 foreach (var kv in oldZoneKeyToNew)
                     newHtml = newHtml.Replace(kv.Key, kv.Value, StringComparison.OrdinalIgnoreCase);
 
+                // Placeholders of WebParts that failed to import keep their old GUID and
+                // render as empty boxes — swap them for a visible warning instead.
+                newHtml = ReplaceFailedWebPartPlaceholders(
+                    newHtml,
+                    report.Entries.Where(e =>
+                        e.Status == WebPartCopyStatus.Failed &&
+                        e.Placement == WebPartPlacement.PageContent));
+
                 using var ctx2    = await GetContextAsync(targetSiteUrl);
+
                 var pageFile2     = ctx2.Web.GetFileByServerRelativeUrl(newPageRelUrl);
                 ctx2.Load(pageFile2, f => f.ListItemAllFields);
                 await Task.Run(() => ctx2.ExecuteQuery());
 
                 // Page was checked in above — now check it out cleanly for editing
-                pageFile2.CheckOut();
+                /*
+				pageFile2.CheckOut();
                 await Task.Run(() => ctx2.ExecuteQuery());
+				*/
+				
+				// Page was checked in above — now check it out cleanly for editing
+				await SafeCheckOutAsync(ctx2, pageFile2);
+
 
                 ctx2.Load(pageFile2.ListItemAllFields);
                 await Task.Run(() => ctx2.ExecuteQuery());
@@ -1752,9 +1800,10 @@ namespace SPUtil.Services
             sb.AppendLine(new string('═', 70));
             sb.AppendLine();
 
-            sb.AppendLine($"WebParts: {r.TotalCount} total — " +
-                          $"{r.OkCount} added, {r.SkippedCount} skipped, {r.FailedCount} failed");
-            sb.AppendLine();
+			sb.AppendLine($"WebParts: {r.TotalCount} total — " +
+              $"{r.OkCount} copied, {r.TotalCount - r.OkCount} failed");
+			  
+			  sb.AppendLine();
 
             // Same order as the WebParts grid: page content first, then layout zones
             // grouped by zone. The order in which the copy processed them is different
@@ -1771,12 +1820,7 @@ namespace SPUtil.Services
 
             foreach (var e in ordered)
             {
-                string status = e.Status switch
-                {
-                    WebPartCopyStatus.Ok      => "OK",
-                    WebPartCopyStatus.Skipped => "SKIPPED",
-                    _                         => "FAILED"
-                };
+				string status = e.Status == WebPartCopyStatus.Ok ? "COPIED" : "FAILED";
 
                 sb.AppendLine($"{status,-7}  {Trim(e.ZoneId, 20),-20}  {e.Position,3}  {e.Title}");
             }
@@ -1794,11 +1838,9 @@ namespace SPUtil.Services
 
                 foreach (var e in problems)
                 {
-                    sb.AppendLine();
-                    string status = e.Status == WebPartCopyStatus.Skipped ? "SKIPPED" : "FAILED";
-                    sb.AppendLine($"  {status}  {e.Title}  ({e.ZoneId}[{e.Position}])");
-                    sb.AppendLine($"           {e.Reason}");
-
+					sb.AppendLine();
+					sb.AppendLine($"  FAILED  {e.Title}  ({e.ZoneId}[{e.Position}])");
+					sb.AppendLine($"           {e.Reason}");
                     // The source key locates the WebPart on the source page via
                     // ?contents=1 or exportwp.aspx — the only reliable handle when
                     // several WebParts share a title.

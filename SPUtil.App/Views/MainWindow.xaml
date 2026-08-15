@@ -93,7 +93,7 @@
         </StatusBar>
 
         <Menu Grid.Row="1" Background="White" BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" Padding="2">
-            <MenuItem Header="_File">
+            <MenuItem Header="_Session">
                 <!--MenuItem Header="_Connect As..." 
                   Command="{Binding ConnectAsCommand}">
                     <MenuItem.Icon>
@@ -107,6 +107,13 @@
                         <TextBlock Text="&#xe748;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
+				
+				<MenuItem Header="_Open Logs Folder"
+						  Command="{Binding OpenLogsFolderCommand}">
+					<MenuItem.Icon>
+						<TextBlock Text="&#xED25;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center"/>
+					</MenuItem.Icon>
+				</MenuItem>				
 				
                 <Separator />
                 <MenuItem Header="_Exit" Command="{Binding ExitCommand}" />

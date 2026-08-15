@@ -234,9 +234,9 @@
                             <MenuItem Header="Compare WP with target page"
                                       Command="{Binding CompareWebPartCommand}"
                                       Icon="{StaticResource IconMenuCompare}"/>
-                            <MenuItem Header="Copy WP Properties to target"
+                            <!--MenuItem Header="Copy WP Properties to target"
                                       Command="{Binding CopyWebPartPropertiesCommand}"
-                                      Icon="{StaticResource IconMenuCopy}"/>
+                                      Icon="{StaticResource IconMenuCopy}"/-->
                             <Separator/>
                             <MenuItem Header="Copy WP properties to clipboard"
                                       Command="{Binding CopyWpToClipboardCommand}"

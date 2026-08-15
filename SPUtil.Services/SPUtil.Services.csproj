@@ -11,6 +11,7 @@
 	<!--PackageReference Include="Microsoft.SharePoint.Client.Online.CSOM" Version="15.0.4919.1000" /-->
 
 	<!-- стало -->
+	<PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
 	<PackageReference Include="Microsoft.SharePoint2016.CSOM" Version="16.0.4690.1000" />
   
   

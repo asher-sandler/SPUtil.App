@@ -1,15 +1,11 @@
+
 using System.Windows;
+using System.Windows.Media;
 
 namespace SPUtil.Views
 {
-    /// <summary>
-    /// Result dialog of a page copy. Replaces a plain MessageBox so the detailed
-    /// report can be offered as a link rather than as a second, equally weighted
-    /// button — the report matters when something went wrong, not every time.
-    /// </summary>
     public partial class CopyCompleteWindow : Window
     {
-        /// <summary>True when the user asked to see the detailed report.</summary>
         public bool ShowReportRequested { get; private set; }
 
         public CopyCompleteWindow(string message, string summary, string warning, bool hasProblems)
@@ -20,13 +16,17 @@ namespace SPUtil.Views
             TxtSummary.Text = summary;
             TxtWarning.Text = warning;
 
-            // The link is always available, but it only draws attention when there is
-            // something to look at.
             if (hasProblems)
             {
                 TxtReportLink.Text       = "⚠ View detailed report — some WebParts were not copied";
-                TxtReportLink.Foreground = System.Windows.Media.Brushes.Firebrick;
+                TxtReportLink.Foreground = Brushes.Firebrick;
                 TxtReportLink.FontWeight = FontWeights.SemiBold;
+
+                // Make the summary box itself impossible to miss at a glance —
+                // the badge plus the red tint, not just the small link below.
+                IconErrorBadge.Visibility = Visibility.Visible;
+                BorderSummary.Background  = new SolidColorBrush(Color.FromRgb(0xFD, 0xEC, 0xEA));
+                BorderSummary.BorderBrush = new SolidColorBrush(Color.FromRgb(0xB0, 0x00, 0x20));
             }
         }
 

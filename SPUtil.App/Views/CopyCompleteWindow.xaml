@@ -19,11 +19,29 @@
         <TextBlock x:Name="TxtMessage" Grid.Row="0"
                    TextWrapping="Wrap" Margin="0,0,0,12"/>
 
-        <Border Grid.Row="1" Background="#F5F7FA" BorderBrush="#DDD" BorderThickness="1"
-                Padding="10,8" Margin="0,0,0,12" CornerRadius="3">
-            <TextBlock x:Name="TxtSummary" TextWrapping="Wrap" FontWeight="SemiBold"/>
-        </Border>
+		<Border x:Name="BorderSummary" Grid.Row="1" Background="#F5F7FA" BorderBrush="#DDD" BorderThickness="1"
+				Padding="10,8" Margin="0,0,0,12" CornerRadius="3">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="*"/>
+				</Grid.ColumnDefinitions>
 
+				<!-- Red "!" badge, hidden by default — shown only when hasProblems is true -->
+				<Border x:Name="IconErrorBadge" Grid.Column="0"
+						Width="18" Height="18" CornerRadius="9"
+						Background="#B00020" Margin="0,0,8,0"
+						VerticalAlignment="Center"
+						Visibility="Collapsed">
+					<TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="12"
+							   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+				</Border>
+
+				<TextBlock x:Name="TxtSummary" Grid.Column="1" TextWrapping="Wrap" FontWeight="SemiBold"/>
+			</Grid>
+		</Border>
+		
+		
         <TextBlock x:Name="TxtWarning" Grid.Row="2"
                    TextWrapping="Wrap" Foreground="#B36B00" FontSize="11"/>
 
