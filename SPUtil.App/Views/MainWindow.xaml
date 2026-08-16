@@ -84,12 +84,14 @@
 				</StackPanel>
 			</StatusBarItem>
 			
-			<StatusBarItem Grid.Column="4">
+			<StatusBarItem Grid.Column="4" 
+						   Cursor="Hand" 
+						   MouseLeftButtonDown="Logo_MouseLeftButtonDown"
+						   ToolTip="About SPUtil">
 				<Image Source="/Views/Huji-BlackLogo.png"
-                       Height="55"
-                       RenderOptions.BitmapScalingMode="HighQuality"/>
+					   Height="55"
+					   RenderOptions.BitmapScalingMode="HighQuality"/>
 			</StatusBarItem>
-
         </StatusBar>
 
         <Menu Grid.Row="1" Background="White" BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" Padding="2">

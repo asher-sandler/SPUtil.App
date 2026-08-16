@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Views\BigColorLogo.png" />
     <None Remove="Views\Huji-BlackLogo.png" />
     <None Remove="Views\HUJI-logo.jpg" />
     <None Remove="Views\אחיד רוחבי שמאל.png" />
@@ -43,6 +44,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Views\BigColorLogo.png" />
     <Resource Include="Views\Huji-BlackLogo.png" />
   </ItemGroup>
 

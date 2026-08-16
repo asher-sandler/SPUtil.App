@@ -34,7 +34,15 @@ namespace SPUtil.App.Views
 			});
 			e.Handled = true;
 		}
-		
+
+		private void Logo_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var aboutWin = new AboutWindow
+            {
+                Owner = this // Указываем главное окно владельцем для корректного центрирования
+            };
+            aboutWin.ShowDialog();
+        }		
 		private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
 		{
 			// 1. Берем уже существующую ViewModel из DataContext окна
