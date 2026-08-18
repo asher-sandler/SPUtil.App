@@ -1217,6 +1217,44 @@ namespace SPUtil.Services
                     report.Entries.Add(entry);
                 }
 
+				// ── Fill missing zone WebParts with a visible warning ──────────────
+				// A zone that failed to receive its real WebPart is guaranteed to exist —
+				// AddWebPartToZoneAsync would not have been attempted otherwise — so a
+				// substitute is always placeable, unlike a text field that may not exist
+				// on every page layout.
+				var failedZoneEntries = report.Entries
+					.Where(e => e.Status == WebPartCopyStatus.Failed && e.Placement == WebPartPlacement.LayoutZone)
+					.ToList();
+
+				if (failedZoneEntries.Count > 0)
+				{
+					int serverMajorVersion = ctx.ServerVersion.Major;
+
+					foreach (var failedEntry in failedZoneEntries)
+					{
+						string message =
+							$"<p>Web Part <b> \"{System.Net.WebUtility.HtmlEncode(failedEntry.Title)}\"</b> not available on this site and cannot be added to this page.<br/>" +
+							$"Please install/activate the corresponding feature on this site and copy the page again, " +
+							$"or contact IT support: <a href=\"mailto:supportsp@savion.huji.ac.il\">supportsp@savion.huji.ac.il</a></p>"+
+							$"<p style=\"font-size:11px;color:#666;\">Technical details: {System.Net.WebUtility.HtmlEncode(failedEntry.Reason)}</p>";
+
+						string warningXml = BuildContentEditorWarningXml(serverMajorVersion, message);
+
+						try
+						{
+							await AddWebPartToZoneAsync(
+								targetSiteUrl, newPageRelUrl, warningXml, failedEntry.ZoneId, failedEntry.Position);
+						}
+						catch (Exception ex)
+						{
+							// The warning itself failing to add must not abort page creation —
+							// the zone stays empty, but the rest of the page still gets created.
+							_logPage.Error(ex,
+								"CreatePage: could not place warning placeholder for '{Title}' in zone={Zone}[{Index}]",
+								failedEntry.Title, failedEntry.ZoneId, failedEntry.Position);
+						}
+					}
+				}
                 // ── Group 2: WebParts inside PublishingPageContent ────────────
                 // Every one of them needs its placeholder GUID remapped: SharePoint
                 // assigns a new ZoneKey server-side and it cannot be predicted, so the
@@ -2363,8 +2401,34 @@ namespace SPUtil.Services
         {
             try   { return read(); }
             catch { return fallback; }
-        }		
-        // ═══════════════════════════════════════════════════════════════════════
+        }
+
+		/// <summary>
+		/// Builds a Content Editor Web Part's import XML carrying a fixed warning
+		/// message — used as a visible placeholder in a layout zone when the real
+		/// WebPart could not be copied. ContentEditorWebPart is core SharePoint,
+		/// present on every farm without any Feature activation; only its Assembly
+		/// version differs by SharePoint generation (major version only — CU-level
+		/// patches don't change it, SharePoint's own web.config binding redirects
+		/// handle that).
+		/// </summary>
+		private static string BuildContentEditorWarningXml(int serverMajorVersion, string htmlMessage)
+		{
+			string assemblyVersion = $"{serverMajorVersion}.0.0.0";
+
+				return $@"<?xml version=""1.0"" encoding=""utf-8""?>
+			<WebPart xmlns=""http://schemas.microsoft.com/WebPart/v2"">
+				<Assembly>Microsoft.SharePoint, Version={assemblyVersion}, Culture=neutral, PublicKeyToken=71e9bce111e9429c</Assembly>
+				<TypeName>Microsoft.SharePoint.WebPartPages.ContentEditorWebPart</TypeName>
+				<Title>A required Web Part is missing from this site.</Title>
+				<Description>Warning placeholder for missing web part</Description>
+				<PartImageLarge>/_layouts/15/images/mscontl.gif</PartImageLarge>
+				<ContentLink xmlns=""http://schemas.microsoft.com/WebPart/v2/ContentEditor"" />
+				<Content xmlns=""http://schemas.microsoft.com/WebPart/v2/ContentEditor""><![CDATA[{htmlMessage}]]></Content>				
+			</WebPart>";
+		}
+		
+		// ═══════════════════════════════════════════════════════════════════════
         //  EnsureSubfolderAsync
         //  Creates the subfolder hierarchy under the Pages library if it doesn't
         //  exist. Returns the deepest Folder object.

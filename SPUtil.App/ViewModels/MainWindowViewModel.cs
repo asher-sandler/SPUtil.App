@@ -86,7 +86,7 @@ namespace SPUtil.App.ViewModels
 		public DelegateCommand ShowSchemaCommand { get; }
         public DelegateCommand ExitCommand { get; }
 
-        public DelegateCommand ExportToUniversalWindowCommand { get; }
+        //public DelegateCommand ExportToUniversalWindowCommand { get; }
 		public DelegateCommand ForgetCredentialsCommand { get; }
 
 
@@ -151,13 +151,13 @@ namespace SPUtil.App.ViewModels
 			}
 		}
 		
-		private string _previewText;
+		private string _previewText = string.Empty;
 		public string PreviewText { get => _previewText; set => SetProperty(ref _previewText, value); }
 
-		private CancellationTokenSource _exportCts;
+		private CancellationTokenSource? _exportCts;
 
-		private ObservableCollection<DialogButton> _dialogButtons;
-		public ObservableCollection<DialogButton> DialogButtons { get => _dialogButtons; set => SetProperty(ref _dialogButtons, value); }		
+		private ObservableCollection<DialogButton> _dialogButtons = new();
+        public ObservableCollection<DialogButton> DialogButtons { get => _dialogButtons; set => SetProperty(ref _dialogButtons, value); }		
         private async void CheckService()
         {
             bool isAlive = await _cloneService.TestCloneServiceConnectionAsync();
@@ -438,7 +438,8 @@ namespace SPUtil.App.ViewModels
 			ConnectionStatus = "Loading structure...";
 			return await _spService.GetSiteStructureAsync(url);
 		}		
-        private async Task<ObservableCollection<SPNode>> ConnectWithAuthRetry(string url)
+        /*
+		private async Task<ObservableCollection<SPNode>> ConnectWithAuthRetry(string url)
         {
             while (true) // Цикл для повтора при ошибке
             {
@@ -469,7 +470,7 @@ namespace SPUtil.App.ViewModels
                 }
             }
         }
-
+		*/
 
         /// <summary>
         /// Prompts for credentials and stores them under the profile of the domain that
@@ -850,7 +851,7 @@ namespace SPUtil.App.ViewModels
 					var rightSchemas = await _spService.GetListSchemaAsync(RightSiteUrl, listTitle);
 
 					// Выполняем сравнение в фоновом потоке
-					string report = await Task.Run(() => CompareTwoLists(leftSchemas, rightSchemas,LeftSiteUrl,RightSiteUrl));
+					string report = await Task.Run(() => CompareTwoLists(leftSchemas, rightSchemas,LeftSiteUrl,RightSiteUrl, listTitle));
 					
 					PreviewText = report;
 					StatusMessage = "Compare complete.";
@@ -865,9 +866,9 @@ namespace SPUtil.App.ViewModels
 
 			win.ShowDialog();
 		}
-		private async Task<string> CompareTwoLists(List<string> leftFieldsXml, List<string> rightFieldsXml, string leftSiteUrl, string rightSiteUrl)
-		{
-			string leftListTitle = SelectedLeftNode.Title;
+        private async Task<string> CompareTwoLists(List<string> leftFieldsXml, List<string> rightFieldsXml, string leftSiteUrl, string rightSiteUrl, string leftListTitle)
+        {
+            
 			var sb = new System.Text.StringBuilder();
 			sb.AppendLine($"--- Comparison Report ---");
 			sb.AppendLine($"Source URL: {leftSiteUrl}");
@@ -899,11 +900,18 @@ namespace SPUtil.App.ViewModels
 					// --- ЛОГИКА ДЛЯ LOOKUP ---
 					if (GetFieldType(leftRaw) == "Lookup" && GetFieldType(rightRaw) == "Lookup")
 					{
-						string leftListId = GetAttributeFromXml(leftRaw, "List");
-						string rightListId = GetAttributeFromXml(rightRaw, "List");
+						string? leftListId = GetAttributeFromXml(leftRaw, "List");
+						string? rightListId = GetAttributeFromXml(rightRaw, "List");
 
-						// Получаем реальные имена списков
-						string leftListName = await _spService.GetListNameByIdAsync(leftSiteUrl, leftListId);
+                        if (leftListId == null || rightListId == null)
+                        {
+                            hasDiffs = true;
+                            sb.AppendLine($"FIELD: {name} (Lookup target could not be resolved — missing 'List' attribute in schema)");
+                            continue;
+                        }
+
+                        // Получаем реальные имена списков
+                        string leftListName = await _spService.GetListNameByIdAsync(leftSiteUrl, leftListId);
 						string rightListName = await _spService.GetListNameByIdAsync(rightSiteUrl, rightListId);
 
 						// Если имена списков совпали — игнорируем разницу в XML (в GUID-ах)
@@ -941,7 +949,7 @@ namespace SPUtil.App.ViewModels
 			return sb.ToString();
 		}
 		// Вспомогательный метод для извлечения атрибутов из сырого XML
-		private string GetAttributeFromXml(string xml, string attrName)
+		private string? GetAttributeFromXml(string xml, string attrName)
 		{
 			try {
 				var el = System.Xml.Linq.XElement.Parse(xml);
@@ -949,14 +957,14 @@ namespace SPUtil.App.ViewModels
 			} catch { return null; }
 		}
 		// Вспомогательный метод: создаем словарь [InternalName] -> [SchemaXml]
-		private Dictionary<string, string> ParseFieldsToDictionary(List<string> xmls)
+		private static Dictionary<string, string> ParseFieldsToDictionary(List<string> xmls)
 		{
 			var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 			foreach (var xml in xmls)
 			{
 				try {
 					var el = System.Xml.Linq.XElement.Parse(xml);
-					string name = el.Attribute("Name")?.Value;
+					string? name = el.Attribute("Name")?.Value;
 					if (!string.IsNullOrEmpty(name)) dict[name] = xml;
 				} catch { /* ignore malformed XML */ }
 			}
@@ -1155,22 +1163,28 @@ namespace SPUtil.App.ViewModels
 			foreach (var xml in rawSchemas)
 			{
 				var el = System.Xml.Linq.XElement.Parse(xml);
-				string name = el.Attribute("Name")?.Value;
-				string type = el.Attribute("Type")?.Value;
+                string? name = el.Attribute("Name")?.Value;
+                string? type = el.Attribute("Type")?.Value;
 
-				if (string.IsNullOrEmpty(name)) continue;
-				
-				// Пропускаем ID, так как мы его уже добавили вручную как SPID
-				if (name.Equals("ID", StringComparison.OrdinalIgnoreCase))
-				{
-					internalNames.Add(name); // Добавляем в список для маппинга данных
-					continue; 
-				}
-				
-				internalNames.Add(name); 
-				string sqlType = GetSqlType(type);
-				columns.Add($"        [{name}] {sqlType} NULL");
-			}
+                if (string.IsNullOrEmpty(name)) continue;
+
+                // Пропускаем ID, так как мы его уже добавили вручную как SPID
+                if (name.Equals("ID", StringComparison.OrdinalIgnoreCase))
+                {
+                    internalNames.Add(name);
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(type))
+                {
+                    _log.Warning("Field '{Name}' has no Type attribute in schema — skipped from SQL export", name);
+                    continue;
+                }
+
+                internalNames.Add(name);
+                string sqlType = GetSqlType(type);
+                columns.Add($"        [{name}] {sqlType} NULL");
+            }
 
 			sb.AppendLine(string.Join("," + Environment.NewLine, columns));
 			sb.AppendLine("    );");
@@ -1196,14 +1210,14 @@ namespace SPUtil.App.ViewModels
 				// Формируем список имен колонок (заменяем ID на SPID)
 				var colNames = string.Join(", ", internalNames.Select(n => 
 					n.Equals("ID", StringComparison.OrdinalIgnoreCase) ? "[SPID]" : $"[{n}]"));
+                
+				var values = internalNames.Select(col =>
+                {
+                    object? val = item.Values.TryGetValue(col, out object? value) ? value : null;
+                    return SqlEscape(val);
+                });
 
-				var values = internalNames.Select(col => 
-				{
-					object val = item.Values.ContainsKey(col) ? item.Values[col] : null;
-					return SqlEscape(val); 
-				});
-
-				sb.AppendLine($"INSERT INTO [dbo].[{tableName}] ({colNames}) VALUES ({string.Join(", ", values)});");
+                sb.AppendLine($"INSERT INTO [dbo].[{tableName}] ({colNames}) VALUES ({string.Join(", ", values)});");
 				// Каждые 50 строк обновляем статус-бар, чтобы не перегружать UI
 				if (i % 50 == 0 || i == total - 1)
 				{
@@ -1216,28 +1230,24 @@ namespace SPUtil.App.ViewModels
 
 			return sb.ToString();
 		}
-		
-		private string SqlEscape(object val)
-		{
-			if (val == null || val == DBNull.Value) return "NULL";
-			
-			// ПРОВЕРКА НА ДАТУ: Самый важный момент
-			if (val is DateTime dt)
-			{
-				// Формат 'YYYY-MM-DDTHH:mm:ss' понимает любой SQL Server
-				return $"'{dt.ToString("yyyy-MM-ddTHH:mm:ss")}'";
-			}
 
-			string s = "";
-			if (val is Microsoft.SharePoint.Client.FieldLookupValue lv) s = lv.LookupValue;
-			else if (val is Microsoft.SharePoint.Client.FieldUserValue uv) s = uv.LookupValue;
-			else s = val.ToString();
+        private static string SqlEscape(object? val)
+        {
+            if (val == null || val == DBNull.Value) return "NULL";
 
-			// Для строк оставляем префикс N и экранирование кавычек
-			return $"N'{s.Replace("'", "''")}'";
-		}
+            if (val is DateTime dt)
+            {
+                return $"'{dt.ToString("yyyy-MM-ddTHH:mm:ss")}'";
+            }
 
-		private async Task<string> GenerateCsvData(string listTitle, IProgress<int> progress, CancellationToken ct)
+            string s;
+            if (val is Microsoft.SharePoint.Client.FieldLookupValue lv) s = lv.LookupValue ?? string.Empty;
+            else if (val is Microsoft.SharePoint.Client.FieldUserValue uv) s = uv.LookupValue ?? string.Empty;
+            else s = val.ToString() ?? string.Empty;
+
+            return $"N'{s.Replace("'", "''")}'";
+        }
+        private async Task<string> GenerateCsvData(string listTitle, IProgress<int> progress, CancellationToken ct)
 		{
 			// 1. Получаем схемы (XML)
 			// Передаем ct в сервис, чтобы прервать сетевой запрос при закрытии окна
@@ -1252,16 +1262,21 @@ namespace SPUtil.App.ViewModels
 				ct
 			);
 
-			// Подготовка списка колонок
-			var columns = rawSchemas.Select(xml => {
-				try {
-					var el = System.Xml.Linq.XElement.Parse(xml);
-					return el.Attribute("Name")?.Value;
-				} catch { return null; }
-			}).Where(n => !string.IsNullOrEmpty(n)).ToList();
+            // Подготовка списка колонок
+            var columns = rawSchemas.Select(xml => {
+                try
+                {
+                    var el = System.Xml.Linq.XElement.Parse(xml);
+                    return el.Attribute("Name")?.Value;
+                }
+                catch { return null; }
+            })
+			.Where(n => !string.IsNullOrEmpty(n))
+			.Select(n => n!)   // Where выше уже гарантирует не-null/не-пусто — снимаем формальный "?"
+			.ToList();
 
-			// 3. Генерация текста в фоновом потоке
-			return await Task.Run(() => 
+            // 3. Генерация текста в фоновом потоке
+            return await Task.Run(() => 
 			{
 				var sb = new System.Text.StringBuilder();
 				int total = items.Count;
@@ -1313,12 +1328,12 @@ namespace SPUtil.App.ViewModels
 				"Lookup"  => "NVARCHAR(255)",
 				_         => "NVARCHAR(255)"  // Значение по умолчанию для Text и прочих
 			};
-		}		
+		}
 		// Вспомогательный метод для экранирования CSV (чтобы запятые внутри текста не ломали структуру)
 		private string CsvEscape(object val)
 		{
 			if (val == null) return "";
-			
+
 			string s = "";
 
 			if (val is DateTime dt)
@@ -1327,26 +1342,25 @@ namespace SPUtil.App.ViewModels
 				return $"{dt.ToString("yyyy-MM-dd HH:mm:ss")}";
 			}
 
-
 			// Обработка специфических типов SharePoint
-			if (val is Microsoft.SharePoint.Client.FieldLookupValue lv) s = lv.LookupValue;
-			else if (val is Microsoft.SharePoint.Client.FieldUserValue uv) s = uv.LookupValue;
-			else s = val.ToString();
+			if (val is Microsoft.SharePoint.Client.FieldLookupValue lv) s = lv.LookupValue ?? string.Empty;
+			else if (val is Microsoft.SharePoint.Client.FieldUserValue uv) s = uv.LookupValue ?? string.Empty;
+			else s = val.ToString() ?? string.Empty;
 
 			// Если в тексте есть запятая, кавычка или перенос строки — оборачиваем в кавычки
 			if (s.Contains(",") || s.Contains("\"") || s.Contains("\n") || s.Contains("\r"))
 			{
 				return $"\"{s.Replace("\"", "\"\"")}\"";
 			}
-			
+
 			return s;
 		}
-		
-		/// <summary>
-		/// Removes every stored credential profile — used when the workstation changes
-		/// hands, or after a password change in AD.
-		/// </summary>
-		private void OnForgetCredentials()
+
+        /// <summary>
+        /// Removes every stored credential profile — used when the workstation changes
+        /// hands, or after a password change in AD.
+        /// </summary>
+        private void OnForgetCredentials()
 		{
 			var domains = SPUsingUtils.GetProfileDomains();
 

@@ -136,7 +136,7 @@ namespace SPUtil.Views
                 // The folder is created if it does not exist, so a typo silently produces
                 // a new folder rather than an error. Only genuinely invalid input is
                 // rejected here.
-                string problem = ValidateFolder(folder);
+                string? problem = ValidateFolder(folder);
                 if (problem != null)
                 {
                     MessageBox.Show(problem, "Invalid folder",
@@ -150,7 +150,7 @@ namespace SPUtil.Views
         }
 
         /// <summary>Returns an error message, or null when the path is acceptable.</summary>
-        private static string ValidateFolder(string folder)
+        private static string? ValidateFolder(string folder)
         {
             if (folder.IndexOfAny(InvalidFolderChars) >= 0)
                 return "A folder name cannot contain any of:  ~ \" # % & * : < > ? \\ { | }";
