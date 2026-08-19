@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using Serilog;
 using HtmlAgilityPack;
 using System.Threading.Tasks;
+using System.Net.Http;
 
 namespace SPUtil.Services
 {
@@ -351,7 +352,23 @@ namespace SPUtil.Services
                 }
 
                 // ── C: Fetch rendered HTML to get webpartid / webpartid2 mapping ──
-                string renderedHtml = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
+				string renderedHtml;
+				try
+				{
+					renderedHtml = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
+				}
+				catch (HttpRequestException ex) when (ex.Message.Contains("404"))
+				{
+					// pageFile.Exists was already confirmed true above — the file is real.
+					// A 404 specifically on the RENDERED page means it has never been
+					// checked in: SharePoint has nothing to serve at this URL outside
+					// of edit mode until at least one version is published.
+					_logPage.Warning(
+						"GetPageSnapshot: page has no published version — {Url}", pageRelativeUrl);
+					throw new InvalidOperationException(
+						$"This page has never been checked in.\n\n" +
+						$"Save at least one version (Check In) before copying:\n{pageRelativeUrl}");
+				}
                 var zoneKeyToStorageKey = ParseZoneKeyToStorageKey(renderedHtml);
 
                 // ── DIAGNOSTICS ──────────────────────────────────────────────
@@ -498,7 +515,7 @@ namespace SPUtil.Services
             return xmlRaw.TrimStart('\uFEFF');
         }
 
-
+        /*
         // ═══════════════════════════════════════════════════════════════════════
         //  14. CheckOut / CheckIn / Publish как отдельные методы
         // ═══════════════════════════════════════════════════════════════════════
@@ -530,7 +547,7 @@ namespace SPUtil.Services
             file.Publish(comment);
             await Task.Run(() => ctx.ExecuteQuery());
         }
-
+        */
 
         // ═══════════════════════════════════════════════════════════════════════
         //  5. AddWebPartAsync
@@ -554,79 +571,94 @@ namespace SPUtil.Services
 
                 await SafeCheckOutAsync(ctx, pageFile);
 
-                // ── Register WebPart in wpz zone ──
-                var wpm = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
-                var imported   = wpm.ImportWebPart(webPartXml);
-                var definition = wpm.AddWebPart(imported.WebPart, "wpz", 0);
-                ctx.Load(definition, d => d.Id);
-                await Task.Run(() => ctx.ExecuteQuery());
-
-                string storageKey = definition.Id.ToString("D");
-
-                // ── Fetch rendered HTML to get ZoneKey (webpartid2) ──
-                // After AddWebPart+ExecuteQuery the WebPart is registered.
-                // We need to render the page to discover its ZoneKey.
-                // SharePoint generates ZoneKey server-side — we cannot predict it.
-                string renderedHtml       = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
-                var zoneKeyToStorageKey   = ParseZoneKeyToStorageKey(renderedHtml);
-
-                // Find the ZoneKey that corresponds to our new StorageKey
-                string zoneKey = zoneKeyToStorageKey
-                    .FirstOrDefault(kv =>
-                        kv.Value.Equals(storageKey, StringComparison.OrdinalIgnoreCase))
-                    .Key ?? Guid.NewGuid().ToString("D");
-
-                // ── Insert placeholder into PublishingPageContent ──
-                ctx.Load(pageFile.ListItemAllFields);
-                await Task.Run(() => ctx.ExecuteQuery());
-                var fields   = pageFile.ListItemAllFields;
-                var existing = fields["PublishingPageContent"]?.ToString() ?? "";
-
-                string placeholder = BuildWpBoxPlaceholder(zoneKey);
-                string newHtml;
-
-                if (position <= 0 || string.IsNullOrEmpty(existing))
+                bool checkedIn = false;
+                try
                 {
-                    // Append at the end
-                    newHtml = existing + "\r\n" + placeholder + "\r\n<p><br/></p>";
-                }
-                else
-                {
-                    // Insert at specific visual position
-                    var zoneKeys = ParseZoneKeysInOrder(existing);
+                    // ── Register WebPart in wpz zone ──
+                    var wpm = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
+                    var imported = wpm.ImportWebPart(webPartXml);
+                    var definition = wpm.AddWebPart(imported.WebPart, "wpz", 0);
+                    ctx.Load(definition, d => d.Id);
+                    await Task.Run(() => ctx.ExecuteQuery());
 
-                    if (position > zoneKeys.Count)
+                    string storageKey = definition.Id.ToString("D");
+
+                    string renderedHtml = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
+                    var zoneKeyToStorageKey = ParseZoneKeyToStorageKey(renderedHtml);
+
+                    string zoneKey = zoneKeyToStorageKey
+                        .FirstOrDefault(kv =>
+                            kv.Value.Equals(storageKey, StringComparison.OrdinalIgnoreCase))
+                        .Key ?? Guid.NewGuid().ToString("D");
+
+                    ctx.Load(pageFile.ListItemAllFields);
+                    await Task.Run(() => ctx.ExecuteQuery());
+                    var fields = pageFile.ListItemAllFields;
+                    var existing = fields["PublishingPageContent"]?.ToString() ?? "";
+
+                    string placeholder = BuildWpBoxPlaceholder(zoneKey);
+                    string newHtml;
+
+                    if (position <= 0 || string.IsNullOrEmpty(existing))
                     {
-                        // Position beyond end — append
                         newHtml = existing + "\r\n" + placeholder + "\r\n<p><br/></p>";
                     }
                     else
                     {
-                        // Insert before the WebPart currently at [position]
-                        string targetZoneKey = zoneKeys[position - 1];
-                        string insertPattern =
-                            @"(<div[^>]*ms-rte-wpbox[^>]*>.*?" +
-                            Regex.Escape(targetZoneKey) +
-                            @".*?</div>\s*</div>\s*</div>)";
+                        var zoneKeys = ParseZoneKeysInOrder(existing);
 
-                        newHtml = Regex.Replace(
-                            existing,
-                            insertPattern,
-                            placeholder + "\r\n$1",
-                            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                        if (position > zoneKeys.Count)
+                        {
+                            newHtml = existing + "\r\n" + placeholder + "\r\n<p><br/></p>";
+                        }
+                        else
+                        {
+                            string targetZoneKey = zoneKeys[position - 1];
+                            string insertPattern =
+                                @"(<div[^>]*ms-rte-wpbox[^>]*>.*?" +
+                                Regex.Escape(targetZoneKey) +
+                                @".*?</div>\s*</div>\s*</div>)";
+
+                            newHtml = Regex.Replace(
+                                existing,
+                                insertPattern,
+                                placeholder + "\r\n$1",
+                                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                        }
+                    }
+
+                    fields["PublishingPageContent"] = newHtml;
+                    fields.Update();
+                    await Task.Run(() => ctx.ExecuteQuery());
+
+                    await CheckInAndPublishAsync(ctx, pageFile, $"Added WebPart {storageKey}");
+                    checkedIn = true;
+
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[AddWebPart] OK. StorageKey={storageKey}, ZoneKey={zoneKey}");
+
+                    return storageKey;
+                }
+                finally
+                {
+                    if (!checkedIn)
+                    {
+                        try
+                        {
+                            pageFile.UndoCheckOut();
+                            await Task.Run(() => ctx.ExecuteQuery());
+                            _logPage.Warning(
+                                "AddWebPartAsync: operation failed — checkout discarded for {Page}",
+                                pageRelativeUrl);
+                        }
+                        catch (Exception cleanupEx)
+                        {
+                            _logPage.Error(cleanupEx,
+                                "AddWebPartAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+                                pageRelativeUrl);
+                        }
                     }
                 }
-
-                fields["PublishingPageContent"] = newHtml;
-                fields.Update();
-                await Task.Run(() => ctx.ExecuteQuery());
-
-                await CheckInAndPublishAsync(ctx, pageFile, $"Added WebPart {storageKey}");
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[AddWebPart] OK. StorageKey={storageKey}, ZoneKey={zoneKey}");
-
-                return storageKey;
             });
         }
 
@@ -650,53 +682,78 @@ namespace SPUtil.Services
 
                 await SafeCheckOutAsync(ctx, pageFile);
 
-                // ── Find ZoneKey before deleting the WebPart object ──
-                string renderedHtml     = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
-                var zoneKeyToStorageKey = ParseZoneKeyToStorageKey(renderedHtml);
-
-                string zoneKey = zoneKeyToStorageKey
-                    .FirstOrDefault(kv =>
-                        kv.Value.Equals(storageKey, StringComparison.OrdinalIgnoreCase))
-                    .Key ?? string.Empty;
-
-                // ── Delete WebPart object from wpz ──
-                var wpm = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
-                ctx.Load(wpm.WebParts, wps => wps.Include(d => d.Id));
-                await Task.Run(() => ctx.ExecuteQuery());
-
-                var definition = wpm.WebParts
-                    .FirstOrDefault(d =>
-                        d.Id.ToString("D").Equals(storageKey, StringComparison.OrdinalIgnoreCase));
-
-                if (definition != null)
+                bool checkedIn = false;
+                try
                 {
-                    definition.DeleteWebPart();
+                    // ── Find ZoneKey before deleting the WebPart object ──
+                    string renderedHtml = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
+                    var zoneKeyToStorageKey = ParseZoneKeyToStorageKey(renderedHtml);
+
+                    string zoneKey = zoneKeyToStorageKey
+                        .FirstOrDefault(kv =>
+                            kv.Value.Equals(storageKey, StringComparison.OrdinalIgnoreCase))
+                        .Key ?? string.Empty;
+
+                    // ── Delete WebPart object from wpz ──
+                    var wpm = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
+                    ctx.Load(wpm.WebParts, wps => wps.Include(d => d.Id));
                     await Task.Run(() => ctx.ExecuteQuery());
-                }
-                else
-                {
+
+                    var definition = wpm.WebParts
+                        .FirstOrDefault(d =>
+                            d.Id.ToString("D").Equals(storageKey, StringComparison.OrdinalIgnoreCase));
+
+                    if (definition != null)
+                    {
+                        definition.DeleteWebPart();
+                        await Task.Run(() => ctx.ExecuteQuery());
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[DeleteWebPart] WebPart {storageKey} not found in WebPartManager");
+                    }
+
+                    // ── Remove placeholder from PublishingPageContent ──
+                    if (!string.IsNullOrEmpty(zoneKey))
+                    {
+                        ctx.Load(pageFile.ListItemAllFields);
+                        await Task.Run(() => ctx.ExecuteQuery());
+                        var fields = pageFile.ListItemAllFields;
+                        var html = fields["PublishingPageContent"]?.ToString() ?? "";
+                        var newHtml = RemovePlaceholderFromHtml(html, zoneKey);
+
+                        fields["PublishingPageContent"] = newHtml;
+                        fields.Update();
+                        await Task.Run(() => ctx.ExecuteQuery());
+                    }
+
+                    await CheckInAndPublishAsync(ctx, pageFile, $"Deleted WebPart {storageKey}");
+                    checkedIn = true;
+
                     System.Diagnostics.Debug.WriteLine(
-                        $"[DeleteWebPart] WebPart {storageKey} not found in WebPartManager");
+                        $"[DeleteWebPart] OK. StorageKey={storageKey}, ZoneKey={zoneKey}");
                 }
-
-                // ── Remove placeholder from PublishingPageContent ──
-                if (!string.IsNullOrEmpty(zoneKey))
+                finally
                 {
-                    ctx.Load(pageFile.ListItemAllFields);
-                    await Task.Run(() => ctx.ExecuteQuery());
-                    var fields  = pageFile.ListItemAllFields;
-                    var html    = fields["PublishingPageContent"]?.ToString() ?? "";
-                    var newHtml = RemovePlaceholderFromHtml(html, zoneKey);
-
-                    fields["PublishingPageContent"] = newHtml;
-                    fields.Update();
-                    await Task.Run(() => ctx.ExecuteQuery());
+                    if (!checkedIn)
+                    {
+                        try
+                        {
+                            pageFile.UndoCheckOut();
+                            await Task.Run(() => ctx.ExecuteQuery());
+                            _logPage.Warning(
+                                "DeleteWebPartAsync: operation failed — checkout discarded for {Page}",
+                                pageRelativeUrl);
+                        }
+                        catch (Exception cleanupEx)
+                        {
+                            _logPage.Error(cleanupEx,
+                                "DeleteWebPartAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+                                pageRelativeUrl);
+                        }
+                    }
                 }
-
-                await CheckInAndPublishAsync(ctx, pageFile, $"Deleted WebPart {storageKey}");
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[DeleteWebPart] OK. StorageKey={storageKey}, ZoneKey={zoneKey}");
             });
         }
 
@@ -732,87 +789,108 @@ namespace SPUtil.Services
                 ctx.Load(pageFile);
                 await Task.Run(() => ctx.ExecuteQuery());
 
-                await SafeCheckOutAsync(ctx, pageFile);
+				await SafeCheckOutAsync(ctx, pageFile);
 
-                var wpm = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
-                ctx.Load(wpm.WebParts, wps => wps.Include(
-                    d => d.Id,
-                    d => d.WebPart.Title,
-                    d => d.WebPart.Properties));
-                await Task.Run(() => ctx.ExecuteQuery());
+				bool checkedIn = false;
+				try
+				{
+					var wpm = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
+					ctx.Load(wpm.WebParts, wps => wps.Include(
+						d => d.Id,
+						d => d.WebPart.Title,
+						d => d.WebPart.Properties));
+					await Task.Run(() => ctx.ExecuteQuery());
 
-                // Build index for quick lookup
-                var defByKey = wpm.WebParts.ToDictionary(
-                    d => d.Id.ToString("D"),
-                    d => d,
-                    StringComparer.OrdinalIgnoreCase);
+					// Build index for quick lookup
+					var defByKey = wpm.WebParts.ToDictionary(
+						d => d.Id.ToString("D"),
+						d => d,
+						StringComparer.OrdinalIgnoreCase);
 
-                bool needsHtmlUpdate = false;
-                string currentHtml   = string.Empty;
+					bool needsHtmlUpdate = false;
+					string currentHtml   = string.Empty;
 
-                foreach (var req in requests)
-                {
-                    if (!defByKey.TryGetValue(req.StorageKey, out var def))
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[UpdateWebParts] StorageKey {req.StorageKey} not found");
-                        continue;
-                    }
+					foreach (var req in requests)
+					{
+						if (!defByKey.TryGetValue(req.StorageKey, out var def))
+						{
+							System.Diagnostics.Debug.WriteLine(
+								$"[UpdateWebParts] StorageKey {req.StorageKey} not found");
+							continue;
+						}
 
-                    // Update Title
-                    if (req.NewTitle != null)
-                        def.WebPart.Title = req.NewTitle;
+						// Update Title
+						if (req.NewTitle != null)
+							def.WebPart.Title = req.NewTitle;
 
-                    // Update properties
-                    foreach (var kv in req.PropertiesToUpdate)
-                        def.WebPart.Properties[kv.Key] = kv.Value;
+						// Update properties
+						foreach (var kv in req.PropertiesToUpdate)
+							def.WebPart.Properties[kv.Key] = kv.Value;
 
-                    def.SaveWebPartChanges();
+						def.SaveWebPartChanges();
 
-                    // Reorder if requested
-                    if (req.NewVisualPosition.HasValue)
-                        needsHtmlUpdate = true;
-                }
+						// Reorder if requested
+						if (req.NewVisualPosition.HasValue)
+							needsHtmlUpdate = true;
+					}
 
-                await Task.Run(() => ctx.ExecuteQuery());
+					await Task.Run(() => ctx.ExecuteQuery());
 
-                // ── Reorder in HTML if any request asked for it ──
-                if (needsHtmlUpdate)
-                {
-                    ctx.Load(pageFile.ListItemAllFields);
-                    await Task.Run(() => ctx.ExecuteQuery());
+					// ── Reorder in HTML if any request asked for it ──
+					if (needsHtmlUpdate)
+					{
+						ctx.Load(pageFile.ListItemAllFields);
+						await Task.Run(() => ctx.ExecuteQuery());
 
-                    var fields = pageFile.ListItemAllFields;
-                    currentHtml = fields["PublishingPageContent"]?.ToString() ?? "";
+						var fields = pageFile.ListItemAllFields;
+						currentHtml = fields["PublishingPageContent"]?.ToString() ?? "";
 
-                    // Build new order: requests with NewVisualPosition override,
-                    // others stay in original order
-                    var zoneKeys = ParseZoneKeysInOrder(currentHtml);
+						var zoneKeys = ParseZoneKeysInOrder(currentHtml);
 
-                    // For each request that has NewVisualPosition,
-                    // find its ZoneKey via rendered HTML and move it
-                    string renderedHtml       = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
-                    var zoneKeyToStorageKey   = ParseZoneKeyToStorageKey(renderedHtml);
-                    var storageKeyToZoneKey   = zoneKeyToStorageKey
-                        .ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.OrdinalIgnoreCase);
+						string renderedHtml       = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
+						var zoneKeyToStorageKey   = ParseZoneKeyToStorageKey(renderedHtml);
+						var storageKeyToZoneKey   = zoneKeyToStorageKey
+							.ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.OrdinalIgnoreCase);
 
-                    foreach (var req in requests.Where(r => r.NewVisualPosition.HasValue))
-                    {
-                        if (!storageKeyToZoneKey.TryGetValue(req.StorageKey, out var zk)) continue;
+						foreach (var req in requests.Where(r => r.NewVisualPosition.HasValue))
+						{
+							if (!storageKeyToZoneKey.TryGetValue(req.StorageKey, out var zk)) continue;
 
-                        zoneKeys.Remove(zk);
-                        int insertAt = Math.Min(req.NewVisualPosition!.Value - 1, zoneKeys.Count);
-                        insertAt     = Math.Max(0, insertAt);
-                        zoneKeys.Insert(insertAt, zk);
-                    }
+							zoneKeys.Remove(zk);
+							int insertAt = Math.Min(req.NewVisualPosition!.Value - 1, zoneKeys.Count);
+							insertAt     = Math.Max(0, insertAt);
+							zoneKeys.Insert(insertAt, zk);
+						}
 
-                    // Rebuild PublishingHtml in new order
-                    fields["PublishingPageContent"] = RebuildHtmlInOrder(currentHtml, zoneKeys);
-                    fields.Update();
-                    await Task.Run(() => ctx.ExecuteQuery());
-                }
+						fields["PublishingPageContent"] = RebuildHtmlInOrder(currentHtml, zoneKeys);
+						fields.Update();
+						await Task.Run(() => ctx.ExecuteQuery());
+					}
 
-                await CheckInAndPublishAsync(ctx, pageFile, "Updated WebParts");
+					await CheckInAndPublishAsync(ctx, pageFile, "Updated WebParts");
+					checkedIn = true;
+				}
+				finally
+				{
+					if (!checkedIn)
+					{
+						try
+						{
+							pageFile.UndoCheckOut();
+							await Task.Run(() => ctx.ExecuteQuery());
+							_logPage.Warning(
+								"UpdateAllWebPartsAsync: operation failed — checkout discarded for {Page}",
+								pageRelativeUrl);
+						}
+						catch (Exception cleanupEx)
+						{
+							_logPage.Error(cleanupEx,
+								"UpdateAllWebPartsAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+								pageRelativeUrl);
+						}
+					}
+				}
+
             });
         }
         // ═══════════════════════════════════════════════════════════════════════
@@ -850,33 +928,53 @@ namespace SPUtil.Services
                 ctx.Load(pageFile, f => f.ListItemAllFields);
                 await Task.Run(() => ctx.ExecuteQuery());
 
-                await SafeCheckOutAsync(ctx, pageFile);
+				await SafeCheckOutAsync(ctx, pageFile);
 
-                // ── Register the WebPart in the requested layout zone ──
-                // CSOM cannot enumerate the zones of a page: LimitedWebPartManager
-                // never instantiates the layout. AddWebPart therefore accepts any
-                // zoneId without validation — an unknown zone yields a WebPart that
-                // is stored on the page but rendered nowhere. Detection of that case
-                // is done once per page after all WebParts are added, not here.
-                var wpm        = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
-                var imported   = wpm.ImportWebPart(webPartXml);
-                var definition = wpm.AddWebPart(imported.WebPart, zoneId, zoneIndex);
-                ctx.Load(definition, d => d.Id);
-                await Task.Run(() => ctx.ExecuteQuery());
+				bool checkedIn = false;
+				try
+				{
+					// ── Register the WebPart in the requested layout zone ──
+					var wpm        = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
+					var imported   = wpm.ImportWebPart(webPartXml);
+					var definition = wpm.AddWebPart(imported.WebPart, zoneId, zoneIndex);
+					ctx.Load(definition, d => d.Id);
+					await Task.Run(() => ctx.ExecuteQuery());
 
-                string storageKey = definition.Id.ToString("D");
+					string storageKey = definition.Id.ToString("D");
 
-                await CheckInAndPublishAsync(ctx, pageFile,
-                    $"Added WebPart {storageKey} to zone {zoneId}[{zoneIndex}]");
+					await CheckInAndPublishAsync(ctx, pageFile,
+						$"Added WebPart {storageKey} to zone {zoneId}[{zoneIndex}]");
+					checkedIn = true;
 
-                _logPage.Information(
-                    "AddWebPartToZone: {Page} zone={Zone}[{Index}] storageKey={Key}",
-                    pageRelativeUrl, zoneId, zoneIndex, storageKey);
+					_logPage.Information(
+						"AddWebPartToZone: {Page} zone={Zone}[{Index}] storageKey={Key}",
+						pageRelativeUrl, zoneId, zoneIndex, storageKey);
 
-                System.Diagnostics.Debug.WriteLine(
-                    $"[AddWebPartToZone] OK. Zone={zoneId}[{zoneIndex}] StorageKey={storageKey}");
+					System.Diagnostics.Debug.WriteLine(
+						$"[AddWebPartToZone] OK. Zone={zoneId}[{zoneIndex}] StorageKey={storageKey}");
 
-                return storageKey;
+					return storageKey;
+				}
+				finally
+				{
+					if (!checkedIn)
+					{
+						try
+						{
+							pageFile.UndoCheckOut();
+							await Task.Run(() => ctx.ExecuteQuery());
+							_logPage.Warning(
+								"AddWebPartToZoneAsync: operation failed — checkout discarded for {Page}",
+								pageRelativeUrl);
+						}
+						catch (Exception cleanupEx)
+						{
+							_logPage.Error(cleanupEx,
+								"AddWebPartToZoneAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+								pageRelativeUrl);
+						}
+					}
+				}
             });
         }
         // ═══════════════════════════════════════════════════════════════════════
@@ -917,36 +1015,62 @@ namespace SPUtil.Services
                 ctx.Load(pageFile, f => f.ListItemAllFields);
                 await Task.Run(() => ctx.ExecuteQuery());
 
-                await SafeCheckOutAsync(ctx, pageFile);
+				await SafeCheckOutAsync(ctx, pageFile);
 
-                // Map StorageKey → ZoneKey via rendered HTML
-                string renderedHtml       = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
-                var zoneKeyToStorageKey   = ParseZoneKeyToStorageKey(renderedHtml);
-                var storageKeyToZoneKey   = zoneKeyToStorageKey
-                    .ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.OrdinalIgnoreCase);
+				bool checkedIn = false;
+				try
+				{
+					// Map StorageKey → ZoneKey via rendered HTML
+					string renderedHtml       = await FetchPageHtmlAsync(siteUrl, pageRelativeUrl);
+					var zoneKeyToStorageKey   = ParseZoneKeyToStorageKey(renderedHtml);
+					var storageKeyToZoneKey   = zoneKeyToStorageKey
+						.ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.OrdinalIgnoreCase);
 
-                // Build new ZoneKey order
-                var newZoneKeyOrder = orderedStorageKeys
-                    .Where(sk => storageKeyToZoneKey.ContainsKey(sk))
-                    .Select(sk => storageKeyToZoneKey[sk])
-                    .ToList();
+					// Build new ZoneKey order
+					var newZoneKeyOrder = orderedStorageKeys
+						.Where(sk => storageKeyToZoneKey.ContainsKey(sk))
+						.Select(sk => storageKeyToZoneKey[sk])
+						.ToList();
 
-                ctx.Load(pageFile.ListItemAllFields);
-                await Task.Run(() => ctx.ExecuteQuery());
-                var fields      = pageFile.ListItemAllFields;
-                var currentHtml = fields["PublishingPageContent"]?.ToString() ?? "";
+					ctx.Load(pageFile.ListItemAllFields);
+					await Task.Run(() => ctx.ExecuteQuery());
+					var fields      = pageFile.ListItemAllFields;
+					var currentHtml = fields["PublishingPageContent"]?.ToString() ?? "";
 
-                // Add any ZoneKeys not in the new order at the end (safety)
-                var existingKeys = ParseZoneKeysInOrder(currentHtml);
-                foreach (var zk in existingKeys)
-                    if (!newZoneKeyOrder.Contains(zk))
-                        newZoneKeyOrder.Add(zk);
+					// Add any ZoneKeys not in the new order at the end (safety)
+					var existingKeys = ParseZoneKeysInOrder(currentHtml);
+					foreach (var zk in existingKeys)
+						if (!newZoneKeyOrder.Contains(zk))
+							newZoneKeyOrder.Add(zk);
 
-                fields["PublishingPageContent"] = RebuildHtmlInOrder(currentHtml, newZoneKeyOrder);
-                fields.Update();
-                await Task.Run(() => ctx.ExecuteQuery());
+					fields["PublishingPageContent"] = RebuildHtmlInOrder(currentHtml, newZoneKeyOrder);
+					fields.Update();
+					await Task.Run(() => ctx.ExecuteQuery());
 
-                await CheckInAndPublishAsync(ctx, pageFile, "Reordered WebParts");
+					await CheckInAndPublishAsync(ctx, pageFile, "Reordered WebParts");
+					checkedIn = true;
+				}
+				finally
+				{
+					if (!checkedIn)
+					{
+						try
+						{
+							pageFile.UndoCheckOut();
+							await Task.Run(() => ctx.ExecuteQuery());
+							_logPage.Warning(
+								"ReorderWebPartsAsync: operation failed — checkout discarded for {Page}",
+								pageRelativeUrl);
+						}
+						catch (Exception cleanupEx)
+						{
+							_logPage.Error(cleanupEx,
+								"ReorderWebPartsAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+								pageRelativeUrl);
+						}
+					}
+				}
+
             });
         }
 
@@ -998,7 +1122,7 @@ namespace SPUtil.Services
             return sb.ToString();
         }
 
-
+        /*
         // ═══════════════════════════════════════════════════════════════════════
         //  9. MoveWebPartAsync
         //     Перемещает WebPart между страницами.
@@ -1022,7 +1146,7 @@ namespace SPUtil.Services
             // Delete from source
             await DeleteWebPartAsync(siteUrl, sourcePageRelativeUrl, storageKey);
         }
-
+        */
 
         // ═══════════════════════════════════════════════════════════════════════
         //  10. CloneWebPartAsync
@@ -1345,39 +1469,58 @@ namespace SPUtil.Services
                         e.Status == WebPartCopyStatus.Failed &&
                         e.Placement == WebPartPlacement.PageContent));
 
-                using var ctx2    = await GetContextAsync(targetSiteUrl);
+				using var ctx2 = await GetContextAsync(targetSiteUrl);
 
-                var pageFile2     = ctx2.Web.GetFileByServerRelativeUrl(newPageRelUrl);
-                ctx2.Load(pageFile2, f => f.ListItemAllFields);
-                await Task.Run(() => ctx2.ExecuteQuery());
+				var pageFile2 = ctx2.Web.GetFileByServerRelativeUrl(newPageRelUrl);
+				ctx2.Load(pageFile2, f => f.ListItemAllFields);
+				await Task.Run(() => ctx2.ExecuteQuery());
 
-                // Page was checked in above — now check it out cleanly for editing
-                /*
-				pageFile2.CheckOut();
-                await Task.Run(() => ctx2.ExecuteQuery());
-				*/
-				
 				// Page was checked in above — now check it out cleanly for editing
 				await SafeCheckOutAsync(ctx2, pageFile2);
 
+				bool checkedIn = false;
+				try
+				{
+					ctx2.Load(pageFile2.ListItemAllFields);
+					await Task.Run(() => ctx2.ExecuteQuery());
 
-                ctx2.Load(pageFile2.ListItemAllFields);
-                await Task.Run(() => ctx2.ExecuteQuery());
+					var fields2 = pageFile2.ListItemAllFields;
+					fields2["PublishingPageContent"] = newHtml;
+					fields2.Update();
+					await Task.Run(() => ctx2.ExecuteQuery());
 
-                var fields2 = pageFile2.ListItemAllFields;
-                fields2["PublishingPageContent"] = newHtml;
-                fields2.Update();
-                await Task.Run(() => ctx2.ExecuteQuery());
+					await CheckInAndPublishAsync(ctx2, pageFile2,
+						$"Created from snapshot of {snapshot.PageRelativeUrl}");
+					checkedIn = true;
+				}
+				finally
+				{
+					if (!checkedIn)
+					{
+						try
+						{
+							pageFile2.UndoCheckOut();
+							await Task.Run(() => ctx2.ExecuteQuery());
+							_logPage.Warning(
+								"CreatePageFromSnapshotAsync: final content write failed — checkout discarded for {Page}",
+								newPageRelUrl);
+						}
+						catch (Exception cleanupEx)
+						{
+							_logPage.Error(cleanupEx,
+								"CreatePageFromSnapshotAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+								newPageRelUrl);
+						}
+					}
+				}
 
-                await CheckInAndPublishAsync(ctx2, pageFile2,
-                    $"Created from snapshot of {snapshot.PageRelativeUrl}");
+				_logPage.Information("CreatePage: done. {Summary}", report.Summary);
 
-                _logPage.Information("CreatePage: done. {Summary}", report.Summary);
+				System.Diagnostics.Debug.WriteLine(
+					$"[CreatePage] Done. {report.Summary}");
 
-                System.Diagnostics.Debug.WriteLine(
-                    $"[CreatePage] Done. {report.Summary}");
+				return report;
 
-                return report;
             });
         }
 
@@ -1525,6 +1668,7 @@ namespace SPUtil.Services
             ctx.Load(items, ii => ii.Include(
                 i => i["FileRef"],
                 i => i["FileLeafRef"],
+				i => i["_ModerationStatus"],
                 i => i["Title"]));
             await Task.Run(() => ctx.ExecuteQuery());
 
@@ -1536,6 +1680,15 @@ namespace SPUtil.Services
 
                 try
                 {
+					string moderationStatus = item["_ModerationStatus"]?.ToString() ?? "";
+					string status = moderationStatus switch
+					{
+						"0" => "Published",
+						"1" => "Rejected",
+						"2" => "Pending Approval",
+						"3" => "Draft",
+						_   => "Unknown"
+					};					
                     var snap = await GetPageSnapshotAsync(siteUrl, fileRef);
                     result.Add(snap);
                     System.Diagnostics.Debug.WriteLine(
@@ -2001,73 +2154,92 @@ namespace SPUtil.Services
                 ctx.Load(pageFile, f => f.ListItemAllFields);
                 await Task.Run(() => ctx.ExecuteQuery());
 
-                await SafeCheckOutAsync(ctx, pageFile);
+				await SafeCheckOutAsync(ctx, pageFile);
 
-                ctx.Load(pageFile.ListItemAllFields);
-                await Task.Run(() => ctx.ExecuteQuery());
+				bool checkedIn = false;
+				try
+				{
+					ctx.Load(pageFile.ListItemAllFields);
+					await Task.Run(() => ctx.ExecuteQuery());
 
-                string html = pageFile.ListItemAllFields["PublishingPageContent"]?.ToString() ?? "";
+					string html = pageFile.ListItemAllFields["PublishingPageContent"]?.ToString() ?? "";
 
-                // Insert placeholders in reverse position order so earlier insertions
-                // don't shift the indices of later ones
-                foreach (var diff in removed.OrderByDescending(d => d.SourcePosition))
-                {
-                    var meta = new WebPartPlaceholderMeta
-                    {
-                        StorageKey = diff.SourceStorageKey,
-                        Title      = diff.Title,
-                        Position   = diff.SourcePosition,
-                        ZoneId     = diff.SourceZoneId,
-                        SiteUrl    = compareResult.SourceSiteUrl,
-                        PageUrl    = compareResult.SourceUrl
-                    };
+					// Insert placeholders in reverse position order so earlier insertions
+					// don't shift the indices of later ones
+					foreach (var diff in removed.OrderByDescending(d => d.SourcePosition))
+					{
+						var meta = new WebPartPlaceholderMeta
+						{
+							StorageKey = diff.SourceStorageKey,
+							Title      = diff.Title,
+							Position   = diff.SourcePosition,
+							ZoneId     = diff.SourceZoneId,
+							SiteUrl    = compareResult.SourceSiteUrl,
+							PageUrl    = compareResult.SourceUrl
+						};
 
-                    // Generate a placeholder ZoneKey (no real WebPart object —
-                    // the placeholder is purely visual text with metadata)
-                    string placeholderZoneKey = Guid.NewGuid().ToString("D");
-                    string placeholder = BuildWpBoxPlaceholder(placeholderZoneKey, meta);
+						string placeholderZoneKey = Guid.NewGuid().ToString("D");
+						string placeholder = BuildWpBoxPlaceholder(placeholderZoneKey, meta);
 
-                    // Find the position to insert — after the (sourcePosition-1)-th wpbox
-                    var existingZoneKeys = ParseZoneKeysInOrder(html);
-                    int insertAfterIndex = diff.SourcePosition - 1;  // 0-based
+						var existingZoneKeys = ParseZoneKeysInOrder(html);
+						int insertAfterIndex = diff.SourcePosition - 1;
 
-                    if (existingZoneKeys.Count == 0 || insertAfterIndex <= 0)
-                    {
-                        // Prepend before all existing content
-                        html = placeholder + "\r\n<p><br/></p>\r\n" + html;
-                    }
-                    else if (insertAfterIndex >= existingZoneKeys.Count)
-                    {
-                        // Append at end
-                        html = html + "\r\n" + placeholder + "\r\n<p><br/></p>";
-                    }
-                    else
-                    {
-                        // Insert after the wpbox at (insertAfterIndex - 1)
-                        string anchorKey = existingZoneKeys[insertAfterIndex - 1];
-                        string insertPattern =
-                            @"(<div[^>]*ms-rte-wpbox[^>]*>.*?" +
-                            Regex.Escape(anchorKey) +
-                            @".*?</div>\s*</div>\s*</div>)";
+						if (existingZoneKeys.Count == 0 || insertAfterIndex <= 0)
+						{
+							html = placeholder + "\r\n<p><br/></p>\r\n" + html;
+						}
+						else if (insertAfterIndex >= existingZoneKeys.Count)
+						{
+							html = html + "\r\n" + placeholder + "\r\n<p><br/></p>";
+						}
+						else
+						{
+							string anchorKey = existingZoneKeys[insertAfterIndex - 1];
+							string insertPattern =
+								@"(<div[^>]*ms-rte-wpbox[^>]*>.*?" +
+								Regex.Escape(anchorKey) +
+								@".*?</div>\s*</div>\s*</div>)";
 
-                        html = Regex.Replace(
-                            html,
-                            insertPattern,
-                            "$1\r\n" + placeholder,
-                            RegexOptions.IgnoreCase | RegexOptions.Singleline);
-                    }
-                }
+							html = Regex.Replace(
+								html,
+								insertPattern,
+								"$1\r\n" + placeholder,
+								RegexOptions.IgnoreCase | RegexOptions.Singleline);
+						}
+					}
 
-                var fields = pageFile.ListItemAllFields;
-                fields["PublishingPageContent"] = html;
-                fields.Update();
-                await Task.Run(() => ctx.ExecuteQuery());
+					var fields = pageFile.ListItemAllFields;
+					fields["PublishingPageContent"] = html;
+					fields.Update();
+					await Task.Run(() => ctx.ExecuteQuery());
 
-                await CheckInAndPublishAsync(ctx, pageFile,
-                    $"Inserted {removed.Count} WebPart placeholder(s)");
+					await CheckInAndPublishAsync(ctx, pageFile,
+						$"Inserted {removed.Count} WebPart placeholder(s)");
+					checkedIn = true;
 
-                System.Diagnostics.Debug.WriteLine(
-                    $"[InsertPlaceholders] Done. {removed.Count} placeholders inserted.");
+					System.Diagnostics.Debug.WriteLine(
+						$"[InsertPlaceholders] Done. {removed.Count} placeholders inserted.");
+				}
+				finally
+				{
+					if (!checkedIn)
+					{
+						try
+						{
+							pageFile.UndoCheckOut();
+							await Task.Run(() => ctx.ExecuteQuery());
+							_logPage.Warning(
+								"InsertPlaceholdersAsync: operation failed — checkout discarded for {Page}",
+								targetPageRelativeUrl);
+						}
+						catch (Exception cleanupEx)
+						{
+							_logPage.Error(cleanupEx,
+								"InsertPlaceholdersAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+								targetPageRelativeUrl);
+						}
+					}
+				}
             });
         }
 
@@ -2255,19 +2427,45 @@ namespace SPUtil.Services
             ctx.Load(pageFile, f => f.ListItemAllFields);
             await Task.Run(() => ctx.ExecuteQuery());
 
-            await SafeCheckOutAsync(ctx, pageFile);
+			await SafeCheckOutAsync(ctx, pageFile);
 
-            ctx.Load(pageFile.ListItemAllFields);
-            await Task.Run(() => ctx.ExecuteQuery());
+			bool checkedIn = false;
+			try
+			{
+				ctx.Load(pageFile.ListItemAllFields);
+				await Task.Run(() => ctx.ExecuteQuery());
 
-            var fields  = pageFile.ListItemAllFields;
-            string html = fields["PublishingPageContent"]?.ToString() ?? "";
+				var fields  = pageFile.ListItemAllFields;
+				string html = fields["PublishingPageContent"]?.ToString() ?? "";
 
-            fields["PublishingPageContent"] = RemovePlaceholderFromHtml(html, zoneKey);
-            fields.Update();
-            await Task.Run(() => ctx.ExecuteQuery());
+				fields["PublishingPageContent"] = RemovePlaceholderFromHtml(html, zoneKey);
+				fields.Update();
+				await Task.Run(() => ctx.ExecuteQuery());
 
-            await CheckInAndPublishAsync(ctx, pageFile, $"Removed placeholder {zoneKey}");
+				await CheckInAndPublishAsync(ctx, pageFile, $"Removed placeholder {zoneKey}");
+				checkedIn = true;
+			}
+			finally
+			{
+				if (!checkedIn)
+				{
+					try
+					{
+						pageFile.UndoCheckOut();
+						await Task.Run(() => ctx.ExecuteQuery());
+						_logPage.Warning(
+							"RemovePlaceholderFromPageAsync: operation failed — checkout discarded for {Page}",
+							pageRelativeUrl);
+					}
+					catch (Exception cleanupEx)
+					{
+						_logPage.Error(cleanupEx,
+							"RemovePlaceholderFromPageAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+							pageRelativeUrl);
+					}
+				}
+			}
+
         }
 
 

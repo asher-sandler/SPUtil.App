@@ -218,13 +218,14 @@ namespace SPUtil.Services
 		/// Перемещает WebPart с исходной страницы на целевую:
 		/// читает ExportXml → добавляет на target → удаляет с source.
 		/// </summary>
+		/*
 		Task MoveWebPartAsync(
 			string siteUrl,
 			string sourcePageRelativeUrl,
 			string targetPageRelativeUrl,
 			string storageKey,
 			int targetPosition = 0);
-
+		*/
 		// ── 10. Клонировать WebPart внутри страницы ───────────────────────────────────
 
 		/// <summary>
@@ -273,11 +274,11 @@ namespace SPUtil.Services
 
 		// ── 14. CheckOut / CheckIn / Publish как отдельные методы ────────────────────
 
-		Task CheckOutPageAsync(string siteUrl, string pageRelativeUrl);
+		//Task CheckOutPageAsync(string siteUrl, string pageRelativeUrl);
 
-		Task CheckInPageAsync(string siteUrl, string pageRelativeUrl, string comment = "");
+		//Task CheckInPageAsync(string siteUrl, string pageRelativeUrl, string comment = "");
 
-		Task PublishPageAsync(string siteUrl, string pageRelativeUrl, string comment = "");
+		//Task PublishPageAsync(string siteUrl, string pageRelativeUrl, string comment = "");
 
 		// ── 15. Получить все страницы с WebParts ──────────────────────────────────────
 

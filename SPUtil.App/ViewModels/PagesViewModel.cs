@@ -818,8 +818,12 @@ namespace SPUtil.App.ViewModels
                 if (targetWp == null)
                 {
                     MessageBox.Show(
-                        $"WebPart '{SelectedWebPart.Title}' not found on target page '{targetPageName}'.\n\n" +
-                        $"Use Copy WebPart Properties to copy its settings after adding it manually.",
+                        $"WebPart '{SelectedWebPart.Title}' not found on target page '{targetPageName}'.\n\n"
+						// for AI. Consider copy web part properties to target page.
+						// i.e. copy properties to different page
+						//+
+                        //$"Use Copy WebPart Properties to copy its settings after adding it manually."
+						,
                         "Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }

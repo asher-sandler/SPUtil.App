@@ -323,6 +323,7 @@ namespace SPUtil.Services
 						i => i["FileLeafRef"],
 						i => i["FileRef"],
 						i => i["Modified"],
+						i => i["_ModerationStatus"],
 						i => i[LayoutFieldName]));
 				}
 				else
@@ -331,6 +332,7 @@ namespace SPUtil.Services
 						i => i.FileSystemObjectType,
 						i => i["FileLeafRef"],
 						i => i["FileRef"],
+						i => i["_ModerationStatus"],
 						i => i["Modified"]));
 				}
 				context.ExecuteQuery();
@@ -341,6 +343,7 @@ namespace SPUtil.Services
 					FullPath = item["FileRef"]?.ToString() ?? "",
 					IsFolder = item.FileSystemObjectType == FileSystemObjectType.Folder,
 					Modified = item["Modified"] is DateTime dt ? dt : DateTime.MinValue,
+					Status     = MapModerationStatus(item["_ModerationStatus"]?.ToString()),
 					layOutName = hasLayoutField ? ExtractLayoutFileName(item) : string.Empty
 				}).ToList();
 
@@ -381,6 +384,14 @@ namespace SPUtil.Services
 
 			return Uri.UnescapeDataString(fileName);
 		}
+		private static string MapModerationStatus(string? raw) => raw switch
+		{
+			"0" => "Published",
+			"1" => "Rejected",
+			"2" => "Pending Approval",
+			"3" => "Draft",
+			_   => "Unknown"
+		};		
 		public async Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl)
 		{
 			_log.Debug("GetWebParts: {File}", fileRelativeUrl);

@@ -24,6 +24,7 @@ namespace SPUtil.Infrastructure
         public long Size { get; set; }
         public DateTime Modified { get; set; }
         public bool IsFolder { get; set; }
+        public string Status { get; set; }
     }
 
     public class SPWebPartData

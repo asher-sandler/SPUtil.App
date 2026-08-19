@@ -203,6 +203,8 @@
                 </DataGridTextColumn>
                 <DataGridTextColumn Header="Layout" Binding="{Binding layOutName}"
                                     Width="180" MinWidth="120"/>
+				<DataGridTextColumn Header="Status" Binding="{Binding Status}"
+									Width="120" MinWidth="90"/>									
                 <DataGridTextColumn Header="Path" Binding="{Binding FullPath}" Width="600" MinWidth="200"/>
             </DataGrid.Columns>
 		</DataGrid>

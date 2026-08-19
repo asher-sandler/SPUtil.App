@@ -42,7 +42,7 @@ namespace SPUtil.Infrastructure
         /// orders WebParts embedded in PublishingPageContent.
         /// </summary>
         public int ZoneIndex { get; set; }
-
+		public string Status { get; set; } = string.Empty;
 
         /// <summary>
         /// True when the WebPart is present on the page but not rendered.
