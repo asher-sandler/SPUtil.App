@@ -81,7 +81,7 @@ namespace SPUtil.App.ViewModels
                         }
                         catch (Exception ex)
                         {
-                            _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                            _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                             StatusMessage = $"✘ {ex.Message}";
                             MessageBox.Show($"Error inserting placeholders:\n{ex.Message}",
                                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);

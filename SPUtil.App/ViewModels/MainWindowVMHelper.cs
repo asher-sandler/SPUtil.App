@@ -140,12 +140,12 @@ namespace SPUtil.App.ViewModels
 			}
 			catch (OperationCanceledException)
 			{
-			    _log.Error("ERROR in catch block");
+			    _log.Caller().Error("ERROR in catch block");
 				System.Windows.MessageBox.Show("Data copy cancelled.");
 			}
 			catch (Exception ex)
 			{
-			    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+			    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				progressWin.Close();
 				System.Windows.MessageBox.Show($"Data copy error: {ex.Message}");
 			}
@@ -278,13 +278,13 @@ namespace SPUtil.App.ViewModels
             }
             catch (OperationCanceledException)
             {
-                _log.Error("ERROR in catch block");
+                _log.Caller().Error("ERROR in catch block");
                 progressWin.Close();
                 MessageBox.Show("File copy cancelled.", "Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 progressWin.Close();
                 MessageBox.Show($"Error copying files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -323,8 +323,8 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
-                _log.Error(ex, "CreateListStructureAsync failed");
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "CreateListStructureAsync failed");
                 System.Windows.MessageBox.Show($"Structure creation error: {ex.Message}");
                 return false;
             }

@@ -80,7 +80,7 @@ namespace SPUtil.Services
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine(
                     $"[GetWebPartsWithPosition] VisualPosition resolution failed: {ex.Message}");
                 return SortByPosition(webParts);

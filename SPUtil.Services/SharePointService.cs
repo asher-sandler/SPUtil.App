@@ -302,7 +302,7 @@ namespace SPUtil.Services
 					string.Equals(f.InternalName, LayoutFieldName, StringComparison.OrdinalIgnoreCase));
 
 				if (!hasLayoutField)
-					_log.Warning(
+					_log.Caller().Warning(
 						"GetPageItems: field {Field} is not present in list {List} — layout values will be empty",
 						LayoutFieldName, listId);
 
@@ -1061,7 +1061,7 @@ namespace SPUtil.Services
                             }
                             else
                             {
-                                _log.Warning("Field '{Field}' not found on target list — skipped for view '{View}'", fName, viewData.Title);
+                                _log.Caller().Warning("Field '{Field}' not found on target list — skipped for view '{View}'", fName, viewData.Title);
                             }
                         }
                     }
@@ -1095,7 +1095,7 @@ namespace SPUtil.Services
                 {
                     // 2026-06-10: added _log.Error — previously only Debug.WriteLine,
                     // so view creation failures were invisible in the log file.
-                    _log.Error(ex, "[SP_SERVICE] Error creating view '{ViewTitle}': {Message}",
+                    _log.Caller().Error(ex, "[SP_SERVICE] Error creating view '{ViewTitle}': {Message}",
                         viewData.Title, ex.Message);
                     System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] Error creating view '{viewData.Title}': {ex.Message}");
                 }
@@ -1400,7 +1400,7 @@ namespace SPUtil.Services
 
 		public async Task ClearListItemsAsync(string siteUrl, string listTitle)
 		{
-			_log.Warning("ClearListItems: {Title} on {Site}", listTitle, siteUrl);
+			_log.Caller().Warning("ClearListItems: {Title} on {Site}", listTitle, siteUrl);
 			await Task.Run(async () =>
 			{
 				using (var ctx = await GetContextAsync(siteUrl))

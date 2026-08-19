@@ -96,16 +96,18 @@ namespace SPUtil.Services
                 var outerDiv = innerDiv?.ParentNode;
                 if (outerDiv == null)
                 {
-                    _logPage.Warning(
+                    _logPage.Caller().Warning(
                         "ReplaceFailedWebPartPlaceholders: placeholder not found for '{Title}' (ZoneKey={ZoneKey})",
                         entry.Title, entry.SourceZoneKey);
                     continue;
                 }
 
-                var warningNode = HtmlNode.CreateNode(
-                    $"<p style=\"color:#b00020;border:1px dashed #b00020;padding:4px;\">" +
-                    $"WEB PART \"{WebUtility.HtmlEncode(entry.Title)}\" NOT AVAILABLE ON THIS FARM — " +
-                    $"install/activate the corresponding feature before copying.</p>");
+				// SharePointPageService.cs
+				var warningNode = HtmlNode.CreateNode(
+					$"<p style=\"color:#b00020;border:1px dashed #b00020;padding:4px;\">" +
+					$"WEB PART \"{WebUtility.HtmlEncode(entry.Title)}\" IS NOT AVAILABLE ON THIS FARM AND WAS NOT ADDED. " +
+					$"Install/activate the corresponding feature before copying.</p>" +
+					$"<p style=\"font-size:11px;color:#666;\">Technical details: {WebUtility.HtmlEncode(entry.Reason)}</p>");
 
                 outerDiv.ParentNode.ReplaceChild(warningNode, outerDiv);
             }
@@ -241,7 +243,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception innerEx)
                 {
-                    _log.Error(innerEx, "ERROR: {ExType} — {Message}", innerEx.GetType().Name, innerEx.Message);
+                    _log.Caller().Error(innerEx, "ERROR: {ExType} — {Message}", innerEx.GetType().Name, innerEx.Message);
                     throw new InvalidOperationException(
                         $"File is checked out by another user and cannot be taken over automatically.\n" +
                         $"Please ask the user to check it in, or check it in manually via SharePoint UI.\n" +
@@ -295,7 +297,7 @@ namespace SPUtil.Services
                 // a message that says nothing about the actual cause.
                 if (!pageFile.Exists)
                 {
-                    _logPage.Warning("GetPageSnapshot: page not found — {Url}", pageRelativeUrl);
+                    _logPage.Caller().Warning("GetPageSnapshot: page not found — {Url}", pageRelativeUrl);
                     throw new System.IO.FileNotFoundException(
                         $"Page not found:\n{pageRelativeUrl}", pageRelativeUrl);
                 }
@@ -363,7 +365,7 @@ namespace SPUtil.Services
 					// A 404 specifically on the RENDERED page means it has never been
 					// checked in: SharePoint has nothing to serve at this URL outside
 					// of edit mode until at least one version is published.
-					_logPage.Warning(
+					_logPage.Caller().Warning(
 						"GetPageSnapshot: page has no published version — {Url}", pageRelativeUrl);
 					throw new InvalidOperationException(
 						$"This page has never been checked in.\n\n" +
@@ -647,13 +649,13 @@ namespace SPUtil.Services
                         {
                             pageFile.UndoCheckOut();
                             await Task.Run(() => ctx.ExecuteQuery());
-                            _logPage.Warning(
+                            _logPage.Caller().Warning(
                                 "AddWebPartAsync: operation failed — checkout discarded for {Page}",
                                 pageRelativeUrl);
                         }
                         catch (Exception cleanupEx)
                         {
-                            _logPage.Error(cleanupEx,
+                            _logPage.Caller().Error(cleanupEx,
                                 "AddWebPartAsync: failed to undo checkout after error — page may remain checked out: {Page}",
                                 pageRelativeUrl);
                         }
@@ -742,13 +744,13 @@ namespace SPUtil.Services
                         {
                             pageFile.UndoCheckOut();
                             await Task.Run(() => ctx.ExecuteQuery());
-                            _logPage.Warning(
+                            _logPage.Caller().Warning(
                                 "DeleteWebPartAsync: operation failed — checkout discarded for {Page}",
                                 pageRelativeUrl);
                         }
                         catch (Exception cleanupEx)
                         {
-                            _logPage.Error(cleanupEx,
+                            _logPage.Caller().Error(cleanupEx,
                                 "DeleteWebPartAsync: failed to undo checkout after error — page may remain checked out: {Page}",
                                 pageRelativeUrl);
                         }
@@ -878,13 +880,13 @@ namespace SPUtil.Services
 						{
 							pageFile.UndoCheckOut();
 							await Task.Run(() => ctx.ExecuteQuery());
-							_logPage.Warning(
+							_logPage.Caller().Warning(
 								"UpdateAllWebPartsAsync: operation failed — checkout discarded for {Page}",
 								pageRelativeUrl);
 						}
 						catch (Exception cleanupEx)
 						{
-							_logPage.Error(cleanupEx,
+							_logPage.Caller().Error(cleanupEx,
 								"UpdateAllWebPartsAsync: failed to undo checkout after error — page may remain checked out: {Page}",
 								pageRelativeUrl);
 						}
@@ -963,13 +965,13 @@ namespace SPUtil.Services
 						{
 							pageFile.UndoCheckOut();
 							await Task.Run(() => ctx.ExecuteQuery());
-							_logPage.Warning(
+							_logPage.Caller().Warning(
 								"AddWebPartToZoneAsync: operation failed — checkout discarded for {Page}",
 								pageRelativeUrl);
 						}
 						catch (Exception cleanupEx)
 						{
-							_logPage.Error(cleanupEx,
+							_logPage.Caller().Error(cleanupEx,
 								"AddWebPartToZoneAsync: failed to undo checkout after error — page may remain checked out: {Page}",
 								pageRelativeUrl);
 						}
@@ -1058,13 +1060,13 @@ namespace SPUtil.Services
 						{
 							pageFile.UndoCheckOut();
 							await Task.Run(() => ctx.ExecuteQuery());
-							_logPage.Warning(
+							_logPage.Caller().Warning(
 								"ReorderWebPartsAsync: operation failed — checkout discarded for {Page}",
 								pageRelativeUrl);
 						}
 						catch (Exception cleanupEx)
 						{
-							_logPage.Error(cleanupEx,
+							_logPage.Caller().Error(cleanupEx,
 								"ReorderWebPartsAsync: failed to undo checkout after error — page may remain checked out: {Page}",
 								pageRelativeUrl);
 						}
@@ -1310,7 +1312,7 @@ namespace SPUtil.Services
                     {
                         entry.Status = WebPartCopyStatus.Skipped;
                         entry.Reason = "Export returned no XML";
-                        _logPage.Warning(
+                        _logPage.Caller().Warning(
                             "CreatePage: SKIPPED '{Title}' zone={Zone}[{Index}] key={Key} — empty ExportXml",
                             wp.Title, wp.ZoneId, wp.ZoneIndex, wp.StorageKey);
                     }
@@ -1332,7 +1334,7 @@ namespace SPUtil.Services
                             // record the failure and move on to the next one.
                             entry.Status = WebPartCopyStatus.Failed;
                             entry.Reason = ex.Message;
-                            _logPage.Error(ex,
+                            _logPage.Caller().Error(ex,
                                 "CreatePage: FAILED '{Title}' zone={Zone}[{Index}] key={Key}",
                                 wp.Title, wp.ZoneId, wp.ZoneIndex, wp.StorageKey);
                         }
@@ -1373,7 +1375,7 @@ namespace SPUtil.Services
 						{
 							// The warning itself failing to add must not abort page creation —
 							// the zone stays empty, but the rest of the page still gets created.
-							_logPage.Error(ex,
+							_logPage.Caller().Error(ex,
 								"CreatePage: could not place warning placeholder for '{Title}' in zone={Zone}[{Index}]",
 								failedEntry.Title, failedEntry.ZoneId, failedEntry.Position);
 						}
@@ -1401,7 +1403,7 @@ namespace SPUtil.Services
                     {
                         entry.Status = WebPartCopyStatus.Skipped;
                         entry.Reason = "Export returned no XML";
-                        _logPage.Warning(
+                        _logPage.Caller().Warning(
                             "CreatePage: SKIPPED '{Title}' content position {Pos} key={Key} — empty ExportXml",
                             wp.Title, wp.VisualPosition, wp.StorageKey);
                     }
@@ -1431,7 +1433,7 @@ namespace SPUtil.Services
                             {
                                 // The WebPart exists on the page but its placeholder
                                 // cannot be remapped — it will not be visible.
-                                _logPage.Warning(
+                                _logPage.Caller().Warning(
                                     "CreatePage: '{Title}' added but its new ZoneKey was not found in " +
                                     "the rendered page — placeholder will not be remapped",
                                     wp.Title);
@@ -1445,7 +1447,7 @@ namespace SPUtil.Services
                         {
                             entry.Status = WebPartCopyStatus.Failed;
                             entry.Reason = ex.Message;
-                            _logPage.Error(ex,
+                            _logPage.Caller().Error(ex,
                                 "CreatePage: FAILED '{Title}' content position {Pos} key={Key}",
                                 wp.Title, wp.VisualPosition, wp.StorageKey);
                         }
@@ -1501,13 +1503,13 @@ namespace SPUtil.Services
 						{
 							pageFile2.UndoCheckOut();
 							await Task.Run(() => ctx2.ExecuteQuery());
-							_logPage.Warning(
+							_logPage.Caller().Warning(
 								"CreatePageFromSnapshotAsync: final content write failed — checkout discarded for {Page}",
 								newPageRelUrl);
 						}
 						catch (Exception cleanupEx)
 						{
-							_logPage.Error(cleanupEx,
+							_logPage.Caller().Error(cleanupEx,
 								"CreatePageFromSnapshotAsync: failed to undo checkout after error — page may remain checked out: {Page}",
 								newPageRelUrl);
 						}
@@ -1696,7 +1698,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception ex)
                 {
-                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     System.Diagnostics.Debug.WriteLine(
                         $"[GetAllPages] Error on {fileRef}: {ex.Message}");
                 }
@@ -1773,7 +1775,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception ex)
                 {
-                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     System.Diagnostics.Debug.WriteLine($"[ParsePlaceholder] Failed to parse: {json} | {ex.Message}");
                 }
             }
@@ -2228,13 +2230,13 @@ namespace SPUtil.Services
 						{
 							pageFile.UndoCheckOut();
 							await Task.Run(() => ctx.ExecuteQuery());
-							_logPage.Warning(
+							_logPage.Caller().Warning(
 								"InsertPlaceholdersAsync: operation failed — checkout discarded for {Page}",
 								targetPageRelativeUrl);
 						}
 						catch (Exception cleanupEx)
 						{
-							_logPage.Error(cleanupEx,
+							_logPage.Caller().Error(cleanupEx,
 								"InsertPlaceholdersAsync: failed to undo checkout after error — page may remain checked out: {Page}",
 								targetPageRelativeUrl);
 						}
@@ -2352,7 +2354,7 @@ namespace SPUtil.Services
                 }
                 catch (Exception ex)
                 {
-                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     syncResult.Errors.Add($"Error syncing '{meta.Title}': {ex.Message}");
                     System.Diagnostics.Debug.WriteLine(
                         $"[SyncProperties] Error for '{meta.Title}': {ex}");
@@ -2404,7 +2406,7 @@ namespace SPUtil.Services
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine($"[ParseExportXml] Error: {ex.Message}");
             }
 
@@ -2453,13 +2455,13 @@ namespace SPUtil.Services
 					{
 						pageFile.UndoCheckOut();
 						await Task.Run(() => ctx.ExecuteQuery());
-						_logPage.Warning(
+						_logPage.Caller().Warning(
 							"RemovePlaceholderFromPageAsync: operation failed — checkout discarded for {Page}",
 							pageRelativeUrl);
 					}
 					catch (Exception cleanupEx)
 					{
-						_logPage.Error(cleanupEx,
+						_logPage.Caller().Error(cleanupEx,
 							"RemovePlaceholderFromPageAsync: failed to undo checkout after error — page may remain checked out: {Page}",
 							pageRelativeUrl);
 					}

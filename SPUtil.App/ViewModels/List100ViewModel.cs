@@ -207,7 +207,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR checking target list existence: {ExType} — {Message}",
+                _log.Caller().Error(ex, "ERROR checking target list existence: {ExType} — {Message}",
                     ex.GetType().Name, ex.Message);
                 System.Windows.MessageBox.Show(
                     $"Could not check target list:\n{ex.Message}",
@@ -288,12 +288,12 @@ namespace SPUtil.App.ViewModels
             {
                 progressWin.Close();
                 LogAndStatus("Copy cancelled.");
-                _log.Warning("CopySelectedItemsAsync cancelled by user");
+                _log.Caller().Warning("CopySelectedItemsAsync cancelled by user");
             }
             catch (Exception ex)
             {
                 progressWin.Close();
-                _log.Error(ex, "ERROR in CopySelectedItemsAsync: {ExType} — {Message}",
+                _log.Caller().Error(ex, "ERROR in CopySelectedItemsAsync: {ExType} — {Message}",
                     ex.GetType().Name, ex.Message);
                 System.Windows.MessageBox.Show(
                     $"Copy error:\n{ex.Message}",
@@ -330,7 +330,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "CopySelectedViewsAsync — ListExistsAsync failed: {Message}", ex.Message);
+                _log.Caller().Error(ex, "CopySelectedViewsAsync — ListExistsAsync failed: {Message}", ex.Message);
                 System.Windows.MessageBox.Show(
                     $"Could not reach target site:\n{ex.Message}",
                     "Connection Error",
@@ -383,7 +383,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "CopySelectedViewsAsync — schema/view check failed: {Message}", ex.Message);
+                _log.Caller().Error(ex, "CopySelectedViewsAsync — schema/view check failed: {Message}", ex.Message);
                 System.Windows.MessageBox.Show(
                     $"Could not verify target list state:\n{ex.Message}",
                     "Verification Error",
@@ -460,7 +460,7 @@ namespace SPUtil.App.ViewModels
 
             if (!schemaMatch)
             {
-                _log.Warning(
+                _log.Caller().Warning(
                     "CopySelectedViewsAsync — view fields missing on target: [{Fields}]",
                     string.Join(", ", missingInViews));
 
@@ -507,7 +507,7 @@ namespace SPUtil.App.ViewModels
             if (blocked.Count > 0)
             {
                 var blockedNames = string.Join("\n", blocked.Select(v => $"  • {v.Title}"));
-                _log.Warning(
+                _log.Caller().Warning(
                     "CopySelectedViewsAsync — blocked: default view(s) on target cannot be overwritten: [{Views}]",
                     string.Join(", ", blocked.Select(v => v.Title)));
 
@@ -593,7 +593,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR in CopySelectedViewsAsync: {ExType} — {Message}",
+                _log.Caller().Error(ex, "ERROR in CopySelectedViewsAsync: {ExType} — {Message}",
                     ex.GetType().Name, ex.Message);
                 System.Windows.MessageBox.Show(
                     $"Copy error:\n{ex.Message}",
@@ -638,7 +638,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 LogAndStatus($"Field load error: {ex.Message}");
             }
 
@@ -650,7 +650,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 Debug.WriteLine($"View load error: {ex.Message}");
             }
 
@@ -671,7 +671,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 LogAndStatus($"Item load error: {ex.Message}");
             }
         }

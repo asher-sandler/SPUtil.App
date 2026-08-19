@@ -134,8 +134,10 @@ namespace SPUtil.Infrastructure
                     }
                 }
             }
-            catch { /* If URL is invalid, return as-is */ }
-                _log.Error("ERROR in catch block");
+            catch (Exception ex)
+            {
+                _log.Caller().Error(ex, "UrlWithF5: failed to parse/normalize URL — {Url}", url);
+            }
 
             return url;
         }
@@ -240,7 +242,7 @@ namespace SPUtil.Infrastructure
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 // Если даже так не вышло, возвращаем оригинал, чтобы не падать
                 System.Diagnostics.Debug.WriteLine("XML formatting error: " + ex.Message);
                 return xml;
@@ -309,7 +311,7 @@ namespace SPUtil.Infrastructure
             string domain = GetDomainFromUrl(siteUrl);
             if (string.IsNullOrEmpty(domain))
             {
-                _log.Warning("GetCredentials — cannot resolve a domain from '{Url}'", siteUrl);
+                _log.Caller().Warning("GetCredentials — cannot resolve a domain from '{Url}'", siteUrl);
                 return null;
             }
 
@@ -326,7 +328,7 @@ namespace SPUtil.Infrastructure
 
                 if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(encryptedHex))
                 {
-                    _log.Warning("GetCredentials — profile '{Domain}' is incomplete", domain);
+                    _log.Caller().Warning("GetCredentials — profile '{Domain}' is incomplete", domain);
                     return null;
                 }
 
@@ -338,7 +340,7 @@ namespace SPUtil.Infrastructure
                 catch (Exception ex)
                 {
                     // The DPAPI blob belongs to another Windows account or machine.
-                    _log.Warning(ex, "GetCredentials — stored password for '{Domain}' cannot be decrypted", domain);
+                    _log.Caller().Warning(ex, "GetCredentials — stored password for '{Domain}' cannot be decrypted", domain);
                     return null;
                 }
             }

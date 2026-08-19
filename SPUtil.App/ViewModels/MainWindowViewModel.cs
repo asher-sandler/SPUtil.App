@@ -204,7 +204,7 @@ namespace SPUtil.App.ViewModels
 						LeftUserName     = "Unknown user";
 						ConnectionStatus = "Not Connected";
 
-						_log.Warning("Connect left: {Url} returned no nodes", LeftSiteUrl);
+						_log.Caller().Warning("Connect left: {Url} returned no nodes", LeftSiteUrl);
 
 						MessageBox.Show(
 							$"No content could be read from:\n{LeftSiteUrl}\n\n" +
@@ -216,7 +216,7 @@ namespace SPUtil.App.ViewModels
 				}
 				catch (Exception ex)
 				{
-					_log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+					_log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 
 					LeftSiteNodes    = new ObservableCollection<SPNode>();
 					IsLeftConnected  = false;
@@ -264,7 +264,7 @@ namespace SPUtil.App.ViewModels
 						RightUserName    = "Unknown user";
 						ConnectionStatus = "Not Connected";
 
-						_log.Warning("Connect right: {Url} returned no nodes", RightSiteUrl);
+						_log.Caller().Warning("Connect right: {Url} returned no nodes", RightSiteUrl);
 
 						MessageBox.Show(
 							$"No content could be read from:\n{RightSiteUrl}\n\n" +
@@ -276,7 +276,7 @@ namespace SPUtil.App.ViewModels
 				}
 				catch (Exception ex)
 				{
-					_log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+					_log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 
 					// Clear the tree: leaving the previous site's nodes on screen makes the
 					// panel look connected, and any operation started from it would target
@@ -461,7 +461,7 @@ namespace SPUtil.App.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     // Error авторизации (401) или доступа
                     var result = ShowLoginDialog(url);
                     if (!result) return new ObservableCollection<SPNode>(); // Пользователь отменил
@@ -603,7 +603,7 @@ namespace SPUtil.App.ViewModels
             }
 			catch (Exception ex)
 			{
-			    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+			    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				System.Windows.MessageBox.Show(ex.Message);
 			}
 		}
@@ -633,7 +633,7 @@ namespace SPUtil.App.ViewModels
 			}
 			catch (Exception ex) 
 			{
-			    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+			    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				// Выводим ошибку в статус-бар
 				//ConnectionStatus = $"Connection Error: {ex.Message}";
 				ConnectionStatus = $"Error: {ex.Message}"; 
@@ -703,7 +703,7 @@ namespace SPUtil.App.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                     newView = new InfoViewModel($"Detail load error: {ex.Message}");
                 }
             }
@@ -719,33 +719,33 @@ namespace SPUtil.App.ViewModels
 		private async void ExecuteCopyEmptyList()
 		{
 			try { await StartCopyProcess(withData: false); }
-			catch (Exception ex) { _log.Error(ex, nameof(ExecuteCopyEmptyList)); }
+			catch (Exception ex) { _log.Caller().Error(ex, nameof(ExecuteCopyEmptyList)); }
 		}
 		
 		private async void ExecuteCopyListWithData()
 		{
 			try { await StartCopyProcess(withData: true); }
-			catch (Exception ex) { _log.Error(ex, nameof(ExecuteCopyListWithData)); }
+			catch (Exception ex) { _log.Caller().Error(ex, nameof(ExecuteCopyListWithData)); }
 		}		
 		//
 		/*
 		private async void ExecuteDeleteList()
 		{
 			try { await DeleteList(); }
-			catch (Exception ex) { _log.Error(ex, nameof(ExecuteDeleteList)); }
+			catch (Exception ex) { _log.Caller().Error(ex, nameof(ExecuteDeleteList)); }
 		}
 		*/		
 		//
 		private async void ExecuteCompareList()
 		{
 			try { await CompareList(); }
-			catch (Exception ex) { _log.Error(ex, nameof(ExecuteCompareList)); }
+			catch (Exception ex) { _log.Caller().Error(ex, nameof(ExecuteCompareList)); }
 		}		
 		//
 		private async void ExecuteExportList()
 		{
 			try { await ExportList(); }
-			catch (Exception ex) { _log.Error(ex, nameof(ExecuteExportList)); }
+			catch (Exception ex) { _log.Caller().Error(ex, nameof(ExecuteExportList)); }
 		}		
 		//
 		/*
@@ -858,7 +858,7 @@ namespace SPUtil.App.ViewModels
 				}
 				catch (Exception ex)
 				{
-				    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+				    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 					PreviewText = "Error during compare: " + ex.Message;
 					StatusMessage = "Error";
 				}
@@ -1029,11 +1029,11 @@ namespace SPUtil.App.ViewModels
 							StatusMessage = "SQL Script is ready.";
 						}
 						catch (OperationCanceledException) {
-						    _log.Error("ERROR in catch block");
+						    _log.Caller().Error("ERROR in catch block");
 							StatusMessage = "Export cancelled.";
 						}
 						catch (Exception ex) {
-						    _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+						    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 							StatusMessage = "Error: " + ex.Message;
 						}
 						finally {
@@ -1059,7 +1059,7 @@ namespace SPUtil.App.ViewModels
 							StatusMessage = "CSV is ready. After insert data to Excel press ALT + A + E";
 						}
 						catch (OperationCanceledException) {
-						    _log.Error("ERROR in catch block");
+						    _log.Caller().Error("ERROR in catch block");
 							StatusMessage = "Export cancelled.";
 						}
 						finally {
@@ -1177,7 +1177,7 @@ namespace SPUtil.App.ViewModels
 
                 if (string.IsNullOrEmpty(type))
                 {
-                    _log.Warning("Field '{Name}' has no Type attribute in schema — skipped from SQL export", name);
+                    _log.Caller().Warning("Field '{Name}' has no Type attribute in schema — skipped from SQL export", name);
                     continue;
                 }
 
@@ -1401,7 +1401,7 @@ namespace SPUtil.App.ViewModels
 			}
 			catch (Exception ex)
 			{
-				_log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+				_log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				MessageBox.Show($"Could not remove the stored credentials:\n{ex.Message}",
 					"Error", MessageBoxButton.OK, MessageBoxImage.Error);
 			}
@@ -1455,7 +1455,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine($"[AppSettings] Failed to load: {ex.Message}");
                 return (string.Empty, string.Empty);
             }

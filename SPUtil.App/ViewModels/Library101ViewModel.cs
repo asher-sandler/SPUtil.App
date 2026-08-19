@@ -85,7 +85,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex) 
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"SERVER ERROR: {ex.Message}"; 
                 System.Diagnostics.Debug.WriteLine($"Full error: {ex.ToString()}");
             }

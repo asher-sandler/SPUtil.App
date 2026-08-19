@@ -90,7 +90,7 @@ namespace SPUtil.App
                     fileSizeLimitBytes:     20_000_000,            // 20 MB max per file
                     outputTemplate:
                         "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] " +
-                        "{SourceContext} — {Message:lj}{NewLine}" +
+                        "{SourceContext} [{Caller}] — {Message:lj}{NewLine}" +
                         "{Exception}")
                 .CreateLogger();
 

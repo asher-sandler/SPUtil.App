@@ -166,8 +166,10 @@ namespace SPUtil.Services
 							            ctx.ExecuteQuery();
 							            info.LookupListName = targetList.Title;
 						            }
-						            catch { /* List may be on another web or deleted */ }
-						                _log.Error("ERROR in catch block");
+						            catch (Exception ex)
+						            {
+						                _log.Caller().Error(ex, "GetFieldInfosFromSiteAsync: failed to resolve lookup list name for list id {ListId}", g);
+						            }
 					            }
 					
 					break;                            
@@ -233,7 +235,7 @@ namespace SPUtil.Services
                     }
                     catch (Exception ex)
                     {
-                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                        _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                         // Если по какому-то полю не удалось получить детали, 
                         // логируем, но не прерываем весь процесс
                         System.Diagnostics.Debug.WriteLine($"Error fetching details for field {field.InternalName}: {ex.Message}");

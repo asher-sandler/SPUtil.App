@@ -180,14 +180,14 @@ namespace SPUtil.App.ViewModels
 
             if (SelectedPage == null)
             {
-                _log.Warning("CopyPage aborted — no page selected");
+                _log.Caller().Warning("CopyPage aborted — no page selected");
                 MessageBox.Show("Please select a page to copy.",
                     "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             if (string.IsNullOrEmpty(_targetSiteUrl))
             {
-                _log.Warning("CopyPage aborted — no target site configured");
+                _log.Caller().Warning("CopyPage aborted — no target site configured");
                 MessageBox.Show("Connect to target site (right panel).",
                     "No target site", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -237,13 +237,13 @@ namespace SPUtil.App.ViewModels
                 {
                     // A failed check must not block a copy that might still succeed —
                     // CreatePageFromSnapshotAsync validates the layout again anyway.
-                    _log.Warning(ex, "Page layout pre-flight check failed for {Layout} on {Site}",
+                    _log.Caller().Warning(ex, "Page layout pre-flight check failed for {Layout} on {Site}",
                         SelectedPage.layOutName, _targetSiteUrl);
                 }
 
                 if (!layoutAvailable)
                 {
-                    _log.Warning("Copy aborted — layout {Layout} missing on {Site}",
+                    _log.Caller().Warning("Copy aborted — layout {Layout} missing on {Site}",
                         SelectedPage.layOutName, _targetSiteUrl);
                     infoWin.Close();
                     MessageBox.Show(
@@ -296,7 +296,7 @@ namespace SPUtil.App.ViewModels
                     }
                     catch (Exception ex)
                     {
-                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                        _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                         infoWin.Close();
                         MessageBox.Show($"Error deleting existing page:\n{ex.Message}",
                             "Delete Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -324,7 +324,7 @@ namespace SPUtil.App.ViewModels
                     }
                     catch (Exception ex)
                     {
-                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                        _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                         infoWin.Close();
                         MessageBox.Show(
                             $"Error removing the previous backup page '{oldName}':\n{ex.Message}",
@@ -339,7 +339,7 @@ namespace SPUtil.App.ViewModels
                     }
                     catch (Exception ex)
                     {
-                        _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                        _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                         infoWin.Close();
                         MessageBox.Show($"Error renaming existing page:\n{ex.Message}",
                             "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -359,7 +359,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "Failed to read snapshot: {Page}", SelectedPage.FullPath);
+                _log.Caller().Error(ex, "Failed to read snapshot: {Page}", SelectedPage.FullPath);
                 infoWin.Close();
                 MessageBox.Show($"Error reading source page:\n{ex.Message}",
                     "Snapshot Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -385,7 +385,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "Failed to create page {Name} on {Site}", targetName, _targetSiteUrl);
+                _log.Caller().Error(ex, "Failed to create page {Name} on {Site}", targetName, _targetSiteUrl);
                 infoWin.Close();
                 MessageBox.Show($"Error creating target page:\n{ex.Message}",
                     "Create Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -398,7 +398,7 @@ namespace SPUtil.App.ViewModels
             StatusMessage = $"✔ '{targetName}' copied → {_targetSiteUrl}";
 
             if (!report.IsClean)
-                _log.Warning("Copy finished with problems: {Summary}", report.Summary);
+                _log.Caller().Warning("Copy finished with problems: {Summary}", report.Summary);
 
             // Counts come from the report, not from the snapshot: the snapshot says how
             // many WebParts were found on the source, which is not the same as how many
@@ -469,7 +469,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Delete error: {ex.Message}";
                 MessageBox.Show($"Error deleting page:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -541,7 +541,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Rename error: {ex.Message}";
                 MessageBox.Show($"Error renaming page:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -594,7 +594,7 @@ namespace SPUtil.App.ViewModels
                 string missing = await _spService.GetPageRelativeUrlAsync(
                     _targetSiteUrl, targetPageName, targetSubfolder);
 
-                _log.Warning("Target page not found: {Url}", missing);
+                _log.Caller().Warning("Target page not found: {Url}", missing);
                 MessageBox.Show(
                     $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
                     "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -639,7 +639,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 MessageBox.Show($"Error during comparison:\n{ex.Message}",
                     "Compare Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -747,7 +747,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 StatusMessage = $"Sync error: {ex.Message}";
                 MessageBox.Show($"Error during sync:\n{ex.Message}",
@@ -784,7 +784,7 @@ namespace SPUtil.App.ViewModels
                 string missing = await _spService.GetPageRelativeUrlAsync(
                     _targetSiteUrl, targetPageName, dialog.TargetSubfolder);
 
-                _log.Warning("Target page not found: {Url}", missing);
+                _log.Caller().Warning("Target page not found: {Url}", missing);
                 MessageBox.Show(
                     $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
                     "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -888,7 +888,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 MessageBox.Show($"Compare error:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -925,7 +925,7 @@ namespace SPUtil.App.ViewModels
                 string missing = await _spService.GetPageRelativeUrlAsync(
                     _targetSiteUrl, targetPageName, dialog.TargetSubfolder);
 
-                _log.Warning("Target page not found: {Url}", missing);
+                _log.Caller().Warning("Target page not found: {Url}", missing);
                 MessageBox.Show(
                     $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
                     "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -1001,7 +1001,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 infoWin.Close();
                 MessageBox.Show($"Error copying properties:\n{ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1033,7 +1033,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 System.Diagnostics.Debug.WriteLine($"[ParseExportXml] {ex.Message}");
             }
             return result;
@@ -1079,7 +1079,7 @@ namespace SPUtil.App.ViewModels
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Clipboard error: {ex.Message}";
             }
         }
@@ -2085,7 +2085,7 @@ stop-transcript
                         }
                         catch (Exception ex)
                         {
-                            _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                            _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                             StatusMessage = $"Clipboard error: {ex.Message}";
                         }
                     }
@@ -2142,7 +2142,7 @@ stop-transcript
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Load error: {ex.Message}";
             }
         }
@@ -2166,7 +2166,7 @@ stop-transcript
             }
             catch (Exception ex)
             {
-                _log.Error(ex, "LoadWebParts failed for {Url}", fileUrl);
+                _log.Caller().Error(ex, "LoadWebParts failed for {Url}", fileUrl);
                 StatusMessage = $"Web part error: {ex.Message}";
                 Debug.WriteLine(ex.ToString());
             }
