@@ -10,8 +10,8 @@ namespace SPUtil.Services
 {
     public class SharePointCloneService
     {
-        public string SourceListTitle { get; set; }
-        public string TargetListTitle { get; set; }
+        public string SourceListTitle { get; set; } = string.Empty;
+        public string TargetListTitle { get; set; } = string.Empty;
         public int ListTemplateType { get; set; } = 100; // По умолчанию Custom List
                                                          // Наша временная заглушка для проверки связи
 
@@ -204,7 +204,8 @@ namespace SPUtil.Services
                     // В SharePoint XML оно всегда имеет тип "TargetTo".
                     // Обычно оно настраивается как многострочный текст (Note) внутри, 
                     // но в схеме создания указывается именно этот тип.
-                    fieldXml.Attribute("Type").Value = "TargetTo";
+                    fieldXml.Attribute("Type")!.Value = "TargetTo";
+					// null-forgiving: "Type" attribute is unconditionally added at the top
                     // Добавляем технические атрибуты, характерные для этого поля
                     fieldXml.Add(new XAttribute("ReadOnly", "FALSE"));
                     fieldXml.Add(new XAttribute("Sortable", "FALSE"));
@@ -215,7 +216,7 @@ namespace SPUtil.Services
 			return fieldXml.ToString();
 		}
  
-       public string GetAttributeFromXml(string xml, string attributeName)
+       public string? GetAttributeFromXml(string xml, string attributeName)
         {
             if (string.IsNullOrEmpty(xml)) return null;
             try

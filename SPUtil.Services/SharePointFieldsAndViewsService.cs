@@ -190,7 +190,7 @@ namespace SPUtil.Services
                                 // Если формат всё равно пустой, пробуем вытащить напрямую из XML
                                 if (string.IsNullOrEmpty(info.Format))
                                 {
-                                    info.Format = _cloneService.GetAttributeFromXml(field.SchemaXml, "Format");
+                                    info.Format = _cloneService.GetAttributeFromXml(field.SchemaXml, "Format") ?? string.Empty;
                                 }
                                 break;
                             case FieldType.Note:

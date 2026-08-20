@@ -36,7 +36,7 @@ namespace SPUtil.Services
 					string targetUrl,
 					string sourceLibraryTitle,
 					string targetLibraryTitle,
-					IProgress<string> progress = null);
+					IProgress<string>? progress = null);
 
         Task CopyDocLibFilesAsync(
 			string sourceUrl,

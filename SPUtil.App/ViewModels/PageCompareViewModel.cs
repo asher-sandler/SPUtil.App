@@ -33,7 +33,7 @@ namespace SPUtil.App.ViewModels
             string formattedText,
             Window ownerWindow,
             ISharePointService spService,
-            Action onPlaceholdersInserted = null)
+            Action? onPlaceholdersInserted = null)
         {
             PreviewText   = formattedText;
             StatusMessage = compareResult.IsIdentical

@@ -102,6 +102,17 @@ namespace SPUtil.App.ViewModels
                 {
                     StatusMessage = "Will append to existing list.";
                 }
+				
+				// SelectedAction can also be "Rename" or "Skip" here — both currently
+				// abort the same way as Cancel. "Rename" additionally discards the name
+				// the user typed into ExistsActionDialog.NewName (never read anywhere).
+				// Known gap, not implemented — see backlog.
+				#if DEBUG
+				else if (action == "Rename")
+				{	
+					System.Diagnostics.Debugger.Break();
+				}	
+				#endif				
                 else return;
             }
             else

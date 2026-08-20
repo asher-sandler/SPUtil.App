@@ -4,6 +4,6 @@
     {
         public int Processed { get; set; }
         public int Total { get; set; }
-        public string Message { get; set; }
+        public required string Message { get; set; }
     }
 }

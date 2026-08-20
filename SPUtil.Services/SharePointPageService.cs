@@ -80,41 +80,53 @@ namespace SPUtil.Services
 
             return result;
         }
-        private string ReplaceFailedWebPartPlaceholders(
-            string html, IEnumerable<WebPartCopyEntry> failedEntries)
-        {
-            var doc = new HtmlDocument();
-            doc.LoadHtml(html);
 
-            foreach (var entry in failedEntries)
-            {
-                if (string.IsNullOrEmpty(entry.SourceZoneKey)) continue;
+		private string ReplaceFailedWebPartPlaceholders(
+			string html, IEnumerable<WebPartCopyEntry> failedEntries)
+		{
+			var doc = new HtmlDocument();
+			doc.LoadHtml(html);
 
-                var innerDiv = doc.DocumentNode.SelectSingleNode(
-                    $"//div[contains(@class,'ms-rtestate-read') and contains(@class,'{entry.SourceZoneKey}')]");
+			foreach (var entry in failedEntries)
+			{
+				if (string.IsNullOrEmpty(entry.SourceZoneKey)) continue;
 
-                var outerDiv = innerDiv?.ParentNode;
-                if (outerDiv == null)
-                {
-                    _logPage.Caller().Warning(
-                        "ReplaceFailedWebPartPlaceholders: placeholder not found for '{Title}' (ZoneKey={ZoneKey})",
-                        entry.Title, entry.SourceZoneKey);
-                    continue;
-                }
+				var innerDiv = doc.DocumentNode.SelectSingleNode(
+					$"//div[contains(@class,'ms-rtestate-read') and contains(@class,'{entry.SourceZoneKey}')]");
 
-				// SharePointPageService.cs
-				var warningNode = HtmlNode.CreateNode(
-					$"<p style=\"color:#b00020;border:1px dashed #b00020;padding:4px;\">" +
-					$"WEB PART \"{WebUtility.HtmlEncode(entry.Title)}\" IS NOT AVAILABLE ON THIS FARM AND WAS NOT ADDED. " +
-					$"Install/activate the corresponding feature before copying.</p>" +
-					$"<p style=\"font-size:11px;color:#666;\">Technical details: {WebUtility.HtmlEncode(entry.Reason)}</p>");
+				var outerDiv = innerDiv?.ParentNode;
+				if (outerDiv == null)
+				{
+					_logPage.Caller().Warning(
+						"ReplaceFailedWebPartPlaceholders: placeholder not found for '{Title}' (ZoneKey={ZoneKey})",
+						entry.Title, entry.SourceZoneKey);
+					continue;
+				}
 
-                outerDiv.ParentNode.ReplaceChild(warningNode, outerDiv);
-            }
+				try
+				{
+					var warningNode = HtmlNode.CreateNode(
+						$"<div>" +
+						$"<p>Web Part <b> \"{System.Net.WebUtility.HtmlEncode(entry.Title)}\"</b> not available on this site and cannot be added to this page.<br/>" +
+						$"Please install/activate the corresponding feature on this site and copy the page again, " +
+						$"or contact IT support: <a href=\"mailto:supportsp@savion.huji.ac.il\">supportsp@savion.huji.ac.il</a></p>" +
+						$"<p style=\"font-size:11px;color:#666;\">Technical details: {System.Net.WebUtility.HtmlEncode(entry.Reason)}</p>" +
+						$"</div>");
 
-            return doc.DocumentNode.OuterHtml;
-        }
+					outerDiv.ParentNode.ReplaceChild(warningNode, outerDiv);
+				}
+				catch (Exception ex)
+				{
+					// A single placeholder failing to render must not abort the whole
+					// page creation — same principle already applied to the zone case.
+					_logPage.Caller().Error(ex,
+						"ReplaceFailedWebPartPlaceholders: could not build/insert warning node for '{Title}' (ZoneKey={ZoneKey})",
+						entry.Title, entry.SourceZoneKey);
+				}
+			}
 
+			return doc.DocumentNode.OuterHtml;
+		}
         /// <summary>
         /// Извлекает ZoneKey GUID-ы из PublishingPageContent HTML
         /// в визуальном порядке (порядок появления в тексте).
@@ -144,7 +156,7 @@ namespace SPUtil.Services
         /// </summary>
         private static string BuildWpBoxPlaceholder(
             string zoneKey,
-            WebPartPlaceholderMeta sourceMeta = null)
+            WebPartPlaceholderMeta? sourceMeta = null)
         {
             string metaComment = string.Empty;
             string extraClass  = string.Empty;
@@ -1196,7 +1208,7 @@ namespace SPUtil.Services
 
                 // ── Ensure subfolder exists if requested ───────────────────────
                 string pagesRoot = web.ServerRelativeUrl.TrimEnd('/') + "/Pages";
-                Folder targetFolder = null;
+                Folder? targetFolder = null;
                 if (!string.IsNullOrEmpty(subfolderPath))
                 {
                     System.Diagnostics.Debug.WriteLine(

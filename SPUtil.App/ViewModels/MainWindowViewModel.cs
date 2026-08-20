@@ -494,7 +494,7 @@ namespace SPUtil.App.ViewModels
                 if (loginWin.ShowDialog() == true)
                 {
                     // Сохраняем в реестр, в профиль домена этого сайта
-                    SPUsingUtils.SaveCredentials(siteUrl, loginWin.UserName, loginWin.Password);
+                    SPUsingUtils.SaveCredentials(siteUrl, loginWin.UserName ?? string.Empty, loginWin.Password ?? string.Empty);
                     isSaved = true;
                 }
             });

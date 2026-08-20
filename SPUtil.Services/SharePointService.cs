@@ -613,7 +613,7 @@ namespace SPUtil.Services
 				return items.AsEnumerable().Select(i => new SPListItemData
 				{
 					Id = i.Id,
-					Title = i["Title"] != null ? i["Title"].ToString() : "Untitled"
+					Title = i["Title"]?.ToString() ?? "Untitled"
 				}).ToList();
 			});
 		}
@@ -949,7 +949,7 @@ namespace SPUtil.Services
                     // Теперь формируем ключ для поиска в словаре, который наполнили в Этапе А
                     string parentKey = $"{field.LookupListName}:{parentFieldName}";
 
-					if (fieldGuidMap.TryGetValue(parentKey, out string newParentId))
+					if (fieldGuidMap.TryGetValue(parentKey, out var newParentId))
 					{
 						try
 						{
@@ -1493,7 +1493,7 @@ namespace SPUtil.Services
             string targetUrl,
             string sourceLibraryTitle,
             string targetLibraryTitle,
-            IProgress<string> progress = null)
+            IProgress<string>? progress = null)
         {
             await Task.Run(async () =>
             {
@@ -1543,7 +1543,7 @@ namespace SPUtil.Services
                 // Note: avoid ?. inside expression trees — use explicit null check instead
                 var folderPaths = folderItems
                     .Cast<ListItem>()
-                    .Select(i => i["FileRef"] != null ? i["FileRef"].ToString() : "")
+                    .Select(i => i["FileRef"] != null ? (i["FileRef"].ToString() ?? "") : "")
                     .Where(p => !string.IsNullOrEmpty(p))
                     .OrderBy(p => p.Count(c => c == '/')) // shallow folders first
                     .ToList();

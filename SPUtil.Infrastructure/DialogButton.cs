@@ -6,8 +6,8 @@ using Prism.Commands;
 
 public class DialogButton
 {
-    public string Caption { get; set; }
-    public Action Action { get; set; }
+	public required string Caption { get; set; }
+	public required Action Action { get; set; }
     public bool IsCancel { get; set; }
 
     // Добавьте это свойство, чтобы XAML мог "нажать" на кнопку

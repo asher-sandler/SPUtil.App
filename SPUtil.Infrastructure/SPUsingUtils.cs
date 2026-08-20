@@ -176,7 +176,7 @@ namespace SPUtil.Infrastructure
                         // if (attr.Name.LocalName == "Required" && attr.Value.ToUpper() == "FALSE") return null;
 
                         return attr;
-                    }).Where(attr => attr != null);
+                    }).OfType<XAttribute>(); //.Where(attr => attr != null);
 
                     // Сортируем для стабильного сравнения строк
                     query = query.OrderBy(attr => attr.Name.LocalName);
@@ -232,7 +232,7 @@ namespace SPUtil.Infrastructure
                     using (var xmlWriter = System.Xml.XmlWriter.Create(stringWriter, settings))
                     {
                         // Пишем только содержимое нашего виртуального корня
-                        foreach (var node in xDoc.Root.Nodes())
+                        foreach (var node in xDoc.Root!.Nodes())
                         {
                             node.WriteTo(xmlWriter);
                         }

@@ -7,9 +7,9 @@ namespace SPUtil.App.Views
     public partial class LoginWindow : Window
     {
         /// <summary>Account name without the domain prefix, as stored in the registry.</summary>
-        public string UserName { get; private set; }
+        public string? UserName { get; private set; }
 
-        public string Password { get; private set; }
+        public string? Password { get; private set; }
 
         /// <summary>AD domain these credentials are being entered for.</summary>
         private readonly string _domain;

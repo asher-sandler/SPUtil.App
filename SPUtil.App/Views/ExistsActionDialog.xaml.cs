@@ -7,7 +7,7 @@ namespace SPUtil.Views
     public partial class ExistsActionDialog : Window
     {
         public string SelectedAction { get; private set; } = "Cancel";
-        public string NewName { get; private set; }
+        public string? NewName { get; private set; }
 
         public ExistsActionDialog(string listName)
         {
@@ -21,7 +21,7 @@ namespace SPUtil.Views
 
             if (sender is Button btn && btn.Tag != null)
             {
-                SelectedAction = btn.Tag.ToString();
+                SelectedAction = btn.Tag.ToString() ?? "Cancel";
 
                 if (SelectedAction == "Rename")
                 {
@@ -33,9 +33,16 @@ namespace SPUtil.Views
                         TxtListName.Text);
 
                     if (string.IsNullOrWhiteSpace(input) || input == TxtListName.Text) 
-                        return; 
+                        return;
+                    // SelectedAction can also be "Rename" or "Skip" here — both currently
+                    // abort the same way as Cancel. "Rename" additionally discards the name
+                    // the user typed into ExistsActionDialog.NewName (never read anywhere).
+                    // Known gap, not implemented — see backlog.
 
                     NewName = input;
+#if DEBUG
+                    System.Diagnostics.Debugger.Break();
+#endif
                 }
 
                 this.DialogResult = SelectedAction != "Cancel";

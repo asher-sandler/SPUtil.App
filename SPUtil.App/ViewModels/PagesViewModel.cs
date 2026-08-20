@@ -81,7 +81,7 @@ namespace SPUtil.App.ViewModels
         public DelegateCommand GetAllPropertiesCommand    { get; }
         public DelegateCommand ShowWebPartsPreviewCommand { get; }
         public DelegateCommand CopyPageCommand            { get; }
-        public DelegateCommand DeletePageCommand          { get; }
+        //public DelegateCommand DeletePageCommand          { get; }
         public DelegateCommand RenamePageCommand          { get; }
         public DelegateCommand ComparePageCommand         { get; }
         public DelegateCommand SyncPropertiesCommand      { get; }
