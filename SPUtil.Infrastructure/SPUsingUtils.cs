@@ -374,6 +374,25 @@ namespace SPUtil.Infrastructure
             _log.Information("SaveCredentials — profile stored for domain '{Domain}', user '{User}'",
                 domain, userName);
         }
+		
+		
+		private static string recentsPath = $@"{regPath}\Recents";
+
+		public static void PushRecentSite(string side, string url)
+		{
+			// side: "Left" / "Right"
+			// v1: пишет только слот 1. Метод-обёртка нужен уже сейчас,
+			// чтобы расширение до 5 слотов (MRU-сдвиг) не требовало
+			// менять вызывающий код в App.xaml.cs.
+			using (var key = Registry.CurrentUser.CreateSubKey(recentsPath))
+				key.SetValue($"Site{side}1", url ?? string.Empty);
+		}
+
+		public static string GetRecentSite(string side)
+		{
+			using (var key = Registry.CurrentUser.OpenSubKey(recentsPath))
+				return key?.GetValue($"Site{side}1") as string ?? string.Empty;
+		}		
 
     }
 }

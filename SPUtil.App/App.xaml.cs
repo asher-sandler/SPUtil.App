@@ -8,6 +8,7 @@ using System;
 using System.IO;
 using System.Windows;
 using Serilog;
+using SPUtil.Infrastructure;
 
 namespace SPUtil.App
 {
@@ -48,12 +49,14 @@ namespace SPUtil.App
         }
 
         protected override void OnExit(ExitEventArgs e)
-        {
-            Log.Information("=== SPUtil exiting ===");
-            Log.CloseAndFlush();   // flush all buffered log entries before exit
-            base.OnExit(e);
-        }
+	    {
+			Log.Information("=== SPUtil exiting ===");
 
+            
+
+            Log.CloseAndFlush();
+			base.OnExit(e);
+		}
         protected override void RegisterTypes(IContainerRegistry containerRegistry)
         {
             containerRegistry.RegisterSingleton<ISharePointService, SharePointService>();

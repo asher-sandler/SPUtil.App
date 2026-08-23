@@ -196,6 +196,9 @@ namespace SPUtil.App.ViewModels
 						IsLeftConnected = true;
 						LeftUserName    = SPUsingUtils.GetStoredUsername(LeftSiteUrl) ?? "Unknown user";
 						ConnectionStatus = "Connected";
+						SPUsingUtils.PushRecentSite("Left", LeftSiteUrl);
+						Log.Information("Save Left  Site to registry: " + LeftSiteUrl);
+
 					}
 					else
 					{
@@ -252,6 +255,8 @@ namespace SPUtil.App.ViewModels
 						IsRightConnected = true;
 						RightUserName    = SPUsingUtils.GetStoredUsername(RightSiteUrl) ?? "Unknown user";
 						ConnectionStatus = "Connected";
+						SPUsingUtils.PushRecentSite("Right", RightSiteUrl);
+						Log.Information("Save Right Site to registry: " + RightSiteUrl);
 					}
 					else
 					{
@@ -1437,6 +1442,7 @@ namespace SPUtil.App.ViewModels
         {
             try
             {
+				/*
                 string path = System.IO.Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
 
@@ -1447,10 +1453,14 @@ namespace SPUtil.App.ViewModels
                         "Copy appsettings.example.json → appsettings.json and fill in your URLs.");
                     return (string.Empty, string.Empty);
                 }
-
+				
                 string json  = System.IO.File.ReadAllText(path);
                 string left  = ExtractJsonString(json, "LeftSiteUrl");
                 string right = ExtractJsonString(json, "RightSiteUrl");
+				*/
+				
+				string left  = SPUsingUtils.GetRecentSite("Left");
+				string right = SPUsingUtils.GetRecentSite("Right");
                 return (left, right);
             }
             catch (Exception ex)
