@@ -1,0 +1,81 @@
+<Window x:Class="SPUtil.Views.FilterDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Filter" Width="500" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="White">
+
+    <StackPanel Margin="20">
+
+        <!-- Header -->
+        <TextBlock Text="Filter Items" FontSize="16" FontWeight="SemiBold"
+                   Foreground="#333333" Margin="0,0,0,2"/>
+        <TextBlock Text="Choose a field and a condition to narrow down the grid."
+                   FontSize="11" Foreground="Gray" Margin="0,0,0,14"/>
+
+        <!-- Condition section -->
+        <Border BorderBrush="#DDDDDD" BorderThickness="1" CornerRadius="4"
+                Background="#FAFAFA" Padding="14">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Row 0: Field / Operator -->
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Field"
+                           VerticalAlignment="Center" Margin="0,0,10,10"
+                           FontSize="12" Foreground="#555"/>
+                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="CmbField"
+                          Margin="0,0,20,10" Padding="6,4"
+                          SelectionChanged="CmbField_SelectionChanged">
+                    <ComboBoxItem Content="ID" IsSelected="True"/>
+                    <ComboBoxItem Content="Title"/>
+                    <ComboBoxItem Content="Modified"/>
+                </ComboBox>
+
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Operator"
+                           VerticalAlignment="Center" Margin="0,0,10,10"
+                           FontSize="12" Foreground="#555"/>
+                <ComboBox Grid.Row="0" Grid.Column="3" x:Name="CmbOperator"
+                          Margin="0,0,0,10" Padding="6,4"
+                          SelectionChanged="CmbOperator_SelectionChanged"/>
+
+                <!-- Row 1: Value / To -->
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Value"
+                           VerticalAlignment="Center" Margin="0,0,10,0"
+                           FontSize="12" Foreground="#555"/>
+                <Grid Grid.Row="1" Grid.Column="1" Margin="0,0,20,0">
+                    <TextBox x:Name="TxtValue1" Padding="5,4"/>
+                    <DatePicker x:Name="DtpValue1" Padding="5,4" Visibility="Collapsed"/>
+                </Grid>
+
+                <TextBlock Grid.Row="1" Grid.Column="2" x:Name="TxtToLabel" Text="To"
+                           VerticalAlignment="Center" Margin="0,0,10,0"
+                           FontSize="12" Foreground="#555" Visibility="Collapsed"/>
+                <Grid Grid.Row="1" Grid.Column="3">
+                    <TextBox x:Name="TxtValue2" Padding="5,4" Visibility="Collapsed"/>
+                    <DatePicker x:Name="DtpValue2" Padding="5,4" Visibility="Collapsed"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Cancel" Width="90" Height="30" Margin="0,0,10,0"
+                    Background="White" BorderBrush="#CCCCCC"
+                    Click="BtnCancel_Click"/>
+            <Button Content="Request Data" Width="120" Height="30"
+                    Background="#0078D4" Foreground="White" BorderThickness="0"
+                    FontWeight="SemiBold"
+                    Click="BtnRequestData_Click"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>

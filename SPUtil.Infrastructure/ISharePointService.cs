@@ -21,6 +21,7 @@ namespace SPUtil.Services
         //Task CopyListAsync(string sourceUrl, string targetUrl, string listName);
 
         Task<List<SPListItemData>> GetListItemsByIDAsync(string siteUrl, string listId);
+		Task<List<SPListItemData>> GetListItemsByIDAsync(string siteUrl, string listId, string whereClause);		
 		Task<string> GetListNameByIdAsync(string siteUrl, string listId);
 		Task<Guid> GetListIdByTitleAsync(string siteUrl, string listTitle);
 

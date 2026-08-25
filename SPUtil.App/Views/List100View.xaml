@@ -101,22 +101,37 @@
         <TabControl Grid.Row="2"
                     SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}">
 
-            <!-- ── Tab 0: Items ──────────────────────────────────────────── -->
-            <TabItem Header="Items">
-                <DataGrid ItemsSource="{Binding Items}"
-                          AutoGenerateColumns="False"
-                          CanUserAddRows="False"
-                          IsReadOnly="False"
-                          Background="White">
-                    <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="Sel"
-                                                Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
-                                                Width="40"/>
-                        <DataGridTextColumn Header="ID"    Binding="{Binding Id}"    IsReadOnly="True" Width="50"/>
-                        <DataGridTextColumn Header="Title" Binding="{Binding Title}" IsReadOnly="True" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
+			<!-- ── Tab 0: Items ──────────────────────────────────────────── -->
+			<TabItem Header="Items">
+				<Grid>
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<!-- Prototype: Filter / Reset Filter buttons — no real logic wired yet -->
+					<StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+						<Button x:Name="BtnFilter" Content="Filter" Width="90" Click="BtnFilter_Click"/>
+						<Button x:Name="BtnResetFilter" Content="Reset Filter" Width="100"
+								Margin="8,0,0,0" IsEnabled="False" Click="BtnResetFilter_Click"/>
+					</StackPanel>
+
+					<DataGrid Grid.Row="1"
+							  ItemsSource="{Binding Items}"
+							  AutoGenerateColumns="False"
+							  CanUserAddRows="False"
+							  IsReadOnly="False"
+							  Background="White">
+						<DataGrid.Columns>
+							<DataGridCheckBoxColumn Header="Sel"
+													Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+													Width="40"/>
+							<DataGridTextColumn Header="ID"    Binding="{Binding Id}"    IsReadOnly="True" Width="50"/>
+							<DataGridTextColumn Header="Title" Binding="{Binding Title}" IsReadOnly="True" Width="*"/>
+						</DataGrid.Columns>
+					</DataGrid>
+				</Grid>
+			</TabItem>
 
             <!-- ── Tab 1: Fields ─────────────────────────────────────────── -->
             <TabItem Header="Fields">

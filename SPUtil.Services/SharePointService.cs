@@ -591,6 +591,8 @@ namespace SPUtil.Services
 			}, ct);
 		}
 
+
+		
        public async Task<List<SPListItemData>> GetListItemsByIDAsync(string siteUrl, string listId)
 		{
 			return await Task.Run(async () =>
@@ -617,6 +619,51 @@ namespace SPUtil.Services
 				}).ToList();
 			});
 		}
+
+		/// <summary>
+		/// Same as GetListItemsByIDAsync(siteUrl, listId), but injects a caller-built
+		/// CAML &lt;Where&gt; clause (see CamlFilterBuilder) instead of loading the
+		/// entire list unconditionally. Same projection (ID, Title), same lack of
+		/// server-side paging/RowLimit as the unfiltered overload — the caller
+		/// (List100ViewModel) is responsible for the "large result" warning before
+		/// calling this, not this method.
+		/// </summary>
+		public async Task<List<SPListItemData>> GetListItemsByIDAsync(string siteUrl, string listId, string whereClause)
+		{
+			return await Task.Run(async () =>
+			{
+				using var context = await GetContextAsync(siteUrl);
+				var list = context.Web.Lists.GetById(new Guid(listId));
+
+				var query = new CamlQuery
+				{
+					ViewXml = $@"<View>
+						<Query>
+							{whereClause}
+						</Query>
+						<ViewFields>
+							<FieldRef Name='ID'/>
+							<FieldRef Name='Title'/>
+						</ViewFields>
+					</View>"
+				};
+
+				var items = list.GetItems(query);
+
+				context.Load(items, icol => icol.Include(
+					i => i.Id,
+					i => i["Title"]));
+
+				context.ExecuteQuery();
+
+				return items.AsEnumerable().Select(i => new SPListItemData
+				{
+					Id = i.Id,
+					Title = i["Title"]?.ToString() ?? "Untitled"
+				}).ToList();
+			});
+		}		
+		
 		//
 		public async Task<string> GetListNameByIdAsync(string siteUrl, string listId)
 		{

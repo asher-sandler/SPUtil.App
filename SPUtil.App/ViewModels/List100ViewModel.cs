@@ -26,12 +26,18 @@ namespace SPUtil.App.ViewModels
         Fields,
         Views
     }
+	
+	
 
     public class List100ViewModel : BindableBase
     {
         private static readonly ILogger _log = Log.ForContext<List100ViewModel>();
 
         private readonly ISharePointService _spService;
+		
+		private string _currentSiteUrl = string.Empty;
+		private string _currentListId  = string.Empty;
+
 
         // ── Data collections ─────────────────────────────────────────────────
         private ObservableCollection<SPListItemData> _items  = new();
@@ -621,7 +627,9 @@ namespace SPUtil.App.ViewModels
             Views.Clear();
 
             string cleanId = listPath.StartsWith("id:") ? listPath.Substring(3) : listPath;
-
+			
+			_currentSiteUrl = siteUrl;
+			_currentListId  = cleanId;
             // ── Fields ──
             try
             {
@@ -675,5 +683,52 @@ namespace SPUtil.App.ViewModels
                 LogAndStatus($"Item load error: {ex.Message}");
             }
         }
+		
+		/// <summary>
+		/// Applies a CAML &lt;Where&gt; clause built by FilterDialog/CamlFilterBuilder.
+		/// Replaces Items entirely with the filtered result — no client-side 250 cap,
+		/// unlike the unfiltered load (see ResetFilterAsync).
+		/// </summary>
+		public async Task ApplyFilterAsync(string whereClause)
+		{
+			try
+			{
+				var filteredItems = await _spService.GetListItemsByIDAsync(_currentSiteUrl, _currentListId, whereClause);
+				Items = new ObservableCollection<SPListItemData>(filteredItems);
+				LogAndStatus($"Filter applied — {filteredItems.Count} item(s) found.");
+			}
+			catch (Exception ex)
+			{
+				_log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+				LogAndStatus($"Filter error: {ex.Message}");
+			}
+		}
+
+		/// <summary>
+		/// Reloads the grid without any <Where> — same unfiltered call and same
+		/// first-250 client-side cap as the initial load in LoadDataAsync.
+		/// </summary>
+		public async Task ResetFilterAsync()
+		{
+			try
+			{
+				var allItems = await _spService.GetListItemsByIDAsync(_currentSiteUrl, _currentListId);
+				if (allItems.Count > 250)
+				{
+					LogAndStatus($"Warning: list contains {allItems.Count} items. Showing first 250.");
+					Items = new ObservableCollection<SPListItemData>(allItems.Take(250));
+				}
+				else
+				{
+					Items = new ObservableCollection<SPListItemData>(allItems);
+					LogAndStatus($"Items: {allItems.Count}");
+				}
+			}
+			catch (Exception ex)
+			{
+				_log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+				LogAndStatus($"Reset filter error: {ex.Message}");
+			}
+		}		
     }
 }
