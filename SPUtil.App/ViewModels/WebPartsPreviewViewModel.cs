@@ -57,10 +57,10 @@ namespace SPUtil.App.ViewModels
         public WebPartsPreviewViewModel(
             IEnumerable<SPWebPartData> webParts,
             string pageTitle,
-            Window ownerWindow)
+            Window ownerWindow,string pageUrl = "")
         {
             // Build the formatted text block
-            PreviewText = BuildPreviewText(webParts, pageTitle);
+            PreviewText = BuildPreviewText(webParts, pageTitle, pageUrl);
 
             // ── Buttons ──────────────────────────────────────────────────────
             DialogButtons = new ObservableCollection<DialogButton>
@@ -88,10 +88,12 @@ namespace SPUtil.App.ViewModels
         }
 
         // ── Text builder ─────────────────────────────────────────────────────
-        private static string BuildPreviewText(IEnumerable<SPWebPartData> webParts, string pageTitle)
+        private static string BuildPreviewText(IEnumerable<SPWebPartData> webParts, string pageTitle, string pageUrl)
         {
             var sb = new StringBuilder();
             sb.AppendLine($"=== WebParts — {pageTitle} ===");
+			if (!string.IsNullOrEmpty(pageUrl))
+                sb.AppendLine($"URL: {pageUrl}");
             sb.AppendLine($"Generated: {DateTime.Now:dd.MM.yyyy HH:mm:ss}");
             sb.AppendLine(new string('═', 60));
 

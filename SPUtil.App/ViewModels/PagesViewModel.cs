@@ -133,7 +133,9 @@ namespace SPUtil.App.ViewModels
                     Width  = 1000,
                     Height = 680
                 };
-                var vm = new WebPartsPreviewViewModel(WebParts, SelectedPage.Name, win);
+                string hostRoot = "https://" + new Uri(_siteUrl).Host;
+                string fullPagePath = $"{hostRoot}{SelectedPage.FullPath}";
+                var vm = new WebPartsPreviewViewModel(WebParts, SelectedPage.Name, win, fullPagePath);
                 win.DataContext = vm;
                 win.ShowDialog();
             });
@@ -596,7 +598,7 @@ namespace SPUtil.App.ViewModels
 
                 _log.Caller().Warning("Target page not found: {Url}", missing);
                 MessageBox.Show(
-                    $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
+                    $"Page '{targetPageName}' was not found on the target site.",
                     "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -786,7 +788,7 @@ namespace SPUtil.App.ViewModels
 
                 _log.Caller().Warning("Target page not found: {Url}", missing);
                 MessageBox.Show(
-                    $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
+                    $"Page '{targetPageName}' was not found on the target site.",
                     "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -831,8 +833,10 @@ namespace SPUtil.App.ViewModels
                 // Build diff text for this single WebPart
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine($"=== WebPart Comparison: {SelectedWebPart.Title} ===");
-                sb.AppendLine($"Source : {_siteUrl}{SelectedPage.FullPath}");
-                sb.AppendLine($"Target : {_targetSiteUrl}{targetRelUrl}");
+                string sourceHost = "https://" + new Uri(_siteUrl).Host;
+                string targetHost = "https://" + new Uri(_targetSiteUrl).Host;
+                sb.AppendLine($"Source : {sourceHost}{SelectedPage.FullPath}");
+                sb.AppendLine($"Target : {targetHost}{targetRelUrl}");
                 sb.AppendLine(new string('═', 70));
 
                 var skipProps = new System.Collections.Generic.HashSet<string>(
@@ -927,7 +931,7 @@ namespace SPUtil.App.ViewModels
 
                 _log.Caller().Warning("Target page not found: {Url}", missing);
                 MessageBox.Show(
-                    $"Page '{targetPageName}' was not found on the target site.\n\n{missing}",
+                    $"Page '{targetPageName}' was not found on the target site.",
                     "Page Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }

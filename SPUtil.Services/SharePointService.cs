@@ -599,6 +599,7 @@ namespace SPUtil.Services
 			{
 				using var context = await GetContextAsync(siteUrl);
 				var list = context.Web.Lists.GetById(new Guid(listId));
+				context.Load(list, l => l.RootFolder.ServerRelativeUrl);
 
 				// Base query for Default View
 				var query = CamlQuery.CreateAllItemsQuery();
@@ -612,10 +613,14 @@ namespace SPUtil.Services
 				// USE SYNCHRONOUS METHOD
 				context.ExecuteQuery();
 
+				string hostRoot   = "https://" + new Uri(siteUrl).Host;
+				string rootFolder = list.RootFolder.ServerRelativeUrl.TrimEnd('/');				
+
 				return items.AsEnumerable().Select(i => new SPListItemData
 				{
 					Id = i.Id,
-					Title = i["Title"]?.ToString() ?? "Untitled"
+					Title = i["Title"]?.ToString() ?? "Untitled",
+					DispFormUrl = $"{hostRoot}{rootFolder}/DispForm.aspx?ID={i.Id}"
 				}).ToList();
 			});
 		}
@@ -634,6 +639,8 @@ namespace SPUtil.Services
 			{
 				using var context = await GetContextAsync(siteUrl);
 				var list = context.Web.Lists.GetById(new Guid(listId));
+				context.Load(list, l => l.RootFolder.ServerRelativeUrl);   // ← добавлено, тот же фикс, что и в перегрузке без фильтра
+
 
 				var query = new CamlQuery
 				{
@@ -655,12 +662,16 @@ namespace SPUtil.Services
 					i => i["Title"]));
 
 				context.ExecuteQuery();
+				
+				string hostRoot   = "https://" + new Uri(siteUrl).Host;
+				string rootFolder = list.RootFolder.ServerRelativeUrl.TrimEnd('/');
 
 				return items.AsEnumerable().Select(i => new SPListItemData
 				{
 					Id = i.Id,
-					Title = i["Title"]?.ToString() ?? "Untitled"
-				}).ToList();
+					Title = i["Title"]?.ToString() ?? "Untitled",
+					DispFormUrl = $"{hostRoot}{rootFolder}/DispForm.aspx?ID={i.Id}"
+				}).ToList();			
 			});
 		}		
 		

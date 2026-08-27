@@ -109,12 +109,25 @@
 						<RowDefinition Height="*"/>
 					</Grid.RowDefinitions>
 
-					<!-- Prototype: Filter / Reset Filter buttons — no real logic wired yet -->
 					<StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-						<Button x:Name="BtnFilter" Content="Filter" Width="90" Click="BtnFilter_Click"/>
-						<Button x:Name="BtnResetFilter" Content="Reset Filter" Width="100"
-								Margin="8,0,0,0" IsEnabled="False" Click="BtnResetFilter_Click"/>
+						<Button x:Name="BtnFilter" Style="{StaticResource IconTextButton}" Click="BtnFilter_Click">
+							<StackPanel Orientation="Horizontal">
+								<TextBlock Text="&#xE71C;" Style="{StaticResource IconText}" FontSize="14"
+										   Foreground="#0078D4" VerticalAlignment="Center"/>
+								<TextBlock Text="Filter" Margin="6,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
+							</StackPanel>
+						</Button>
+
+						<Button x:Name="BtnResetFilter" Style="{StaticResource IconTextButton}"
+								Margin="8,0,0,0" IsEnabled="False" Click="BtnResetFilter_Click">
+							<StackPanel Orientation="Horizontal">
+								<TextBlock Text="&#xE894;" Style="{StaticResource IconText}" FontSize="14"
+										   Foreground="#D83B01" VerticalAlignment="Center"/>
+								<TextBlock Text="Reset Filter" Margin="6,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/>
+							</StackPanel>
+						</Button>
 					</StackPanel>
+
 
 					<DataGrid Grid.Row="1"
 							  ItemsSource="{Binding Items}"
@@ -126,7 +139,33 @@
 							<DataGridCheckBoxColumn Header="Sel"
 													Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
 													Width="40"/>
-							<DataGridTextColumn Header="ID"    Binding="{Binding Id}"    IsReadOnly="True" Width="50"/>
+
+							<DataGridTemplateColumn Header="ID" Width="37">
+								<DataGridTemplateColumn.CellTemplate>
+									<DataTemplate>
+										<Button Content="{Binding Id}"
+												Click="BtnOpenItem_Click"
+												Tag="{Binding DispFormUrl}"
+												ToolTip="Open item"
+												Background="Transparent" BorderThickness="0"
+												Cursor="Hand"
+												HorizontalContentAlignment="Left" Padding="0">
+											<Button.Style>
+												<Style TargetType="Button">
+													<Setter Property="Foreground" Value="#0078D4"/>
+													<Style.Triggers>
+														<DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
+																	 Value="True">
+															<Setter Property="Foreground" Value="White"/>
+														</DataTrigger>
+													</Style.Triggers>
+												</Style>
+											</Button.Style>
+										</Button>
+									</DataTemplate>
+								</DataGridTemplateColumn.CellTemplate>
+							</DataGridTemplateColumn>
+
 							<DataGridTextColumn Header="Title" Binding="{Binding Title}" IsReadOnly="True" Width="*"/>
 						</DataGrid.Columns>
 					</DataGrid>
