@@ -156,11 +156,20 @@
 													<Style TargetType="Button">
 														<Setter Property="Foreground" Value="#0078D4"/>
 														<Style.Triggers>
-															<DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
-																		 Value="True">
+															<!-- White only while selection is ACTIVE (dark blue row background).
+																 When focus moves to another grid/tab (e.g. Fields, Views),
+																 WPF switches to a much lighter "inactive selection" background —
+																 white would be invisible there, so the icon stays blue instead. -->
+															<MultiDataTrigger>
+																<MultiDataTrigger.Conditions>
+																	<Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
+																			   Value="True"/>
+																	<Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=(Selector.IsSelectionActive)}"
+																			   Value="True"/>
+																</MultiDataTrigger.Conditions>
 																<Setter Property="Foreground" Value="White"/>
-															</DataTrigger>
-														</Style.Triggers>
+															</MultiDataTrigger>
+														</Style.Triggers>	
 													</Style>
 												</Button.Style>
 											</Button>
