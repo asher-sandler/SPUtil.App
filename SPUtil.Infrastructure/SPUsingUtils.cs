@@ -377,22 +377,86 @@ namespace SPUtil.Infrastructure
 		
 		
 		private static string recentsPath = $@"{regPath}\Recents";
+		private const int MaxRecentSites = 5;
 
+		/// <summary>
+		/// Comparison key for recent-site dedup. Not the same as NormalizeUrl()
+		/// alone: NormalizeUrl only TrimEnd('/')s when the host ends with a
+		/// balancer "2" (see its "2" branch) — the plain-host fallback branch
+		/// returns the URL with any trailing slash intact. Without the extra
+		/// TrimEnd here, "crs.ada.../X/" and "crs2.ada.../X" would compare as
+		/// different sites even though they are the same one.
+		/// </summary>
+		private static string RecentSiteComparisonKey(string url) =>
+			NormalizeUrl(url)?.TrimEnd('/') ?? string.Empty;
+
+
+		/// <summary>
+		/// Records a site as most-recently-used for the given pane ("Left"/"Right").
+		/// Stored EXACTLY as typed (not normalized) — only the dedup comparison
+		/// uses the normalized key. If an existing entry represents the same site
+		/// (e.g. differs only by the "2" balancer host or a trailing slash), it is
+		/// removed and the newly typed variant takes its place at the front —
+		/// the list always keeps the most recently typed form, not the oldest.
+		/// </summary>
 		public static void PushRecentSite(string side, string url)
 		{
-			// side: "Left" / "Right"
-			// v1: пишет только слот 1. Метод-обёртка нужен уже сейчас,
-			// чтобы расширение до 5 слотов (MRU-сдвиг) не требовало
-			// менять вызывающий код в App.xaml.cs.
+			if (string.IsNullOrWhiteSpace(url)) return;
+
+			var entries = GetRecentSites(side);
+			string newKey = RecentSiteComparisonKey(url);
+
+			entries.RemoveAll(e => RecentSiteComparisonKey(e) == newKey);
+			entries.Insert(0, url);
+
+			if (entries.Count > MaxRecentSites)
+				entries = entries.Take(MaxRecentSites).ToList();
+
 			using (var key = Registry.CurrentUser.CreateSubKey(recentsPath))
-				key.SetValue($"Site{side}1", url ?? string.Empty);
+			{
+				for (int i = 0; i < MaxRecentSites; i++)
+				{
+					string valueName = $"Site{side}{i + 1}";
+					if (i < entries.Count)
+						key.SetValue(valueName, entries[i]);
+					else
+						key.DeleteValue(valueName, throwOnMissingValue: false);
+				}
+			}
 		}
 
+
+		/// <summary>
+		/// Returns up to 5 recent site URLs for the given pane, most-recent first,
+		/// exactly as they were typed when saved. Empty slots are skipped, not
+		/// returned as empty strings.
+		/// </summary>
+		public static List<string> GetRecentSites(string side)
+		{
+			var result = new List<string>();
+			using (var key = Registry.CurrentUser.OpenSubKey(recentsPath))
+			{
+				if (key == null) return result;
+
+				for (int i = 1; i <= MaxRecentSites; i++)
+				{
+					string? value = key.GetValue($"Site{side}{i}") as string;
+					if (!string.IsNullOrWhiteSpace(value))
+						result.Add(value);
+				}
+			}
+			return result;
+		}
+
+		/// <summary>
+		/// Backward-compatible single-value accessor — the most recent site only.
+		/// Used by App startup to restore Left/RightSiteUrl without needing the
+		/// full list.
+		/// </summary>
 		public static string GetRecentSite(string side)
 		{
-			using (var key = Registry.CurrentUser.OpenSubKey(recentsPath))
-				return key?.GetValue($"Site{side}1") as string ?? string.Empty;
-		}		
-
+			var entries = GetRecentSites(side);
+			return entries.Count > 0 ? entries[0] : string.Empty;
+		}
     }
 }
