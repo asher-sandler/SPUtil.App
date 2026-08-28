@@ -19,7 +19,9 @@ namespace SPUtil.App.ViewModels
         private readonly ISharePointService _spService;
         private string  _siteUrl       = string.Empty;
 		
-        
+		private bool _isBusy;
+        public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
+       
 	    // Provider instead of a captured string: the target site URL must be read at
         // the moment of the operation. It used to be a snapshot taken when the user
         // picked a library in the tree, so changing the target site afterwards had no
@@ -2131,6 +2133,8 @@ stop-transcript
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
             _siteUrl = siteUrl;
+			IsBusy = true;
+			await Task.Delay(5000);
             try
             {
                 StatusMessage = "Loading pages...";
@@ -2149,6 +2153,10 @@ stop-transcript
                 _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"Load error: {ex.Message}";
             }
+			finally
+            {
+                //IsBusy = false;
+            }			
         }
 
         private async Task LoadWebPartsAsync(string fileUrl)

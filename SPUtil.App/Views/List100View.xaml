@@ -1,7 +1,8 @@
 <UserControl x:Class="SPUtil.App.Views.List100View"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:prism="http://prismlibrary.com/">
+             xmlns:prism="http://prismlibrary.com/"
+             xmlns:controls="clr-namespace:SPUtil.App.Controls">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
@@ -129,46 +130,50 @@
 					</StackPanel>
 
 
-					<DataGrid Grid.Row="1"
-							  ItemsSource="{Binding Items}"
-							  AutoGenerateColumns="False"
-							  CanUserAddRows="False"
-							  IsReadOnly="False"
-							  Background="White">
-						<DataGrid.Columns>
-							<DataGridCheckBoxColumn Header="Sel"
-													Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
-													Width="40"/>
+					<Grid Grid.Row="1">
+						<DataGrid
+								  ItemsSource="{Binding Items}"
+								  AutoGenerateColumns="False"
+								  CanUserAddRows="False"
+								  IsReadOnly="False"
+								  Background="White">
+							<DataGrid.Columns>
+								<DataGridCheckBoxColumn Header="Sel"
+														Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+														Width="40"/>
+	
+								<DataGridTemplateColumn Header="ID" Width="37">
+									<DataGridTemplateColumn.CellTemplate>
+										<DataTemplate>
+											<Button Content="{Binding Id}"
+													Click="BtnOpenItem_Click"
+													Tag="{Binding DispFormUrl}"
+													ToolTip="Open item"
+													Background="Transparent" BorderThickness="0"
+													Cursor="Hand"
+													HorizontalContentAlignment="Left" Padding="0">
+												<Button.Style>
+													<Style TargetType="Button">
+														<Setter Property="Foreground" Value="#0078D4"/>
+														<Style.Triggers>
+															<DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
+																		 Value="True">
+																<Setter Property="Foreground" Value="White"/>
+															</DataTrigger>
+														</Style.Triggers>
+													</Style>
+												</Button.Style>
+											</Button>
+										</DataTemplate>
+									</DataGridTemplateColumn.CellTemplate>
+								</DataGridTemplateColumn>
+	
+								<DataGridTextColumn Header="Title" Binding="{Binding Title}" IsReadOnly="True" Width="*"/>
+							</DataGrid.Columns>
+						</DataGrid>
 
-							<DataGridTemplateColumn Header="ID" Width="37">
-								<DataGridTemplateColumn.CellTemplate>
-									<DataTemplate>
-										<Button Content="{Binding Id}"
-												Click="BtnOpenItem_Click"
-												Tag="{Binding DispFormUrl}"
-												ToolTip="Open item"
-												Background="Transparent" BorderThickness="0"
-												Cursor="Hand"
-												HorizontalContentAlignment="Left" Padding="0">
-											<Button.Style>
-												<Style TargetType="Button">
-													<Setter Property="Foreground" Value="#0078D4"/>
-													<Style.Triggers>
-														<DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
-																	 Value="True">
-															<Setter Property="Foreground" Value="White"/>
-														</DataTrigger>
-													</Style.Triggers>
-												</Style>
-											</Button.Style>
-										</Button>
-									</DataTemplate>
-								</DataGridTemplateColumn.CellTemplate>
-							</DataGridTemplateColumn>
-
-							<DataGridTextColumn Header="Title" Binding="{Binding Title}" IsReadOnly="True" Width="*"/>
-						</DataGrid.Columns>
-					</DataGrid>
+						<controls:LoadingOverlay IsBusy="{Binding IsBusy}" LoadingText="Loading items, please wait…"/>
+					</Grid>
 				</Grid>
 			</TabItem>
 

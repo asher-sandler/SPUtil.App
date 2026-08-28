@@ -663,22 +663,31 @@ namespace SPUtil.App.ViewModels
                         var vm = _container.Resolve<List100ViewModel>();
                         vm.ListTitle = node.Title;
 						vm.IsSourceMode = isLeftPane;
-                        // Toolbar buttons are hidden when IsSourceMode=false (right pane),
-                        // so copy commands only ever fire from the left pane.
-                        // Target is therefore always the right site.
-						vm.SetTargetSiteUrlProvider(
+                        vm.SetTargetSiteUrlProvider(
                             () => SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(RightSiteUrl));
 
-						await vm.LoadDataAsync(siteUrl, node.Path);
+						// Assign to the pane BEFORE awaiting: the View is created here
+						// (via the DataTemplate in App.xaml) while the ViewModel's data
+						// is still empty and IsBusy is still false. LoadDataAsync then
+						// flips IsBusy=true on an already-visible View, so the loading
+						// overlay actually has something on screen to render onto —
+						// assigning after the await (as before) meant the View never
+						// existed during the load, and the overlay could never show.
 						newView = vm;
+						if (isLeftPane) LeftDetailsView = newView; else RightDetailsView = newView;
+
+						await vm.LoadDataAsync(siteUrl, node.Path);
                     }
                     else if (templateId == 101) // Библиотека документов
                     {
                         var vm = _container.Resolve<Library101ViewModel>();
                         vm.LibraryTitle = node.Title;
 						vm.IsSourceMode = isLeftPane;
+
+						newView = vm;
+						if (isLeftPane) LeftDetailsView = newView; else RightDetailsView = newView;
+
                         await vm.LoadDataAsync(siteUrl, node.Path);
-                        newView = vm;
                     }
                     else if (templateId == 850 || templateId == 119) // Страницы (Site Pages / Wiki)
                     {
@@ -686,17 +695,13 @@ namespace SPUtil.App.ViewModels
 						var vm = _container.Resolve<PagesViewModel>();
 						vm.IsSourceMode = isLeftPane;
 
-						// Give the VM access to the target site URL so CopyPageCommand knows
-						// where to copy. Source (left) pane targets the right site, and vice-versa.
-						// isLeftPane=true  → source is left  → target is RightSiteUrl
-						// isLeftPane=false → source is right → target is LeftSiteUrl  (less common)
-
-						// A provider is passed rather than the value itself: the user may switch
-						// the target site after picking the library, and the copy must follow.
 						vm.SetTargetSiteUrlProvider(() => SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(
 							isLeftPane ? RightSiteUrl : LeftSiteUrl));
-						await vm.LoadDataAsync(siteUrl, node.Path);
+
 						newView = vm;
+						if (isLeftPane) LeftDetailsView = newView; else RightDetailsView = newView;
+
+						await vm.LoadDataAsync(siteUrl, node.Path);
 
 
                     }

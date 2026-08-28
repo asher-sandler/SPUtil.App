@@ -30,6 +30,9 @@ namespace SPUtil.App.ViewModels
 			set => SetProperty(ref _isSourceMode, value); 
 		}
 
+        private bool _isBusy;
+        public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
+
         // Commands
         public DelegateCommand SelectAllCommand { get; }
         public DelegateCommand CopySelectedCommand { get; }
@@ -65,6 +68,8 @@ namespace SPUtil.App.ViewModels
 
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
+            IsBusy = true;
+            await Task.Delay(5000);
             try
             {
                 StatusMessage = "Loading data from SharePoint...";
@@ -88,6 +93,10 @@ namespace SPUtil.App.ViewModels
                 _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 StatusMessage = $"SERVER ERROR: {ex.Message}"; 
                 System.Diagnostics.Debug.WriteLine($"Full error: {ex.ToString()}");
+            }
+            finally
+            {
+                //IsBusy = false;
             }
         }
     }

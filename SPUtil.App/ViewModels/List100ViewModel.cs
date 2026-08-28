@@ -38,6 +38,9 @@ namespace SPUtil.App.ViewModels
 		private string _currentSiteUrl = string.Empty;
 		private string _currentListId  = string.Empty;
 
+        private bool _isBusy;
+        public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
+
 
         // ── Data collections ─────────────────────────────────────────────────
         private ObservableCollection<SPListItemData> _items  = new();
@@ -630,6 +633,10 @@ namespace SPUtil.App.ViewModels
 			
 			_currentSiteUrl = siteUrl;
 			_currentListId  = cleanId;
+
+            IsBusy = true;
+            try
+            {
             // ── Fields ──
             try
             {
@@ -682,6 +689,11 @@ namespace SPUtil.App.ViewModels
                 _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
                 LogAndStatus($"Item load error: {ex.Message}");
             }
+            }
+            finally
+            {
+                //IsBusy = false;
+            }
         }
 		
 		/// <summary>
@@ -691,6 +703,7 @@ namespace SPUtil.App.ViewModels
 		/// </summary>
 		public async Task ApplyFilterAsync(string whereClause)
 		{
+			IsBusy = true;
 			try
 			{
 				var filteredItems = await _spService.GetListItemsByIDAsync(_currentSiteUrl, _currentListId, whereClause);
@@ -702,6 +715,10 @@ namespace SPUtil.App.ViewModels
 				_log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				LogAndStatus($"Filter error: {ex.Message}");
 			}
+			finally
+			{
+				IsBusy = false;
+			}
 		}
 
 		/// <summary>
@@ -710,6 +727,7 @@ namespace SPUtil.App.ViewModels
 		/// </summary>
 		public async Task ResetFilterAsync()
 		{
+			IsBusy = true;
 			try
 			{
 				var allItems = await _spService.GetListItemsByIDAsync(_currentSiteUrl, _currentListId);
@@ -728,6 +746,10 @@ namespace SPUtil.App.ViewModels
 			{
 				_log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
 				LogAndStatus($"Reset filter error: {ex.Message}");
+			}
+			finally
+			{
+				IsBusy = false;
 			}
 		}		
     }

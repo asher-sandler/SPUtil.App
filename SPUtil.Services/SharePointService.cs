@@ -337,14 +337,21 @@ namespace SPUtil.Services
 				}
 				context.ExecuteQuery();
 
-				var result = items.ToList().Select(item => new SPFileData
+				string hostRoot = "https://" + new Uri(siteUrl).Host;
+
+				var result = items.ToList().Select(item =>
 				{
-					Name = item["FileLeafRef"]?.ToString() ?? "",
-					FullPath = item["FileRef"]?.ToString() ?? "",
-					IsFolder = item.FileSystemObjectType == FileSystemObjectType.Folder,
-					Modified = item["Modified"] is DateTime dt ? dt : DateTime.MinValue,
-					Status     = MapModerationStatus(item["_ModerationStatus"]?.ToString()),
-					layOutName = hasLayoutField ? ExtractLayoutFileName(item) : string.Empty
+					string fullPath = item["FileRef"]?.ToString() ?? "";
+					return new SPFileData
+					{
+						Name       = item["FileLeafRef"]?.ToString() ?? "",
+						FullPath   = fullPath,
+						PageUrl    = $"{hostRoot}{fullPath}",
+						IsFolder   = item.FileSystemObjectType == FileSystemObjectType.Folder,
+						Modified   = item["Modified"] is DateTime dt ? dt : DateTime.MinValue,
+						Status     = MapModerationStatus(item["_ModerationStatus"]?.ToString()),
+						layOutName = hasLayoutField ? ExtractLayoutFileName(item) : string.Empty
+					};
 				}).ToList();
 
 				_log.Information(

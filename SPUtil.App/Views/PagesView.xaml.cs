@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Diagnostics;
 
 namespace SPUtil.App.Views
 {
@@ -10,7 +11,21 @@ namespace SPUtil.App.Views
         {
             InitializeComponent();
         }
-
+        private void BtnOpenPage_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string url && !string.IsNullOrEmpty(url))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not open page: {ex.Message}",
+                        "Open Page", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
         // Opens page-actions ContextMenu on left-click
         private void BtnHamburger_Click(object sender, RoutedEventArgs e)
         {

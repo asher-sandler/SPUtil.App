@@ -1,0 +1,19 @@
+﻿<UserControl x:Class="SPUtil.App.Controls.LoadingOverlay"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="OverlayBoolToVis"/>
+    </UserControl.Resources>
+
+    <!-- Sits as the LAST child of the containing Grid so it renders on top
+         of whatever it overlays (e.g. a DataGrid). Toggle via IsBusy. -->
+    <Grid Background="#B3FFFFFF"
+          Visibility="{Binding IsBusy, ElementName=Root, Converter={StaticResource OverlayBoolToVis}}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <ProgressBar IsIndeterminate="True" Width="120" Height="4" Margin="0,0,0,10"/>
+            <TextBlock Text="{Binding LoadingText, ElementName=Root}"
+                       HorizontalAlignment="Center" FontSize="13" Foreground="#333333"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

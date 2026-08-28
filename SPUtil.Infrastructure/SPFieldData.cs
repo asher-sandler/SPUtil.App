@@ -21,6 +21,10 @@ namespace SPUtil.Infrastructure
         public string Name { get; set; } = string.Empty;
         public string FullPath { get; set; } = string.Empty;
         public string layOutName { get; set; } = string.Empty;
+		// Absolute URL to open the page in a browser — host from siteUrl + FullPath
+        // (FullPath/FileRef is already server-relative from the domain root).
+        public string PageUrl { get; set; } = string.Empty;
+		
         public long Size { get; set; }
         public DateTime Modified { get; set; }
         public bool IsFolder { get; set; }

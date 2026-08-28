@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
+             xmlns:controls="clr-namespace:SPUtil.App.Controls"
              mc:Ignorable="d" d:DesignHeight="600" d:DesignWidth="900">
 
     <UserControl.Resources>
@@ -183,24 +184,61 @@
                    Foreground="DarkBlue" Margin="0,0,0,5" FontWeight="Bold"/>
 
         <!-- Row 2 — Pages list -->
-        <DataGrid Grid.Row="2"
+        <Grid Grid.Row="2">
+            <DataGrid
                   ItemsSource="{Binding Source={StaticResource SortedPages}}"
                   SelectedItem="{Binding SelectedPage}"
                   AutoGenerateColumns="False" CanUserAddRows="False"
                   IsReadOnly="True" Background="White"
                   HorizontalScrollBarVisibility="Visible"
-                  ColumnWidth="Auto">
+                  ColumnWidth="Auto"
+                  FrozenColumnCount="1">
              <DataGrid.Columns>
-                <DataGridTextColumn Binding="{Binding Name}" Width="250" MinWidth="150">
-                    <DataGridTextColumn.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Name"/>
-                            <!-- TextBlock Text=" ▲" Foreground="#0066CC" FontSize="10"
-                                       VerticalAlignment="Center" Margin="3,0,0,0"
-                                       ToolTip="Sorted A→Z by name"/ -->
-                        </StackPanel>
-                    </DataGridTextColumn.Header>
-                </DataGridTextColumn>
+                <!-- Dedicated "open in browser" column — kept separate from Name so that
+                     grid navigation (arrow keys, programmatic SelectedItem changes) never
+                     accidentally triggers a click on the Name cell itself. -->
+                <DataGridTemplateColumn Width="34" MinWidth="34" CanUserResize="False">
+                    <DataGridTemplateColumn.Header>
+                        <TextBlock Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                   HorizontalAlignment="Center" ToolTip="Open page"/>
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Click="BtnOpenPage_Click"
+                                    Tag="{Binding PageUrl}"
+                                    ToolTip="Open page"
+                                    Background="Transparent" BorderThickness="0"
+                                    Cursor="Hand" Padding="0"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Foreground" Value="#0078D4"/>
+                                        <Style.Triggers>
+                                            <!-- White only while selection is ACTIVE (dark blue row background).
+                                                 When focus moves to another grid (e.g. the Web Parts grid below),
+                                                 WPF switches to a much lighter "inactive selection" background —
+                                                 white would be invisible there, so the icon stays blue instead. -->
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
+                                                               Value="True"/>
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=(Selector.IsSelectionActive)}"
+                                                               Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <!-- Segoe MDL2 Assets "OpenInNewWindow" glyph — verify it renders
+                                     correctly; adjust the codepoint if it shows as a blank box. -->
+                                <TextBlock Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                            </Button>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="250" MinWidth="150"/>
                 <DataGridTextColumn Header="Layout" Binding="{Binding layOutName}"
                                     Width="180" MinWidth="120"/>
 				<DataGridTextColumn Header="Status" Binding="{Binding Status}"
@@ -208,6 +246,9 @@
                 <DataGridTextColumn Header="Path" Binding="{Binding FullPath}" Width="600" MinWidth="200"/>
             </DataGrid.Columns>
 		</DataGrid>
+
+            <controls:LoadingOverlay IsBusy="{Binding IsBusy}" LoadingText="Loading pages, please wait…"/>
+        </Grid>
 
         <!-- Row 3 — Splitter -->
         <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
