@@ -2134,7 +2134,7 @@ stop-transcript
         {
             _siteUrl = siteUrl;
 			IsBusy = true;
-			await Task.Delay(5000);
+			await Task.Delay(300);
             try
             {
                 StatusMessage = "Loading pages...";
@@ -2155,7 +2155,7 @@ stop-transcript
             }
 			finally
             {
-                //IsBusy = false;
+                IsBusy = false;
             }			
         }
 

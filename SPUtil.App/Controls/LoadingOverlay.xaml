@@ -8,6 +8,7 @@
 
     <!-- Sits as the LAST child of the containing Grid so it renders on top
          of whatever it overlays (e.g. a DataGrid). Toggle via IsBusy. -->
+    
     <Grid Background="#B3FFFFFF"
           Visibility="{Binding IsBusy, ElementName=Root, Converter={StaticResource OverlayBoolToVis}}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">

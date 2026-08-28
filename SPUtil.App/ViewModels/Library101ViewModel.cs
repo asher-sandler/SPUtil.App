@@ -69,7 +69,7 @@ namespace SPUtil.App.ViewModels
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
             IsBusy = true;
-            await Task.Delay(5000);
+            await Task.Delay(300);
             try
             {
                 StatusMessage = "Loading data from SharePoint...";
@@ -96,7 +96,7 @@ namespace SPUtil.App.ViewModels
             }
             finally
             {
-                //IsBusy = false;
+                IsBusy = false;
             }
         }
     }

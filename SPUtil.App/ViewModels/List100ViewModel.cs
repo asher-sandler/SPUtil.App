@@ -635,6 +635,7 @@ namespace SPUtil.App.ViewModels
 			_currentListId  = cleanId;
 
             IsBusy = true;
+			await Task.Delay(300);
             try
             {
             // ── Fields ──
@@ -692,7 +693,7 @@ namespace SPUtil.App.ViewModels
             }
             finally
             {
-                //IsBusy = false;
+                IsBusy = false;
             }
         }
 		
