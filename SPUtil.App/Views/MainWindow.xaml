@@ -195,7 +195,15 @@
 					<DockPanel Grid.Column="1">
 						<StackPanel DockPanel.Dock="Top" Margin="5">
 							<Label Content="Source URL:"/>
-							<TextBox Text="{Binding LeftSiteUrl, UpdateSourceTrigger=PropertyChanged}" Height="25"/>
+							<!--TextBox Text="{Binding LeftSiteUrl, UpdateSourceTrigger=PropertyChanged}" Height="25"/-->
+							<ComboBox Text="{Binding LeftSiteUrl, UpdateSourceTrigger=PropertyChanged}"
+									  ItemsSource="{Binding RecentLeftSites}"
+									  IsEditable="True" Height="25">
+								<ComboBox.InputBindings>
+									<KeyBinding Key="Return" Command="{Binding ConnectLeftCommand}"/>
+								</ComboBox.InputBindings>
+							</ComboBox>
+									  
 							<StackPanel Orientation="Horizontal" Margin="0,3">
                                 
                                 <TextBlock Margin="0,3">
@@ -269,7 +277,16 @@
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Margin="5">
                         <Label Content="Destination URL:"/>
-                        <TextBox Text="{Binding RightSiteUrl, UpdateSourceTrigger=PropertyChanged}" Height="25"/>
+                        <!--TextBox Text="{Binding RightSiteUrl, UpdateSourceTrigger=PropertyChanged}" Height="25"/-->
+
+						<ComboBox Text="{Binding RightSiteUrl, UpdateSourceTrigger=PropertyChanged}"
+								  ItemsSource="{Binding RecentRightSites}"
+								  IsEditable="True" Height="25">
+							<ComboBox.InputBindings>
+								<KeyBinding Key="Return" Command="{Binding ConnectRightCommand}"/>
+							</ComboBox.InputBindings>
+						</ComboBox>
+
 						<StackPanel Orientation="Horizontal" Margin="0,3">
                                 <TextBlock Margin="0,3">
 									<TextBlock.Style>

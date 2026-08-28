@@ -27,6 +27,17 @@ namespace SPUtil.App.ViewModels
         private ObservableCollection<SPNode>? _rightSiteNodes;
         private SPNode? _selectedLeftNode;
         private SPNode? _selectedRightNode;
+		
+		public ObservableCollection<string> RecentLeftSites  { get; } = new();
+		public ObservableCollection<string> RecentRightSites { get; } = new();		
+
+		private void RefreshRecentSites(string side)
+		{
+			var target = side == "Left" ? RecentLeftSites : RecentRightSites;
+			target.Clear();
+			foreach (var url in SPUsingUtils.GetRecentSites(side))
+				target.Add(url);
+		}
         
         // Two independent detail panels
         private object? _leftDetailsView;
@@ -197,8 +208,15 @@ namespace SPUtil.App.ViewModels
 						LeftUserName    = SPUsingUtils.GetStoredUsername(LeftSiteUrl) ?? "Unknown user";
 						ConnectionStatus = "Connected";
 						SPUsingUtils.PushRecentSite("Left", LeftSiteUrl);
-						Log.Information("Save Left  Site to registry: " + LeftSiteUrl);
 
+						// Refreshing RecentLeftSites (Clear+Add) can reset the editable
+						// ComboBox's bound Text via WPF's own SelectedItem-reset quirk —
+						// restore the value explicitly right after to be safe.
+						string currentLeftUrl = LeftSiteUrl;
+						RefreshRecentSites("Left");
+						LeftSiteUrl = currentLeftUrl;
+
+						Log.Information("Save Left  Site to registry: " + LeftSiteUrl);
 					}
 					else
 					{
@@ -256,6 +274,11 @@ namespace SPUtil.App.ViewModels
 						RightUserName    = SPUsingUtils.GetStoredUsername(RightSiteUrl) ?? "Unknown user";
 						ConnectionStatus = "Connected";
 						SPUsingUtils.PushRecentSite("Right", RightSiteUrl);
+
+						string currentRightUrl = RightSiteUrl;
+						RefreshRecentSites("Right");
+						RightSiteUrl = currentRightUrl;
+
 						Log.Information("Save Right Site to registry: " + RightSiteUrl);
 					}
 					else
@@ -1443,7 +1466,7 @@ namespace SPUtil.App.ViewModels
         /// The file is excluded from git via .gitignore — copy appsettings.example.json
         /// to appsettings.json and fill in your real URLs.
         /// </summary>
-        private static (string leftUrl, string rightUrl) LoadAppSettings()
+        private  (string leftUrl, string rightUrl) LoadAppSettings()
         {
             try
             {
@@ -1466,6 +1489,8 @@ namespace SPUtil.App.ViewModels
 				
 				string left  = SPUsingUtils.GetRecentSite("Left");
 				string right = SPUsingUtils.GetRecentSite("Right");
+				RefreshRecentSites("Left");
+				RefreshRecentSites("Right");				
                 return (left, right);
             }
             catch (Exception ex)
