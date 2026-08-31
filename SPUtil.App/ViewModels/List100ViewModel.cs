@@ -624,6 +624,7 @@ namespace SPUtil.App.ViewModels
         {
             _lastSiteUrl  = siteUrl;
             _lastListPath = listPath;
+			const int maxRows = 500;
 
             LogAndStatus($"Loading list data: {listPath}...");
             Fields.Clear();
@@ -674,10 +675,10 @@ namespace SPUtil.App.ViewModels
             try
             {
                 var allItems = await _spService.GetListItemsByIDAsync(siteUrl, cleanId);
-                if (allItems.Count > 250)
+                if (allItems.Count > maxRows)
                 {
-                    LogAndStatus($"Warning: list contains {allItems.Count} items. Showing first 250.");
-                    Items = new ObservableCollection<SPListItemData>(allItems.Take(250));
+                    LogAndStatus($"Warning: list contains {allItems.Count} items. Showing first {maxRows}.");
+                    Items = new ObservableCollection<SPListItemData>(allItems.Take(maxRows));
                 }
                 else
                 {

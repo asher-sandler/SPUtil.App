@@ -64,8 +64,9 @@ namespace SPUtil.Services
             string targetUrl,
             string targetListTitle,
             IEnumerable<SPViewData> viewsToCopy);
-        Task<List<SPFileData>> GetLibraryItemsAsync(string siteUrl, string listId);
-        Task<List<SPFileData>> GetPageItemsAsync(string siteUrl, string listId);
+       Task<(List<SPFileData> Items, string CurrentFolderPath)> GetLibraryItemsAsync(
+            string siteUrl, string listId, string? folderRelativeUrl = null);
+		Task<List<SPFileData>> GetPageItemsAsync(string siteUrl, string listId);
         Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl);
 
         /// <summary>

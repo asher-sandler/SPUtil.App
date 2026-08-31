@@ -191,8 +191,42 @@ namespace SPUtil.Services
 			});
 		}
 
+		/// <summary>Formats a byte count as "<DIR>" for folders, or B/KB/MB for files.</summary>
+		private static string FormatSize(long bytes, bool isFolder)
+		{
+			if (isFolder) return "<DIR>";
+			//if (bytes < 1024) return $"{bytes} B";
+			//if (bytes < 1024 * 1024) 
+				return $"{bytes / 1024.0:0.#} KB";
+			//return $"{bytes / (1024.0 * 1024):0.#} MB";
+		}
 
-		public async Task<List<SPFileData>> GetLibraryItemsAsync(string siteUrl, string listId)
+		/// <summary>
+		/// Segoe MDL2 Assets glyph + brand-ish color per file type. The font has
+		/// no distinct per-app icons (no real Word/Excel/PDF glyphs) — only a
+		/// generic document glyph, differentiated here by color instead. Glyph
+		/// codepoints are from memory, not verified against actual rendering —
+		/// confirm on the live UI and adjust if any show as a blank box.
+		/// </summary>
+		private static (string Glyph, string Color) GetFileIcon(string name, bool isFolder)
+		{
+			if (isFolder) return ("\uE8B7", "#FFC107"); // folder — yellow
+
+			string ext = System.IO.Path.GetExtension(name).ToLowerInvariant();
+
+			return ext switch
+			{
+				".pdf"                                              => ("\uE8A5", "#D93025"), // red
+				".doc" or ".docx"                                   => ("\uE8A5", "#2B579A"), // Word blue
+				".xls" or ".xlsx"                                   => ("\uE8A5", "#217346"), // Excel green
+				".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp"
+					or ".tif" or ".tiff"                             => ("\uE91B", "#8764B8"), // image — purple
+				".txt"                                              => ("\uE8A5", "#666666"), // plain text — gray
+				_                                                    => ("\uE8A5", "#999999")  // other — neutral gray
+			};
+		}
+		public async Task<(List<SPFileData> Items, string CurrentFolderPath)> GetLibraryItemsAsync(
+			string siteUrl, string listId, string? folderRelativeUrl = null)
 		{
 			return await Task.Run(async () =>
 			{
@@ -200,31 +234,79 @@ namespace SPUtil.Services
 				Guid g = new Guid(listId);
 				List list = context.Web.Lists.GetById(g);
 
-				CamlQuery query = CamlQuery.CreateAllItemsQuery();
+				string resolvedFolder = folderRelativeUrl ?? string.Empty;
+
+				if (string.IsNullOrEmpty(resolvedFolder))
+				{
+					// First load for this library — resolve the root folder's
+					// server-relative URL so the query can be scoped explicitly,
+					// rather than relying on CamlQuery's ambiguous default scope.
+					// CreateAllItemsQuery() was found to behave recursively in
+					// practice (confirmed against a live farm), which is the
+					// opposite of what folder-by-folder navigation needs here.
+					context.Load(list, l => l.RootFolder.ServerRelativeUrl);
+					context.ExecuteQuery();
+					resolvedFolder = list.RootFolder.ServerRelativeUrl;
+				}
+
+				var query = new CamlQuery
+				{
+					ViewXml = "<View Scope='Default'><Query></Query><RowLimit>2000</RowLimit></View>",
+					FolderServerRelativeUrl = resolvedFolder
+				};
+
 				ListItemCollection items = list.GetItems(query);
 
 				context.Load(items, icol => icol.Include(
 					i => i.FileSystemObjectType,
 					i => i["FileLeafRef"],
 					i => i["FileRef"],
-					i => i["Modified"]));
+					i => i["Modified"],
+					i => i.File.Length));
 
 				context.ExecuteQuery();
 
-				return items.ToList().Select(item =>
+				var result = items.ToList().Select(item =>
 				{
 					var isFolder = item.FileSystemObjectType == Microsoft.SharePoint.Client.FileSystemObjectType.Folder;
+					string name = item["FileLeafRef"]?.ToString() ?? "";
+
+					// File.Length is only meaningful for actual files. Guarded in
+					// its own try/catch rather than assumed safe for folder rows —
+					// not verified against a live farm whether CSOM returns 0 or
+					// throws for a folder item's File property in this Include batch.
+					long size = 0;
+					if (!isFolder)
+					{
+						try { size = item.File.Length; }
+						catch { size = 0; }
+					}
+
+					var (glyph, color) = GetFileIcon(name, isFolder);
+
 					return new SPFileData
 					{
-						Name = item["FileLeafRef"]?.ToString() ?? "",
-						FullPath = item["FileRef"]?.ToString() ?? "",
-						IsFolder = isFolder,
-						Modified = item["Modified"] != null ? (DateTime)item["Modified"] : DateTime.MinValue,
-						Size = 0
+						Name        = name,
+						DisplayName = isFolder ? $"[{name}]" : name,
+						FullPath    = item["FileRef"]?.ToString() ?? "",
+						IsFolder    = isFolder,
+						Modified    = item["Modified"] != null ? (DateTime)item["Modified"] : DateTime.MinValue,
+						Size        = size,
+						SizeDisplay = FormatSize(size, isFolder),
+						IconGlyph   = glyph,
+						IconColor   = color
 					};
-				}).ToList();
+				})
+				// Total-Commander convention: folders first, then files, each group alphabetical.
+				.OrderBy(f => f.IsFolder ? 0 : 1)
+				.ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+				.ToList();
+
+				return (result, resolvedFolder);
 			});
 		}
+		
+		
 		public async Task<bool> ListExistsAsync(string siteUrl, string listTitle)
 		{
 			return await Task.Run(async () =>

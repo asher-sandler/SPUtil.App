@@ -12,6 +12,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" /> 
 			<RowDefinition Height="Auto" /> 
+			<RowDefinition Height="Auto" />   <!-- folder navigation bar -->
 			<RowDefinition Height="*" />    
 		</Grid.RowDefinitions>
 
@@ -34,12 +35,6 @@
                     <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
                 </Button>
 
-                <Button Command="{Binding DeleteSelectedCommand}" 
-						Style="{StaticResource IconButton}"
-						ToolTip="Delete selected">
-                    <TextBlock Text="&#xE74D;" Style="{StaticResource IconText}" Foreground="#A80000"/>
-                </Button>
-
                 <Separator Margin="5,2" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"/>
 
                 <Button Command="{Binding RefreshCommand}" 
@@ -60,13 +55,40 @@
             <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="Gray" Margin="2,0,0,0"/>
         </StackPanel>
 
-        <Grid Grid.Row="2" Margin="10,5,10,10">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="15,0,15,5">
+            <Button x:Name="BtnFolderUp" Click="BtnFolderUp_Click"
+                    IsEnabled="{Binding CanNavigateUp}"
+                    Style="{StaticResource IconButton}"
+                    ToolTip="Up one level">
+                <TextBlock Text="&#xE74A;" Style="{StaticResource IconText}" Foreground="#0078D4"/>
+            </Button>
+            <Button Click="BtnOpenFolder_Click" Tag="{Binding CurrentFolderUrl}"
+                    Content="{Binding CurrentFolderDisplayPath}"
+                    ToolTip="Open this folder" FontSize="12"
+                    Background="Transparent" BorderThickness="0" Cursor="Hand"
+                    HorizontalContentAlignment="Left" Padding="0"
+                    Margin="8,0,0,0" VerticalAlignment="Center">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Foreground" Value="#0078D4"/>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+
+        <Grid Grid.Row="3" Margin="10,5,10,10">
             <DataGrid
                   ItemsSource="{Binding Files}" 
                   AutoGenerateColumns="False" 
                   CanUserAddRows="False"
                   IsReadOnly="True"
+				  HorizontalScrollBarVisibility="Auto"
                   Background="White">
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick"/>
+                    </Style>
+                </DataGrid.RowStyle>
             <DataGrid.Columns>
                 <DataGridTemplateColumn Width="40">
                     <DataGridTemplateColumn.Header>
@@ -79,10 +101,64 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Header="File Name" Binding="{Binding Name}" Width="2*" />
-                <DataGridTextColumn Header="Path" Binding="{Binding FullPath}" Width="3*" />
-                <DataGridTextColumn Header="Modified" Binding="{Binding Modified, StringFormat={}{0:dd.MM.yyyy HH:mm}}" Width="150" />
-            </DataGrid.Columns>
+					<!-- Hand-drawn vector icons — folder (solid yellow shape) vs file
+						 (dog-eared page). Type differentiation for files (PDF/Word/Excel/
+						 image) is a colored accent bar (IconColor, computed server-side),
+						 since the font has no distinct per-app icons and drawing a unique
+						 shape per file type isn't practical here. -->
+					<DataGridTemplateColumn Width="30">
+						<DataGridTemplateColumn.CellTemplate>
+							<DataTemplate>
+								<Grid Width="18" Height="18">
+									<!-- Folder — single shape, safe to Stretch=Uniform on its own -->
+									<Path Data="M2,6 L2,17 A2,2 0 0 0 4,19 L20,19 A2,2 0 0 0 22,17 L22,8 A2,2 0 0 0 20,6 L12,6 L10,4 L4,4 A2,2 0 0 0 2,6 Z"
+										  Fill="#FFC107" Stretch="Uniform">
+										<Path.Style>
+											<Style TargetType="Path">
+												<Setter Property="Visibility" Value="Collapsed"/>
+												<Style.Triggers>
+													<DataTrigger Binding="{Binding IsFolder}" Value="True">
+														<Setter Property="Visibility" Value="Visible"/>
+													</DataTrigger>
+												</Style.Triggers>
+											</Style>
+										</Path.Style>
+									</Path>
+
+									<!-- File — page body + folded corner + type-color accent bar,
+										 all inside one Viewbox so the pieces scale together as a
+										 unit instead of each independently stretching to fill the cell. -->
+									<Viewbox Stretch="Uniform">
+										<Viewbox.Style>
+											<Style TargetType="Viewbox">
+												<Setter Property="Visibility" Value="Visible"/>
+												<Style.Triggers>
+													<DataTrigger Binding="{Binding IsFolder}" Value="True">
+														<Setter Property="Visibility" Value="Collapsed"/>
+													</DataTrigger>
+												</Style.Triggers>
+											</Style>
+										</Viewbox.Style>
+										<Grid Width="19" Height="24">
+											<Path Data="M4,1 L14,1 L19,6 L19,23 L4,23 Z"
+												  Fill="White" Stroke="#B0B0B0" StrokeThickness="1"/>
+											<Path Data="M14,1 L14,6 L19,6 Z"
+												  Fill="#D9D9D9" Stroke="#B0B0B0" StrokeThickness="1"/>
+											<Rectangle Width="11" Height="3" VerticalAlignment="Bottom"
+													   Margin="0,0,0,3" Fill="{Binding IconColor}"/>
+										</Grid>
+									</Viewbox>
+								</Grid>
+							</DataTemplate>
+						</DataGridTemplateColumn.CellTemplate>
+					</DataGridTemplateColumn>
+
+					<DataGridTextColumn Header="File Name" Binding="{Binding DisplayName}" Width="Auto" />
+					<DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}"
+										SortMemberPath="Size" Width="Auto" />
+					<DataGridTextColumn Header="Modified" Binding="{Binding Modified, StringFormat={}{0:dd.MM.yyyy HH:mm}}" Width="Auto" />
+ 
+				</DataGrid.Columns>
             </DataGrid>
 
             <controls:LoadingOverlay IsBusy="{Binding IsBusy}" LoadingText="Loading files, please wait…"/>

@@ -28,8 +28,19 @@ namespace SPUtil.Infrastructure
         public long Size { get; set; }
         public DateTime Modified { get; set; }
         public bool IsFolder { get; set; }
+
+        // Display-only fields, computed server-side (SharePointService) at the
+        // same place Name/IsFolder are already known — avoids per-row converters
+        // in the View, consistent with how DispFormUrl/PageUrl are computed.
+        public string SizeDisplay { get; set; } = string.Empty;
+        public string IconGlyph { get; set; } = string.Empty;
+        public string IconColor { get; set; } = "#666666";
+
+        // Total-Commander-style "[FolderName]" — real navigation still uses
+        // FullPath/IsFolder, this is purely cosmetic for the grid.
+        public string DisplayName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
-    }
+   }
 
     public class SPWebPartData
     {
