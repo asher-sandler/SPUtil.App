@@ -210,6 +210,8 @@ namespace SPUtil.App.ViewModels
 				IsLeftConnected = false;
 				LeftUserName    = "Unknown user";
 				ConnectionStatus = "Connecting Source...";
+				IsLeftTreeLoading = true;
+				await Task.Delay(300);
 
 				try
 				{
@@ -264,6 +266,7 @@ namespace SPUtil.App.ViewModels
 				}
 				finally
 				{
+					IsLeftTreeLoading = false;
 					RaisePropertyChanged(nameof(IsLeftConnected));
 					RaisePropertyChanged(nameof(LeftSiteFullLink));
 				}
@@ -276,6 +279,8 @@ namespace SPUtil.App.ViewModels
 				IsRightConnected = false;
 				RightUserName    = "Unknown user";
 				ConnectionStatus = "Connecting Target...";
+				IsRightTreeLoading = true;
+				await Task.Delay(300);
 
 				try
 				{
@@ -335,6 +340,7 @@ namespace SPUtil.App.ViewModels
 				}
 				finally
 				{
+					IsRightTreeLoading = false;
 					RaisePropertyChanged(nameof(IsRightConnected));
 					RaisePropertyChanged(nameof(RightSiteFullLink));
 				}
@@ -857,7 +863,7 @@ namespace SPUtil.App.ViewModels
 						string oldStatus = StatusMessage;
 						StatusMessage = "Copied to clipboard!";
 						
-						await Task.Delay(5000);
+						await Task.Delay(300);
 						if (StatusMessage == "Copied to clipboard!")
 							StatusMessage = "Ready";
 					}
