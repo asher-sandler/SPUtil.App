@@ -118,7 +118,20 @@ namespace SPUtil.App.ViewModels
 			get => _isRightConnected;
 			set => SetProperty(ref _isRightConnected, value);
 		}
-		
+
+		private bool _isLeftTreeLoading;
+		public bool IsLeftTreeLoading
+		{
+			get => _isLeftTreeLoading;
+			set => SetProperty(ref _isLeftTreeLoading, value);
+		}
+
+		private bool _isRightTreeLoading;
+		public bool IsRightTreeLoading
+		{
+			get => _isRightTreeLoading;
+			set => SetProperty(ref _isRightTreeLoading, value);
+		}		
 		public string LeftSiteFullLink => IsLeftConnected && !string.IsNullOrWhiteSpace(LeftSiteUrl) 
 			? $"{SPUsingUtils.UrlWithF5(LeftSiteUrl).TrimEnd('/')}/_layouts/15/viewlsts.aspx" 
 			: string.Empty;

@@ -5,6 +5,7 @@
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:viewmodels="clr-namespace:SPUtil.App.ViewModels"
         xmlns:views="clr-namespace:SPUtil.App.Views"
+        xmlns:controls="clr-namespace:SPUtil.App.Controls"
         prism:ViewModelLocator.AutoWireViewModel="True"
         Title="SPUtil - SharePoint Manager (Dual Pane)" 
 		Height="800" Width="1500"
@@ -227,6 +228,7 @@
 							
 							<Button Content="Connect" Command="{Binding ConnectLeftCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
 						</StackPanel>
+						<Grid>
 						<TreeView ItemsSource="{Binding LeftSiteNodes}">
 							<TreeView.ItemContainerStyle>
 								<Style TargetType="TreeViewItem">
@@ -261,6 +263,8 @@
 								</HierarchicalDataTemplate>
 							</TreeView.ItemTemplate>
 						</TreeView>
+							<controls:LoadingOverlay IsBusy="{Binding IsLeftTreeLoading}" LoadingText="Loading site contents, please wait…"/>
+						</Grid>
 					</DockPanel>
 				</Grid>
             </GroupBox>
@@ -310,6 +314,7 @@
 
                         <Button Content="Connect" Command="{Binding ConnectRightCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
                     </StackPanel>
+                    <Grid>
                     <TreeView ItemsSource="{Binding RightSiteNodes}">
                         <i:Interaction.Triggers>
                             <i:EventTrigger EventName="SelectedItemChanged">
@@ -323,6 +328,8 @@
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
+                        <controls:LoadingOverlay IsBusy="{Binding IsRightTreeLoading}" LoadingText="Loading site contents, please wait…"/>
+                    </Grid>
                 </DockPanel>
             </GroupBox>
         </Grid>
