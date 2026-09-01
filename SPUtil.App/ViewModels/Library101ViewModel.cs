@@ -7,6 +7,9 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Serilog;
+using System.Windows;
+using Microsoft.Win32;
+
 
 namespace SPUtil.App.ViewModels
 {
@@ -122,13 +125,14 @@ namespace SPUtil.App.ViewModels
         public DelegateCommand SelectAllCommand { get; }
         public DelegateCommand CopySelectedCommand { get; }
         public DelegateCommand DeleteSelectedCommand { get; }
+		public DelegateCommand DownloadSelectedCommand { get; }		
 
         public Library101ViewModel(ISharePointService spService)
         {
             _spService = spService;
 
             // Initialize select-all command
-            SelectAllCommand = new DelegateCommand(() =>
+			SelectAllCommand = new DelegateCommand(() =>
             {
                 if (Files == null) return;
                 foreach (var f in Files) f.IsSelected = true;
@@ -137,11 +141,14 @@ namespace SPUtil.App.ViewModels
                 var temp = new ObservableCollection<SPFileData>(Files);
                 Files = temp;
             });
-
+			
             // Initialize copy command
             CopySelectedCommand = new DelegateCommand(() => {
                 var selectedCount = Files?.Count(f => f.IsSelected) ?? 0;
                 StatusMessage = $"STUB: Copying {selectedCount} item(s)...";
+				
+
+			
             });
 
             // Initialize delete command
@@ -149,6 +156,9 @@ namespace SPUtil.App.ViewModels
                 var selectedCount = Files?.Count(f => f.IsSelected) ?? 0;
                 StatusMessage = $"STUB: Deleting {selectedCount} item(s)...";
             });
+
+            // Initialize download command
+            DownloadSelectedCommand = new DelegateCommand(async () => await DownloadSelectedAsync());
         }
 
         public async Task LoadDataAsync(string siteUrl, string listId)
@@ -250,5 +260,67 @@ namespace SPUtil.App.ViewModels
             int idx = trimmed.LastIndexOf('/');
             return idx > 0 ? trimmed.Substring(0, idx) : trimmed;
         }
+        private async Task DownloadSelectedAsync()
+        {
+            var selected = Files?.Where(f => f.IsSelected).ToList() ?? new List<SPFileData>();
+            if (selected.Count == 0)
+            {
+                MessageBox.Show("Select at least one file or folder first.",
+                    "Download", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            bool hasFolders = selected.Any(f => f.IsFolder);
+
+            string initialDir = SPUsingUtils.GetLastDownloadFolder();
+            if (string.IsNullOrWhiteSpace(initialDir) || !System.IO.Directory.Exists(initialDir))
+                initialDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "\\Downloads";
+
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Choose download destination",
+                InitialDirectory = initialDir
+            };
+
+            if (dialog.ShowDialog() != true) return;
+            string destination = dialog.FolderName;
+
+            string warningText = hasFolders
+                ? "Selected folders will be downloaded recursively, with their full " +
+                  "subfolder structure. Existing local files with matching names will " +
+                  "be overwritten. Continue?"
+                : "Existing local files with matching names will be overwritten. Continue?";
+
+            var confirm = System.Windows.MessageBox.Show(warningText, "Download",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            IsBusy = true;
+            try
+            {
+                StatusMessage = "Downloading...";
+                var (successCount, failCount) = await _spService.DownloadSelectedItemsAsync(
+                    _siteUrl, _listId, selected, destination);
+
+                SPUsingUtils.SetLastDownloadFolder(destination);
+
+                StatusMessage = failCount == 0
+                    ? $"Download complete: {successCount} file(s)."
+                    : $"Download complete: {successCount} file(s), {failCount} failed (see log).";
+
+                MessageBox.Show(StatusMessage, "Download",
+                    MessageBoxButton.OK, failCount == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                StatusMessage = $"Download error: {ex.Message}";
+                MessageBox.Show(StatusMessage, "Download", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }		
     }
 }

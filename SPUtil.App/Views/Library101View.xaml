@@ -36,7 +36,12 @@
                 </Button>
 
                 <Separator Margin="5,2" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"/>
-
+				<Button Command="{Binding DownloadSelectedCommand}" 
+						Style="{StaticResource IconButton}"
+						ToolTip="Download selected">
+                    <TextBlock Text="&#xE896;" Style="{StaticResource IconText}" Foreground="#107C10"/>
+                </Button>
+				<Separator Margin="5,2" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"/>				
                 <Button Command="{Binding RefreshCommand}" 
 						Style="{StaticResource IconButton}"
 						ToolTip="Refresh">
