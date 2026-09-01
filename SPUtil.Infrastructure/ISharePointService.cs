@@ -68,7 +68,8 @@ namespace SPUtil.Services
             string siteUrl, string listId, string? folderRelativeUrl = null);
 		Task<List<SPFileData>> GetPageItemsAsync(string siteUrl, string listId);
         Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl);
-
+        Task<(int SuccessCount, int FailCount)> DownloadSelectedItemsAsync(
+            string siteUrl, string listId, List<SPFileData> selectedItems, string destinationRoot);
         /// <summary>
         /// Same as GetWebPartsAsync but also resolves VisualPosition for each WebPart
         /// by reading PublishingPageContent and the rendered HTML.

@@ -458,5 +458,19 @@ namespace SPUtil.Infrastructure
 			var entries = GetRecentSites(side);
 			return entries.Count > 0 ? entries[0] : string.Empty;
 		}
+		private static string preferencesPath = $@"{regPath}\Preferences";
+
+		public static string GetLastDownloadFolder()
+		{
+			using (var key = Registry.CurrentUser.OpenSubKey(preferencesPath))
+				return key?.GetValue("LastDownloadFolder") as string ?? string.Empty;
+		}
+
+		public static void SetLastDownloadFolder(string path)
+		{
+			if (string.IsNullOrWhiteSpace(path)) return;
+			using (var key = Registry.CurrentUser.CreateSubKey(preferencesPath))
+				key.SetValue("LastDownloadFolder", path);
+		}		
     }
 }

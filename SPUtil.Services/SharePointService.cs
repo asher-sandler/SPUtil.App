@@ -15,6 +15,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Serilog;
+using System.IO;
 //using SPUtil.Infrastructure;
 
 namespace SPUtil.Services
@@ -306,6 +307,78 @@ namespace SPUtil.Services
 			});
 		}
 		
+		/// <summary>
+		/// Downloads the given items (files, and folders recursively) to a local
+		/// destination. Local path per file = {destinationRoot}/{host}/{FullPath},
+		/// where FullPath is already the file's full server-relative URL (host +
+		/// FullPath alone reproduces the entire site hierarchy — no separate
+		/// parsing of the site URL into segments is needed).
+		///
+		/// No cancellation (v1, per agreed plan) — runs to completion or throws.
+		/// Existing local files are overwritten without prompting per-file (the
+		/// caller is expected to have already warned the user once, up front).
+		/// </summary>
+		public async Task<(int SuccessCount, int FailCount)> DownloadSelectedItemsAsync(
+			string siteUrl, string listId, List<SPFileData> selectedItems, string destinationRoot)
+		{
+			return await Task.Run(async () =>
+			{
+				int success = 0, fail = 0;
+				string host = new Uri(siteUrl).Host;
+
+				using var ctx = await GetContextAsync(siteUrl);
+
+				async Task DownloadFileAsync(SPFileData file)
+				{
+					try
+					{
+						string localPath = BuildLocalPath(destinationRoot, host, file.FullPath);
+						Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
+
+						var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, file.FullPath);
+						using (fileInfo.Stream)
+						using (var localStream = System.IO.File.Create(localPath))
+						{
+							fileInfo.Stream.CopyTo(localStream);
+						}
+						success++;
+					}
+					catch (Exception ex)
+					{
+						_log.Caller().Error(ex, "Download failed for {Path}: {Message}", file.FullPath, ex.Message);
+						fail++;
+					}
+				}
+
+				async Task DownloadFolderAsync(string folderRelativeUrl)
+				{
+					var (children, _) = await GetLibraryItemsAsync(siteUrl, listId, folderRelativeUrl);
+					foreach (var child in children)
+					{
+						if (child.IsFolder)
+							await DownloadFolderAsync(child.FullPath);
+						else
+							await DownloadFileAsync(child);
+					}
+				}
+
+				foreach (var item in selectedItems)
+				{
+					if (item.IsFolder)
+						await DownloadFolderAsync(item.FullPath);
+					else
+						await DownloadFileAsync(item);
+				}
+
+				return (success, fail);
+			});
+		}
+
+		private static string BuildLocalPath(string destinationRoot, string host, string serverRelativeUrl)
+		{
+			string relative = serverRelativeUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+			return Path.Combine(destinationRoot, host, relative);
+		}		
 		
 		public async Task<bool> ListExistsAsync(string siteUrl, string listTitle)
 		{
