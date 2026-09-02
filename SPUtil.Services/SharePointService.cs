@@ -524,6 +524,27 @@ namespace SPUtil.Services
 		}
 
 		/// <summary>
+		/// Resolves the Pages/SitePages library's root server-relative URL via a
+		/// single CSOM round-trip (RootFolder.ServerRelativeUrl). Kept separate
+		/// from GetPageItemsAsync — that method's own recursive-all query and
+		/// schema-probing logic are already tested and are not touched here.
+		/// Called once by PagesViewModel at load time; all subsequent folder
+		/// navigation is client-side LINQ over the already-loaded items, no
+		/// further server calls.
+		/// </summary>
+		public async Task<string> GetPageLibraryRootPathAsync(string siteUrl, string listId)
+		{
+			return await Task.Run(async () =>
+			{
+				using var context = await GetContextAsync(siteUrl);
+				var list = context.Web.Lists.GetById(new Guid(listId));
+				context.Load(list, l => l.RootFolder.ServerRelativeUrl);
+				context.ExecuteQuery();
+				return list.RootFolder.ServerRelativeUrl;
+			});
+		}
+
+		/// <summary>
 		/// Extracts the page layout file name (e.g. "ArticleLeft.aspx") from the
 		/// PublishingPageLayout field of a Pages library item.
 		/// Returns an empty string for folders, for items without a layout, and

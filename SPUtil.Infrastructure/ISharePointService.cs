@@ -67,6 +67,7 @@ namespace SPUtil.Services
        Task<(List<SPFileData> Items, string CurrentFolderPath)> GetLibraryItemsAsync(
             string siteUrl, string listId, string? folderRelativeUrl = null);
 		Task<List<SPFileData>> GetPageItemsAsync(string siteUrl, string listId);
+		Task<string> GetPageLibraryRootPathAsync(string siteUrl, string listId);
         Task<List<SPWebPartData>> GetWebPartsAsync(string siteUrl, string fileRelativeUrl);
         Task<(int SuccessCount, int FailCount)> DownloadSelectedItemsAsync(
             string siteUrl, string listId, List<SPFileData> selectedItems, string destinationRoot);
