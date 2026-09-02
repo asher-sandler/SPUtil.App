@@ -19,6 +19,13 @@
         <DataTemplate DataType="{x:Type viewmodels:PagesViewModel}"><views:PagesView /></DataTemplate>	
         <DataTemplate DataType="{x:Type viewmodels:InfoViewModel}"><views:InfoView /></DataTemplate>
 		<BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+		<!-- Search-selected TreeViewItem keeps focus on the search TextBox, not the
+			 tree itself, so WPF renders it with the "inactive selection" brush by
+			 default (pale gray). Overriding these two system brushes makes the
+			 selection look the same (blue/white) whether the tree has focus or not. -->
+		<SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#0078D4"/>
+		<SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White"/>
     </Window.Resources>
     
     <Grid>
@@ -228,8 +235,14 @@
 							
 							<Button Content="Connect" Command="{Binding ConnectLeftCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
 						</StackPanel>
+						<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,5,0,0">
+							<TextBox x:Name="TxtSearchLeft" Width="180" Padding="4,3"
+									 TextChanged="TxtSearchLeft_TextChanged"/>
+							<Button Content="✕" Width="24" Margin="4,0,0,0"
+									Click="BtnClearSearchLeft_Click" ToolTip="Clear search"/>
+						</StackPanel>
 						<Grid>
-						<TreeView ItemsSource="{Binding LeftSiteNodes}">
+						<TreeView x:Name="TvLeft" ItemsSource="{Binding LeftSiteNodes}">
 							<TreeView.ItemContainerStyle>
 								<Style TargetType="TreeViewItem">
 									<!--Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" /-->
@@ -314,8 +327,14 @@
 
                         <Button Content="Connect" Command="{Binding ConnectRightCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
                     </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,5,0,0">
+                        <TextBox x:Name="TxtSearchRight" Width="180" Padding="4,3"
+                                 TextChanged="TxtSearchRight_TextChanged"/>
+                        <Button Content="✕" Width="24" Margin="4,0,0,0"
+                                Click="BtnClearSearchRight_Click" ToolTip="Clear search"/>
+                    </StackPanel>
                     <Grid>
-                    <TreeView ItemsSource="{Binding RightSiteNodes}">
+                    <TreeView x:Name="TvRight" ItemsSource="{Binding RightSiteNodes}">
                         <i:Interaction.Triggers>
                             <i:EventTrigger EventName="SelectedItemChanged">
                                 <i:InvokeCommandAction Command="{Binding RightNodeSelectedCommand}" 
