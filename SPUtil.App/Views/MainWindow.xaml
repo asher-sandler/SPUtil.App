@@ -10,6 +10,7 @@
         Title="SPUtil - SharePoint Manager (Dual Pane)" 
 		Height="800" Width="1500"
 		MinHeight="600" MinWidth="1100"
+		WindowState="Maximized"
 		Closing="Window_Closing">
     
     
@@ -130,13 +131,18 @@
             </MenuItem>
         </Menu>
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="2" x:Name="MainContentGrid" SizeChanged="MainContentGrid_SizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="300" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="ColSourceDetails" Width="*" />
+                <ColumnDefinition Width="5" />
+                <ColumnDefinition x:Name="ColDestinationDetails" Width="*" />
                 <ColumnDefinition Width="300" />
             </Grid.ColumnDefinitions>
+
+            <GridSplitter Grid.Column="2" Width="5" HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch" Background="#DDDDDD"
+                          ResizeBehavior="PreviousAndNext" ShowsPreview="True"/>
 
             <GroupBox Header="Source" Grid.Column="0" Margin="5">
 				<Grid>
@@ -235,12 +241,25 @@
 							
 							<Button Content="Connect" Command="{Binding ConnectLeftCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
 						</StackPanel>
-						<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,5,0,0">
-							<TextBox x:Name="TxtSearchLeft" Width="180" Padding="4,3"
+						<Grid DockPanel.Dock="Bottom" Margin="0,5,0,0">
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="Auto"/>
+								<ColumnDefinition Width="Auto"/>
+								<ColumnDefinition Width="Auto"/>
+								<ColumnDefinition Width="Auto"/>
+							</Grid.ColumnDefinitions>
+							<TextBox Grid.Column="0" x:Name="TxtSearchLeft" Padding="4,3"
 									 TextChanged="TxtSearchLeft_TextChanged"/>
-							<Button Content="✕" Width="24" Margin="4,0,0,0"
+							<Button Grid.Column="1" Content="✕" Width="22" Margin="3,0,0,0"
 									Click="BtnClearSearchLeft_Click" ToolTip="Clear search"/>
-						</StackPanel>
+							<Button Grid.Column="2" Content="▲" Width="22" Margin="3,0,0,0"
+									Click="BtnSearchPrevLeft_Click" ToolTip="Previous match"/>
+							<Button Grid.Column="3" Content="▼" Width="22" Margin="2,0,0,0"
+									Click="BtnSearchNextLeft_Click" ToolTip="Next match"/>
+							<TextBlock Grid.Column="4" x:Name="TxtSearchCountLeft" VerticalAlignment="Center"
+									   Margin="5,0,0,0" FontSize="10" Foreground="Gray" MinWidth="28"/>
+						</Grid>
 						<Grid>
 						<TreeView x:Name="TvLeft" ItemsSource="{Binding LeftSiteNodes}">
 							<TreeView.ItemContainerStyle>
@@ -286,11 +305,11 @@
                 <ContentControl Content="{Binding LeftDetailsView}" />
             </GroupBox>
 
-            <GroupBox Header="Destination details" Grid.Column="2" Margin="5">
+            <GroupBox Header="Destination details" Grid.Column="3" Margin="5">
                 <ContentControl Content="{Binding RightDetailsView}" />
             </GroupBox>
 
-            <GroupBox Header="Destination" Grid.Column="3" Margin="5">
+            <GroupBox Header="Destination" Grid.Column="4" Margin="5">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Margin="5">
                         <Label Content="Destination URL:"/>
@@ -327,12 +346,25 @@
 
                         <Button Content="Connect" Command="{Binding ConnectRightCommand}" Margin="0,5" Background="#2B579A" Foreground="White"/>
                     </StackPanel>
-                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,5,0,0">
-                        <TextBox x:Name="TxtSearchRight" Width="180" Padding="4,3"
+                    <Grid DockPanel.Dock="Bottom" Margin="0,5,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" x:Name="TxtSearchRight" Padding="4,3"
                                  TextChanged="TxtSearchRight_TextChanged"/>
-                        <Button Content="✕" Width="24" Margin="4,0,0,0"
+                        <Button Grid.Column="1" Content="✕" Width="22" Margin="3,0,0,0"
                                 Click="BtnClearSearchRight_Click" ToolTip="Clear search"/>
-                    </StackPanel>
+                        <Button Grid.Column="2" Content="▲" Width="22" Margin="3,0,0,0"
+                                Click="BtnSearchPrevRight_Click" ToolTip="Previous match"/>
+                        <Button Grid.Column="3" Content="▼" Width="22" Margin="2,0,0,0"
+                                Click="BtnSearchNextRight_Click" ToolTip="Next match"/>
+                        <TextBlock Grid.Column="4" x:Name="TxtSearchCountRight" VerticalAlignment="Center"
+                                   Margin="5,0,0,0" FontSize="10" Foreground="Gray" MinWidth="28"/>
+                    </Grid>
                     <Grid>
                     <TreeView x:Name="TvRight" ItemsSource="{Binding RightSiteNodes}">
                         <i:Interaction.Triggers>

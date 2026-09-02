@@ -73,16 +73,26 @@ namespace SPUtil.App.Views
 			}
 		}
 
-		// ── Site tree search (minimal v1 — jump to first match, no next/prev yet) ──
+		// ── Site tree search — jump to first match, then step through all matches ──
+
+		private List<SPNode> _leftMatches = new();
+		private int _leftMatchIndex = -1;
+
+		private List<SPNode> _rightMatches = new();
+		private int _rightMatchIndex = -1;
 
 		private void TxtSearchLeft_TextChanged(object sender, TextChangedEventArgs e)
 		{
-			SearchTree(TvLeft, TxtSearchLeft);
+			_leftMatches = FindMatches(TvLeft, TxtSearchLeft.Text);
+			_leftMatchIndex = _leftMatches.Count > 0 ? 0 : -1;
+			UpdateSearchUi(TvLeft, TxtSearchLeft, TxtSearchCountLeft, _leftMatches, _leftMatchIndex);
 		}
 
 		private void TxtSearchRight_TextChanged(object sender, TextChangedEventArgs e)
 		{
-			SearchTree(TvRight, TxtSearchRight);
+			_rightMatches = FindMatches(TvRight, TxtSearchRight.Text);
+			_rightMatchIndex = _rightMatches.Count > 0 ? 0 : -1;
+			UpdateSearchUi(TvRight, TxtSearchRight, TxtSearchCountRight, _rightMatches, _rightMatchIndex);
 		}
 
 		private void BtnClearSearchLeft_Click(object sender, RoutedEventArgs e)
@@ -95,39 +105,100 @@ namespace SPUtil.App.Views
 			TxtSearchRight.Text = string.Empty;
 		}
 
-		/// <summary>
-		/// Finds the first node (in current display order — the list is never
-		/// re-sorted or filtered) whose Title contains the typed text
-		/// (case-insensitive), and selects/scrolls to it. Tree is confirmed
-		/// flat in this app (SPNode.Children exists in the model but is never
-		/// populated anywhere) — no expand-ancestors logic needed.
-		/// </summary>
-		private void SearchTree(TreeView tree, TextBox searchBox)
+		private void BtnSearchNextLeft_Click(object sender, RoutedEventArgs e)
 		{
-			string text = searchBox.Text;
-			if (string.IsNullOrEmpty(text))
+			if (_leftMatches.Count == 0) return;
+			_leftMatchIndex = (_leftMatchIndex + 1) % _leftMatches.Count;
+			UpdateSearchUi(TvLeft, TxtSearchLeft, TxtSearchCountLeft, _leftMatches, _leftMatchIndex);
+		}
+
+		private void BtnSearchPrevLeft_Click(object sender, RoutedEventArgs e)
+		{
+			if (_leftMatches.Count == 0) return;
+			_leftMatchIndex = (_leftMatchIndex - 1 + _leftMatches.Count) % _leftMatches.Count;
+			UpdateSearchUi(TvLeft, TxtSearchLeft, TxtSearchCountLeft, _leftMatches, _leftMatchIndex);
+		}
+
+		private void BtnSearchNextRight_Click(object sender, RoutedEventArgs e)
+		{
+			if (_rightMatches.Count == 0) return;
+			_rightMatchIndex = (_rightMatchIndex + 1) % _rightMatches.Count;
+			UpdateSearchUi(TvRight, TxtSearchRight, TxtSearchCountRight, _rightMatches, _rightMatchIndex);
+		}
+
+		private void BtnSearchPrevRight_Click(object sender, RoutedEventArgs e)
+		{
+			if (_rightMatches.Count == 0) return;
+			_rightMatchIndex = (_rightMatchIndex - 1 + _rightMatches.Count) % _rightMatches.Count;
+			UpdateSearchUi(TvRight, TxtSearchRight, TxtSearchCountRight, _rightMatches, _rightMatchIndex);
+		}
+
+		/// <summary>
+		/// Finds ALL nodes (in current display order — the list is never
+		/// re-sorted or filtered) whose Title contains the typed text
+		/// (case-insensitive). Tree is confirmed flat in this app (SPNode.Children
+		/// exists in the model but is never populated anywhere) — no
+		/// expand-ancestors logic needed.
+		/// </summary>
+		private List<SPNode> FindMatches(TreeView tree, string text)
+		{
+			if (string.IsNullOrEmpty(text)) return new List<SPNode>();
+
+			return tree.Items.Cast<object>()
+				.OfType<SPNode>()
+				.Where(node => node.Title.Contains(text, StringComparison.OrdinalIgnoreCase))
+				.ToList();
+		}
+
+		/// <summary>
+		/// Updates the "N/M" counter, the search box's error border (no matches),
+		/// and selects/scrolls to the current match (if any).
+		/// </summary>
+		private void UpdateSearchUi(TreeView tree, TextBox searchBox, TextBlock countLabel,
+			List<SPNode> matches, int currentIndex)
+		{
+			if (string.IsNullOrEmpty(searchBox.Text))
 			{
 				searchBox.ClearValue(TextBox.BorderBrushProperty);
+				countLabel.Text = string.Empty;
 				return;
 			}
 
-			var match = tree.Items.Cast<object>()
-				.FirstOrDefault(item => item is SPNode node &&
-					node.Title.Contains(text, StringComparison.OrdinalIgnoreCase));
-
-			if (match == null)
+			if (matches.Count == 0)
 			{
 				searchBox.BorderBrush = System.Windows.Media.Brushes.IndianRed;
+				countLabel.Text = "0/0";
 				return;
 			}
 
 			searchBox.ClearValue(TextBox.BorderBrushProperty);
+			countLabel.Text = $"{currentIndex + 1}/{matches.Count}";
 
-			if (tree.ItemContainerGenerator.ContainerFromItem(match) is TreeViewItem container)
+			SelectNode(tree, matches[currentIndex]);
+		}
+
+		private void SelectNode(TreeView tree, SPNode node)
+		{
+			if (tree.ItemContainerGenerator.ContainerFromItem(node) is TreeViewItem container)
 			{
 				container.IsSelected = true;
 				container.BringIntoView();
 			}
+		}
+
+		// ── Splitter between "Source details" and "Destination details" ──
+		// GridSplitter itself has no percentage-based constraint in plain XAML —
+		// MinWidth on a ColumnDefinition is always in pixels, so the 35% floor
+		// has to be recalculated in code every time the window (and therefore
+		// the combined width of these two columns) changes size.
+		private void MainContentGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+		{
+			double combined = ColSourceDetails.ActualWidth + ColDestinationDetails.ActualWidth;
+			if (combined <= 0) return;
+
+			double minWidth = combined * 0.35;
+			ColSourceDetails.MinWidth = minWidth;
+			ColDestinationDetails.MinWidth = minWidth;
 		}
     }
 }
