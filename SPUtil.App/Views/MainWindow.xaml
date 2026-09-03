@@ -20,13 +20,6 @@
         <DataTemplate DataType="{x:Type viewmodels:PagesViewModel}"><views:PagesView /></DataTemplate>	
         <DataTemplate DataType="{x:Type viewmodels:InfoViewModel}"><views:InfoView /></DataTemplate>
 		<BooleanToVisibilityConverter x:Key="BoolToVis" />
-
-		<!-- Search-selected TreeViewItem keeps focus on the search TextBox, not the
-			 tree itself, so WPF renders it with the "inactive selection" brush by
-			 default (pale gray). Overriding these two system brushes makes the
-			 selection look the same (blue/white) whether the tree has focus or not. -->
-		<SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#0078D4"/>
-		<SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White"/>
     </Window.Resources>
     
     <Grid>
@@ -262,6 +255,18 @@
 						</Grid>
 						<Grid>
 						<TreeView x:Name="TvLeft" ItemsSource="{Binding LeftSiteNodes}">
+							<TreeView.Resources>
+								<!-- Search-selected TreeViewItem keeps focus on the search TextBox,
+									 not the tree itself, so WPF renders it with the "inactive
+									 selection" brush by default (pale gray). Overriding these two
+									 system brushes — SCOPED to this TreeView only, not the whole
+									 window — makes the selection look the same (blue/white)
+									 whether the tree has focus or not, without affecting selection
+									 rendering in unrelated DataGrids elsewhere (that caused the
+									 "open page" icon to become invisible when scoped globally). -->
+								<SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#0078D4"/>
+								<SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White"/>
+							</TreeView.Resources>
 							<TreeView.ItemContainerStyle>
 								<Style TargetType="TreeViewItem">
 									<!--Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" /-->
@@ -367,6 +372,10 @@
                     </Grid>
                     <Grid>
                     <TreeView x:Name="TvRight" ItemsSource="{Binding RightSiteNodes}">
+                        <TreeView.Resources>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#0078D4"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White"/>
+                        </TreeView.Resources>
                         <i:Interaction.Triggers>
                             <i:EventTrigger EventName="SelectedItemChanged">
                                 <i:InvokeCommandAction Command="{Binding RightNodeSelectedCommand}" 

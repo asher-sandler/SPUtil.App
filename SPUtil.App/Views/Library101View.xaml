@@ -60,24 +60,27 @@
             <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="Gray" Margin="2,0,0,0"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="15,0,15,5">
+        <StackPanel Grid.Row="2" HorizontalAlignment="Stretch" Margin="15,0,15,5">
             <Button x:Name="BtnFolderUp" Click="BtnFolderUp_Click"
                     IsEnabled="{Binding CanNavigateUp}"
                     Style="{StaticResource IconButton}"
+                    HorizontalAlignment="Left"
                     ToolTip="Up one level">
                 <TextBlock Text="&#xE74A;" Style="{StaticResource IconText}" Foreground="#0078D4"/>
             </Button>
             <Button Click="BtnOpenFolder_Click" Tag="{Binding CurrentFolderUrl}"
-                    Content="{Binding CurrentFolderDisplayPath}"
-                    ToolTip="Open this folder" FontSize="12"
+                    ToolTip="Open this folder"
                     Background="Transparent" BorderThickness="0" Cursor="Hand"
-                    HorizontalContentAlignment="Left" Padding="0"
-                    Margin="8,0,0,0" VerticalAlignment="Center">
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Padding="0" Margin="0,2,0,0">
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="Foreground" Value="#0078D4"/>
                     </Style>
                 </Button.Style>
+                <TextBlock Text="{Binding CurrentFolderDisplayPath}"
+                           FontSize="10" TextWrapping="Wrap"
+                           TextAlignment="Left"/>
             </Button>
         </StackPanel>
 

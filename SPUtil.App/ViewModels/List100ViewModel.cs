@@ -51,6 +51,35 @@ namespace SPUtil.App.ViewModels
         public ObservableCollection<SPFieldData>    Fields { get => _fields; set => SetProperty(ref _fields, value); }
         public ObservableCollection<SPViewData>     Views  { get => _views;  set => SetProperty(ref _views,  value); }
 
+        /// <summary>
+        /// Absolute URL to open the list's default view in a browser. Built
+        /// from the already-loaded Views collection (SPViewData.ServerRelativeUrl
+        /// on the DefaultView entry) — no extra server round-trip, since Views
+        /// are loaded anyway for the Views tab. Host is taken directly from
+        /// siteUrl, same convention as DispFormUrl/PageUrl/CurrentFolderUrl
+        /// elsewhere — not verified through a load-balancer host.
+        /// </summary>
+        public string ListUrl
+        {
+            get
+            {
+                var defaultView = Views?.FirstOrDefault(v => v.DefaultView);
+                if (defaultView == null || string.IsNullOrEmpty(defaultView.ServerRelativeUrl) ||
+                    string.IsNullOrEmpty(_currentSiteUrl))
+                    return string.Empty;
+
+                try
+                {
+                    string hostRoot = "https://" + new Uri(_currentSiteUrl).Host;
+                    return $"{hostRoot}{defaultView.ServerRelativeUrl}";
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+        }
+
         // ── Scalar state ─────────────────────────────────────────────────────
         private string      _listTitle     = string.Empty;
         private string      _statusMessage = "Ready";
@@ -75,12 +104,27 @@ namespace SPUtil.App.ViewModels
                 if (SetProperty(ref _activeTab, value))
                 {
                     RaisePropertyChanged(nameof(ActiveTabIndex));
+                    RaisePropertyChanged(nameof(IsItemsTabActive));
+                    RaisePropertyChanged(nameof(IsViewsTabActive));
+                    RaisePropertyChanged(nameof(IsAnyCopyButtonVisible));
                     // 2026-06-09: re-evaluate button enabled state on every tab switch
                     CopyWithDataCommand.RaiseCanExecuteChanged();
                     CopyViewsCommand.RaiseCanExecuteChanged();
                 }
             }
         }
+
+        // Drive toolbar button Visibility — hide the copy action that doesn't
+        // apply to the current tab entirely, rather than leaving it visible
+        // but disabled (was confusing: users clicked a greyed-out button with
+        // no indication of why it did nothing).
+        public bool IsItemsTabActive => ActiveTab == ListTab.Items;
+        public bool IsViewsTabActive => ActiveTab == ListTab.Views;
+
+        // Used only to hide the separator that sits right after the two copy
+        // buttons — on the Fields tab, both buttons are hidden, so that
+        // separator would otherwise be left dangling with nothing before it.
+        public bool IsAnyCopyButtonVisible => IsItemsTabActive || IsViewsTabActive;
 
         public int ActiveTabIndex
         {
@@ -664,6 +708,7 @@ namespace SPUtil.App.ViewModels
             {
                 var viewsData = await _spService.GetListViewsAsync(siteUrl, cleanId);
                 Views = new ObservableCollection<SPViewData>(viewsData);
+                RaisePropertyChanged(nameof(ListUrl));
             }
             catch (Exception ex)
             {

@@ -10,14 +10,6 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <!-- Sort Pages by Name ascending -->
-        <CollectionViewSource x:Key="SortedPages" Source="{Binding Pages}">
-            <CollectionViewSource.SortDescriptions>
-                <scm:SortDescription PropertyName="Name" Direction="Ascending"/>
-            </CollectionViewSource.SortDescriptions>
-        </CollectionViewSource>
-
-
 
         <CollectionViewSource x:Key="GroupedWebParts" Source="{Binding WebParts}">
             <CollectionViewSource.GroupDescriptions>
@@ -178,62 +170,107 @@
             </DockPanel>
         </Border>
 
-        <!-- Row 1 — Status -->
-        <TextBlock Grid.Row="1"
-                   Text="{Binding StatusMessage}"
-                   Foreground="DarkBlue" Margin="0,0,0,5" FontWeight="Bold"/>
+        <!-- Row 1 — Status + folder navigation, stacked vertically, both
+             left-aligned to line up with the grid's left edge below. -->
+        <StackPanel Grid.Row="1" HorizontalAlignment="Stretch">
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="DarkBlue" Margin="0,0,0,5" FontWeight="Bold"/>
+
+            <!-- Folder navigation (Up + current path). Path is shown below the
+                 button, small font with word-wrap, so long paths don't get
+                 clipped/overflow off the edge of the panel. -->
+            <StackPanel HorizontalAlignment="Stretch" Margin="0,0,0,5">
+                <Button x:Name="BtnPagesFolderUp" Click="BtnPagesFolderUp_Click"
+                        IsEnabled="{Binding CanNavigateUp}"
+                        Style="{StaticResource IconButton}"
+                        HorizontalAlignment="Left"
+                        ToolTip="Up one level">
+                    <TextBlock Text="&#xE74A;" Style="{StaticResource IconText}" Foreground="#0078D4"/>
+                </Button>
+                <Button Click="BtnOpenPagesFolder_Click" Tag="{Binding CurrentFolderUrl}"
+                        ToolTip="Open this folder"
+                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Padding="0" Margin="0,2,0,0">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Foreground" Value="#0078D4"/>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock Text="{Binding CurrentFolderDisplayPath}"
+                               FontSize="10" TextWrapping="Wrap"
+                               TextAlignment="Left"/>
+                </Button>
+            </StackPanel>
+        </StackPanel>
 
         <!-- Row 2 — Pages list -->
         <Grid Grid.Row="2">
             <DataGrid
-                  ItemsSource="{Binding Source={StaticResource SortedPages}}"
+                  ItemsSource="{Binding Pages}"
                   SelectedItem="{Binding SelectedPage}"
                   AutoGenerateColumns="False" CanUserAddRows="False"
                   IsReadOnly="True" Background="White"
                   HorizontalScrollBarVisibility="Visible"
                   ColumnWidth="Auto"
                   FrozenColumnCount="1">
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <EventSetter Event="MouseDoubleClick" Handler="PagesRow_MouseDoubleClick"/>
+                    </Style>
+                </DataGrid.RowStyle>
              <DataGrid.Columns>
-                <!-- Dedicated "open in browser" column — kept separate from Name so that
-                     grid navigation (arrow keys, programmatic SelectedItem changes) never
-                     accidentally triggers a click on the Name cell itself. -->
+                <!-- Folder/file icon + "open in browser" for pages only. Folders
+                     show a plain icon (no link) — navigation is via double-click
+                     on the row, not a click on this column. -->
                 <DataGridTemplateColumn Width="34" MinWidth="34" CanUserResize="False">
-                    <DataGridTemplateColumn.Header>
-                        <TextBlock Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" FontSize="13"
-                                   HorizontalAlignment="Center" ToolTip="Open page"/>
-                    </DataGridTemplateColumn.Header>
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Button Click="BtnOpenPage_Click"
-                                    Tag="{Binding PageUrl}"
-                                    ToolTip="Open page"
-                                    Background="Transparent" BorderThickness="0"
-                                    Cursor="Hand" Padding="0"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Foreground" Value="#0078D4"/>
-                                        <Style.Triggers>
-                                            <!-- White only while selection is ACTIVE (dark blue row background).
-                                                 When focus moves to another grid (e.g. the Web Parts grid below),
-                                                 WPF switches to a much lighter "inactive selection" background —
-                                                 white would be invisible there, so the icon stays blue instead. -->
-                                            <MultiDataTrigger>
-                                                <MultiDataTrigger.Conditions>
-                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
-                                                               Value="True"/>
-                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=(Selector.IsSelectionActive)}"
-                                                               Value="True"/>
-                                                </MultiDataTrigger.Conditions>
-                                                <Setter Property="Foreground" Value="White"/>
-                                            </MultiDataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                                <!-- Segoe MDL2 Assets "OpenInNewWindow" glyph — verify it renders
-                                     correctly; adjust the codepoint if it shows as a blank box. -->
-                                <TextBlock Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
-                            </Button>
+                            <Grid Width="18" Height="18">
+                                <!-- Folder — plain icon, no click action -->
+                                <Path Data="M2,6 L2,17 A2,2 0 0 0 4,19 L20,19 A2,2 0 0 0 22,17 L22,8 A2,2 0 0 0 20,6 L12,6 L10,4 L4,4 A2,2 0 0 0 2,6 Z"
+                                      Fill="#FFC107" Stretch="Uniform">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+
+                                <!-- Page — clickable "open in browser" button, unchanged from before -->
+                                <Button Click="BtnOpenPage_Click"
+                                        Tag="{Binding PageUrl}"
+                                        ToolTip="Open page"
+                                        Background="Transparent" BorderThickness="0"
+                                        Cursor="Hand" Padding="0"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Foreground" Value="#0078D4"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}"
+                                                                   Value="True"/>
+                                                        <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=(Selector.IsSelectionActive)}"
+                                                                   Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <TextBlock Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                                </Button>
+                            </Grid>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -242,10 +279,9 @@
                 <DataGridTextColumn Header="Layout" Binding="{Binding layOutName}"
                                     Width="180" MinWidth="120"/>
 				<DataGridTextColumn Header="Status" Binding="{Binding Status}"
-									Width="120" MinWidth="90"/>									
-                <DataGridTextColumn Header="Path" Binding="{Binding FullPath}" Width="600" MinWidth="200"/>
+									Width="120" MinWidth="90"/>						
             </DataGrid.Columns>
-		</DataGrid>
+			</DataGrid>
 
             <controls:LoadingOverlay IsBusy="{Binding IsBusy}" LoadingText="Loading pages, please wait…"/>
         </Grid>

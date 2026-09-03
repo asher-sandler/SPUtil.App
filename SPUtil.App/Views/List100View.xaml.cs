@@ -29,6 +29,22 @@ namespace SPUtil.App.Views
                 }
             }
         }
+
+        private void BtnOpenList_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string url && !string.IsNullOrEmpty(url))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not open list: {ex.Message}",
+                        "Open List", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
         private async void BtnFilter_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new FilterDialog { Owner = Window.GetWindow(this) };

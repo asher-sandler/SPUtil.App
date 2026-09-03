@@ -18,6 +18,74 @@ namespace SPUtil.App.ViewModels
 
         private readonly ISharePointService _spService;
         private string  _siteUrl       = string.Empty;
+        private string  _listId        = string.Empty;
+
+        // Full recursive result of GetPageItemsAsync — pages AND folders, every
+        // level. Navigation never re-queries the server; it just re-filters this.
+        private List<SPFileData> _allItems = new();
+
+        // Resolved once via GetPageLibraryRootPathAsync (a real CSOM round-trip,
+        // not guessed from the loaded paths) — the floor for CanNavigateUp.
+        private string _rootFolderPath = string.Empty;
+
+        private string _currentFolderPath = string.Empty;
+        public string CurrentFolderPath
+        {
+            get => _currentFolderPath;
+            private set
+            {
+                if (SetProperty(ref _currentFolderPath, value))
+                {
+                    RaisePropertyChanged(nameof(CanNavigateUp));
+                    RaisePropertyChanged(nameof(CurrentFolderDisplayPath));
+                    RaisePropertyChanged(nameof(CurrentFolderUrl));
+                }
+            }
+        }
+
+        /// <summary>CurrentFolderPath with the site/library prefix stripped for display.</summary>
+        public string CurrentFolderDisplayPath
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_currentFolderPath)) return string.Empty;
+
+                string rootParent = ComputeParentPath(_rootFolderPath);
+
+                if (_currentFolderPath.StartsWith(rootParent, StringComparison.OrdinalIgnoreCase))
+                {
+                    string tail = _currentFolderPath.Substring(rootParent.Length).TrimStart('/');
+                    return string.IsNullOrEmpty(tail) ? "/" : tail;
+                }
+
+                return _currentFolderPath;
+            }
+        }
+
+        /// <summary>Absolute URL to open the current folder in a browser.</summary>
+        public string CurrentFolderUrl
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_currentFolderPath) || string.IsNullOrEmpty(_siteUrl))
+                    return string.Empty;
+
+                try
+                {
+                    string hostRoot = "https://" + new Uri(_siteUrl).Host;
+                    return $"{hostRoot}{_currentFolderPath}";
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+        }
+
+        /// <summary>True once below the library root — "Up" has somewhere to go.</summary>
+        public bool CanNavigateUp =>
+            !string.IsNullOrEmpty(_currentFolderPath) &&
+            !string.Equals(_currentFolderPath, _rootFolderPath, StringComparison.OrdinalIgnoreCase);
 		
 		private bool _isBusy;
         public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
@@ -74,7 +142,7 @@ namespace SPUtil.App.ViewModels
             get => _selectedPage;
             set
             {
-                if (SetProperty(ref _selectedPage, value) && value != null)
+                if (SetProperty(ref _selectedPage, value) && value != null && !value.IsFolder)
                     _ = LoadWebPartsAsync(value.FullPath);
             }
         }
@@ -187,6 +255,13 @@ namespace SPUtil.App.ViewModels
                 _log.Caller().Warning("CopyPage aborted — no page selected");
                 MessageBox.Show("Please select a page to copy.",
                     "No page selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (SelectedPage.IsFolder)
+            {
+                _log.Caller().Warning("CopyPage aborted — a folder was selected, not a page");
+                MessageBox.Show("Folders cannot be copied — select a single page.",
+                    "Folder selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             if (string.IsNullOrEmpty(_targetSiteUrl))
@@ -2133,20 +2208,23 @@ stop-transcript
         public async Task LoadDataAsync(string siteUrl, string listId)
         {
             _siteUrl = siteUrl;
+            _listId  = listId;
 			IsBusy = true;
 			await Task.Delay(300);
             try
             {
                 StatusMessage = "Loading pages...";
-                var data = await _spService.GetPageItemsAsync(siteUrl, listId);
 
-                // Show only pages (.aspx files), skip folders, sort by Name
-                var pages = data
-                    .Where(f => !f.IsFolder)
-                    .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                Pages = new ObservableCollection<SPFileData>(pages);
-                StatusMessage = $"Pages: {pages.Count}";
+                // Two calls: full recursive item list (pages + folders, all
+                // levels — unchanged, already tested), and the library's real
+                // root path via a single extra CSOM round-trip (reliable, not
+                // guessed — the library's internal name isn't assumed to be
+                // "Pages"/"SitePages", it could differ).
+                _allItems = await _spService.GetPageItemsAsync(siteUrl, listId);
+                _rootFolderPath = await _spService.GetPageLibraryRootPathAsync(siteUrl, listId);
+
+                CurrentFolderPath = _rootFolderPath;
+                ApplyCurrentLevelFilter();
             }
             catch (Exception ex)
             {
@@ -2159,6 +2237,55 @@ stop-transcript
             }			
         }
 
+        /// <summary>
+        /// Navigates into a folder (double-click on a folder row). Purely
+        /// client-side — re-filters the already-loaded _allItems, no server call.
+        /// </summary>
+        public void NavigateToFolder(string folderRelativeUrl)
+        {
+            CurrentFolderPath = folderRelativeUrl;
+            ApplyCurrentLevelFilter();
+        }
+
+        /// <summary>
+        /// Navigates one level up. No-op if already at the library root.
+        /// </summary>
+        public void NavigateUp()
+        {
+            if (!CanNavigateUp) return;
+            CurrentFolderPath = ComputeParentPath(_currentFolderPath);
+            ApplyCurrentLevelFilter();
+        }
+
+        /// <summary>
+        /// Shows only the items whose immediate parent folder is
+        /// CurrentFolderPath — i.e. one level deep, not the whole recursive
+        /// tree. Folders first, then pages, each group alphabetical (same
+        /// convention as Library101).
+        /// </summary>
+        private void ApplyCurrentLevelFilter()
+        {
+            string normalizedFolder = _currentFolderPath.TrimEnd('/');
+
+            var visible = _allItems
+                .Where(item => string.Equals(
+                    ComputeParentPath(item.FullPath), normalizedFolder,
+                    StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f.IsFolder ? 0 : 1)
+                .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Pages = new ObservableCollection<SPFileData>(visible);
+            StatusMessage = $"Items: {visible.Count}";
+        }
+
+        /// <summary>Strips the last path segment of a server-relative URL ("/a/b/c" → "/a/b").</summary>
+        private static string ComputeParentPath(string path)
+        {
+            string trimmed = path.TrimEnd('/');
+            int idx = trimmed.LastIndexOf('/');
+            return idx > 0 ? trimmed.Substring(0, idx) : trimmed;
+        }
         private async Task LoadWebPartsAsync(string fileUrl)
         {
             _log.Debug("LoadWebParts: {Url}", fileUrl);

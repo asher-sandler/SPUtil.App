@@ -35,25 +35,29 @@
                 <!-- 2026-06-09: CreateOnTargetCommand removed — creation is handled
                      via the main toolbar (Copy structure to target). No per-tab value here. -->
 
-                <!-- Copy with data -->
+                <!-- Copy with data — only meaningful on the Items tab -->
                 <Button Style="{StaticResource IconButton}"
                         Command="{Binding CopyWithDataCommand}"
                         CommandParameter="{Binding ActiveTab}"
+                        Visibility="{Binding IsItemsTabActive, Converter={StaticResource BooleanToVisibilityConverter}}"
                         ToolTip="Copy structure with data">
                     <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}" Foreground="#2B579A"/>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
-
-                <!-- Copy views -->
+                <!-- Copy views — only meaningful on the Views tab. Same glyph as
+                     "Copy with data" above — both buttons are mutually exclusive
+                     (never visible at the same time), so reusing the already
+                     proven "copy" icon here avoids guessing a new codepoint. -->
                 <Button Style="{StaticResource IconButton}"
                         Command="{Binding CopyViewsCommand}"
                         CommandParameter="{Binding ActiveTab}"
+                        Visibility="{Binding IsViewsTabActive, Converter={StaticResource BooleanToVisibilityConverter}}"
                         ToolTip="Copy views only">
-                    <TextBlock Text="&#xE7B3;" Style="{StaticResource IconText}" Foreground="#107C10"/>
+                    <TextBlock Text="&#xE8C8;" Style="{StaticResource IconText}" Foreground="#107C10"/>
                 </Button>
 
-                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"/>
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="5,0"
+                           Visibility="{Binding IsAnyCopyButtonVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- 2026-06-09: CompareCommand removed — duplicate of MainWindow CompareListsCommand
                      (Fields tab: identical logic via GetListSchemaAsync;
@@ -91,6 +95,25 @@
                        FontSize="16" FontWeight="SemiBold" Foreground="#0078D4"/>
             <TextBlock Text="{Binding StatusMessage}"
                        FontSize="12" Foreground="Gray" Margin="2,0,0,0"/>
+
+            <!-- List URL — small, wrapping, full-width link to the list's
+                 default view. Same style as the folder-path status bar in
+                 Pages/Library101. Built from the already-loaded default view
+                 (ListUrl in the ViewModel) — no extra server round-trip. -->
+            <Button Click="BtnOpenList_Click" Tag="{Binding ListUrl}"
+                    ToolTip="Open this list"
+                    Background="Transparent" BorderThickness="0" Cursor="Hand"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Padding="0" Margin="2,2,0,0">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Foreground" Value="#0078D4"/>
+                    </Style>
+                </Button.Style>
+                <TextBlock Text="Open List"
+                           FontSize="10" TextWrapping="Wrap"
+                           TextAlignment="Left"/>
+            </Button>
         </StackPanel>
 
         <!-- ═══════════════════════════════════════════════════════════════════
