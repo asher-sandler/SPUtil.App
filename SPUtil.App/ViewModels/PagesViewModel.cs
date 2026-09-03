@@ -89,6 +89,13 @@ namespace SPUtil.App.ViewModels
 		
 		private bool _isBusy;
         public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
+
+        // Separate from IsBusy — that one drives the overlay over the Pages
+        // grid; this one drives the overlay over the Web Parts panel, since
+        // the two load independently of each other (selecting a page loads
+        // its web parts without reloading the whole page list).
+        private bool _isWebPartsLoading;
+        public bool IsWebPartsLoading { get => _isWebPartsLoading; set => SetProperty(ref _isWebPartsLoading, value); }
        
 	    // Provider instead of a captured string: the target site URL must be read at
         // the moment of the operation. It used to be a snapshot taken when the user
@@ -990,7 +997,8 @@ namespace SPUtil.App.ViewModels
             var dialog = new SPUtil.Views.ComparePageDialog(
                 sourceName, _targetSiteUrl,
                 $"WebPart  : {SelectedWebPart.Title}\nSource   : {SelectedPage.FullPath}\nSite     : {_siteUrl}",
-				 ComputeSubfolderPath(SelectedPage.FullPath))
+				 ComputeSubfolderPath(SelectedPage.FullPath),
+				 confirmButtonText: "Copy")
             {
                 Title = "Copy WebPart Properties — enter target page name",
                 Owner = Application.Current.MainWindow
@@ -2289,6 +2297,8 @@ stop-transcript
         private async Task LoadWebPartsAsync(string fileUrl)
         {
             _log.Debug("LoadWebParts: {Url}", fileUrl);
+            IsWebPartsLoading = true;
+            await Task.Delay(300);
             try
             {
                 StatusMessage = "Load Web parts...";
@@ -2308,6 +2318,10 @@ stop-transcript
                 _log.Caller().Error(ex, "LoadWebParts failed for {Url}", fileUrl);
                 StatusMessage = $"Web part error: {ex.Message}";
                 Debug.WriteLine(ex.ToString());
+            }
+            finally
+            {
+                IsWebPartsLoading = false;
             }
         }
     }

@@ -837,9 +837,50 @@ namespace SPUtil.Services
 						if (req.NewTitle != null)
 							def.WebPart.Title = req.NewTitle;
 
-						// Update properties
+						// Update properties — per-property try/catch: some custom WebPart
+						// types (e.g. this farm's DynamicForm control) don't expose every
+						// base WebPart property via this generic property bag (Height/Width
+						// caused "The Height property does not exist" for one such control).
+						// Skip just that property and keep applying the rest, rather than
+						// failing the whole update — future custom controls may reject
+						// different, currently-unknown properties the same way.
 						foreach (var kv in req.PropertiesToUpdate)
-							def.WebPart.Properties[kv.Key] = kv.Value;
+						{
+							try
+							{
+								// Prefer type-aware conversion: if the target property already
+								// has a current value (even a default), its real CLR type is known
+								// client-side from that value alone — no server metadata round-trip
+								// needed. Converting the incoming string to THAT type before
+								// assignment avoids most "cannot be converted to type X" failures
+								// (bool/Single/custom enums like c_textAlign, c_formMode). Properties
+								// that don't exist on this control at all (Height/Width) have no
+								// current value to type-check against, so they fall through to the
+								// plain string assignment below and rely on the catch as before.
+								object valueToWrite = kv.Value;
+								if (def.WebPart.Properties[kv.Key] is object currentValue)
+								{
+									Type targetType = currentValue.GetType();
+									valueToWrite = targetType.IsEnum
+										? Enum.Parse(targetType, kv.Value, ignoreCase: true)
+										: Convert.ChangeType(kv.Value, targetType);
+								}
+
+								def.WebPart.Properties[kv.Key] = valueToWrite;
+                                def.SaveWebPartChanges();
+                                ctx.ExecuteQuery();
+                                _logPage.Caller().Information(
+                                    "Written  '{Prop}' in {StorageKey}: ",
+                                   kv.Value, kv.Key);
+
+                            }
+                            catch (Exception ex)
+							{
+								_logPage.Caller().Warning(
+									"'{Prop}' = '{Key}' : {Message}",
+									kv.Key, kv.Value, ex.Message);
+							}
+						}
 
 						def.SaveWebPartChanges();
 

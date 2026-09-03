@@ -19,7 +19,8 @@ namespace SPUtil.Views
             string sourcePageName,
             string targetSiteUrl,
             string sourceInfo,
-            string sourceSubfolder = "")
+            string sourceSubfolder = "",
+            string confirmButtonText = "Compare")
         {
             InitializeComponent();
 
@@ -30,6 +31,13 @@ namespace SPUtil.Views
             // Defaults to the source page's folder, so the previous behaviour is
             // preserved when the user does not touch the field.
             TxtTargetSubfolder.Text = sourceSubfolder;
+
+            // Same dialog is reused for both "Compare" (ExecuteCompareWebPartAsync)
+            // and "Copy WebPart Properties" (ExecuteCopyWebPartPropertiesAsync) —
+            // the button previously always said "Compare" even when copying, which
+            // was confusing. Defaults to "Compare" so the existing call site with
+            // 4 arguments keeps working unchanged.
+            BtnCompare.Content = confirmButtonText;
 
             TxtTargetPageName.Focus();
             TxtTargetPageName.SelectAll();

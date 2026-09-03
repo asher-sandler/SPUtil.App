@@ -313,9 +313,9 @@
                             <MenuItem Header="Compare WP with target page"
                                       Command="{Binding CompareWebPartCommand}"
                                       Icon="{StaticResource IconMenuCompare}"/>
-                            <!--MenuItem Header="Copy WP Properties to target"
+                            <MenuItem Header="Copy WP Properties to target"
                                       Command="{Binding CopyWebPartPropertiesCommand}"
-                                      Icon="{StaticResource IconMenuCopy}"/-->
+                                      Icon="{StaticResource IconMenuCopy}"/>
                             <Separator/>
                             <MenuItem Header="Copy WP properties to clipboard"
                                       Command="{Binding CopyWpToClipboardCommand}"
@@ -336,14 +336,14 @@
                                FontSize="15" Foreground="#856404"/>
                 </Button>
 
-                <!--Button DockPanel.Dock="Left"
+                <Button DockPanel.Dock="Left"
                         Command="{Binding CopyWebPartPropertiesCommand}"
                         Background="Transparent" BorderBrush="Transparent"
                         Cursor="Hand" Padding="5,4"
                         ToolTip="Copy WP Properties to target page">
                     <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets"
                                FontSize="15" Foreground="#0066CC"/>
-                </Button-->
+                </Button>
 
                 <Button DockPanel.Dock="Left"
                         Command="{Binding CopyWpToClipboardCommand}"
@@ -368,7 +368,9 @@
             </Grid.ColumnDefinitions>
 
             <!-- Left: WebPart list — only # and Title -->
+            <!-- Left: WebPart list — only # and Title -->
             <GroupBox Grid.Column="0" Header="Web Parts">
+              <Grid>
 				<DataGrid ItemsSource="{Binding Source={StaticResource GroupedWebParts}}"
                           SelectedItem="{Binding SelectedWebPart}"
                           AutoGenerateColumns="False"
@@ -416,7 +418,15 @@
                         </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
+
+                <!-- StatusMessage ("Load Web parts...") is shared with the page-level
+                     status text at the top and easy to miss — a visible overlay here
+                     makes it unambiguous that THIS panel is loading, not the page grid. -->
+                <controls:LoadingOverlay IsBusy="{Binding IsWebPartsLoading}"
+                                         LoadingText="Loading web parts…"/>
+              </Grid>
             </GroupBox>
+
 
             <!-- Vertical splitter -->
             <GridSplitter Grid.Column="1" Width="5"
