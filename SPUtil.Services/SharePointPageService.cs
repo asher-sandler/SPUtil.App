@@ -790,6 +790,88 @@ namespace SPUtil.Services
         //  4. UpdateAllWebPartsAsync
         //     Применяет список изменений за одну операцию CheckOut/CheckIn.
         // ═══════════════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Updates properties on WebParts that ALREADY EXIST on the target page,
+        /// identified by their StorageKey. This method deliberately uses a
+        /// fundamentally different (and more fragile) mechanism than
+        /// AddWebPartAsync/AddWebPartToZoneAsync — here is why, and what the
+        /// alternative would cost.
+        ///
+        /// ── Why full-page-copy never hits type problems, but this method does ──
+        ///
+        /// AddWebPartAsync/AddWebPartToZoneAsync (used for full-page-copy and for
+        /// the "target WebPart not found" fallback) do this:
+        ///
+        ///     var imported = wpm.ImportWebPart(webPartXml);
+        ///     var definition = wpm.AddWebPart(imported.WebPart, "wpz", 0);
+        ///
+        /// ImportWebPart runs ENTIRELY server-side. SharePoint parses the whole
+        /// exported XML using the WebPart's own real, compiled .NET type (reflection
+        /// against the actual class, e.g. DynamicForm_V2.VisualWebPart1), so every
+        /// property — including custom enums like c_textAlign or c_formMode — is
+        /// converted to its correct CLR type by the server, in one shot, before the
+        /// object is ever handed back to the client. We never touch individual
+        /// property values ourselves in that path; there is no "step two" where
+        /// properties get set separately. Verified experimentally: comparing a
+        /// source WebPart against a target created purely via AddWebPartAsync
+        /// reported "WebPart properties are IDENTICAL", including the numeric
+        /// (correctly-typed) value of the textAlign enum property.
+        ///
+        /// This method, by contrast, PATCHES an EXISTING WebPart instance in place,
+        /// property by property, via the generic client-side property bag:
+        ///
+        ///     def.WebPart.Properties[kv.Key] = value;
+        ///
+        /// ImportWebPart cannot be used here — it only knows how to CREATE a new
+        /// WebPart object from XML; CSOM's client object model has no "re-import
+        /// into this existing StorageKey" operation. To preserve the target
+        /// WebPart's identity (StorageKey, exact position on the page, any external
+        /// references to it), we are forced onto this weaker, string-keyed path,
+        /// where the client has to guess each property's real type without access
+        /// to the server's type metadata.
+        ///
+        /// ── Known, unfixable-from-the-client limitation ──
+        ///
+        /// Before writing each property, we read the property's CURRENT value (if
+        /// any) and convert the incoming string to ITS CLR type (bool/float/etc. via
+        /// Convert.ChangeType, or Enum.Parse if the type is a real .NET Enum). This
+        /// fixes most cases (bool, numeric) but NOT custom enum properties: CSOM's
+        /// generic PropertyValues indexer exposes an enum-backed property's CURRENT
+        /// value as its underlying integer (boxed System.Int32), not as the real
+        /// enum type — so currentValue.GetType().IsEnum is false even when the true
+        /// server-side property is an enum. We have no way, from the client, to
+        /// recover the real enum type name/members through this API — that
+        /// information only exists in the server's reflection metadata, which
+        /// ImportWebPart uses internally but never exposes to us. As a result,
+        /// enum-backed properties (e.g. textAlign, formMode, itemLoadBy,
+        /// textDirection, fontName on this farm's DynamicForm control) will keep
+        /// failing to convert (FormatException) and get skipped — this is expected,
+        /// not a bug in the conversion logic itself.
+        ///
+        /// Properties that don't exist at all on the target control (e.g. the base
+        /// WebPart class's Height/Width, which this particular custom control
+        /// doesn't expose) throw when merely READ (PropertyOrFieldNotInitialized-
+        /// style exception) — also caught and skipped, same as above.
+        ///
+        /// ── The alternative we chose NOT to take (yet) — delete + re-add ──
+        ///
+        /// Since the export XML is self-sufficient (proven by the same experiment
+        /// above), an existing target WebPart COULD instead be replaced wholesale:
+        /// DeleteWebPartAsync(existing) followed by AddWebPartAsync/
+        /// AddWebPartToZoneAsync(sameExportXml) — sidestepping every typing problem
+        /// in this method entirely, since the server would re-parse the XML fresh
+        /// exactly like it does for full-page-copy. This was deliberately NOT done
+        /// here, because it has three real costs that per-property update avoids:
+        ///   1. StorageKey changes — a new WebPartDefinition.Id is issued on re-add,
+        ///      breaking anything that references the old one specifically.
+        ///   2. Visual position is not preserved automatically — AddWebPartAsync
+        ///      appends by default; the original VisualPosition would need to be
+        ///      captured and explicitly re-applied.
+        ///   3. IsHidden/IsClosed state is not confirmed to round-trip through
+        ///      ImportWebPart — would need separate verification/re-application.
+        /// If StorageKey/position stability stops mattering for a given caller, the
+        /// delete+re-add path is the more robust choice and should be preferred.
+        /// </summary>
         public async Task UpdateAllWebPartsAsync(
             string siteUrl,
             string pageRelativeUrl,
