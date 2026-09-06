@@ -476,11 +476,18 @@
                                 Background="#F0F4FF" BorderBrush="#C8D8FF"
                                 BorderThickness="0,0,0,1" Padding="8,6">
                             <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Title: " Style="{StaticResource PropKey}"/>
-                                    <TextBlock Text="{Binding SelectedWebPart.Title}"
-                                               FontSize="12" FontWeight="Bold" Foreground="#1a1a7a"/>
-                                </StackPanel>
+								<StackPanel Orientation="Horizontal">
+									<Button Command="{Binding EditCustomPropertiesCommand}"
+											ToolTip="Edit custom properties (under construction)"
+											Background="Transparent" BorderThickness="0"
+											Padding="0" Margin="0,0,4,0" Cursor="Hand">
+										<TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets"
+												   FontSize="13" Foreground="#6B2D8B"/>
+									</Button>
+									<TextBlock Text="Title: " Style="{StaticResource PropKey}"/>
+									<TextBlock Text="{Binding SelectedWebPart.Title}"
+											   FontSize="12" FontWeight="Bold" Foreground="#1a1a7a"/>
+								</StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                                     <TextBlock Text="Zone: " Style="{StaticResource PropKey}"/>
                                     <TextBlock Text="{Binding SelectedWebPart.ZoneId}"

@@ -181,6 +181,8 @@ namespace SPUtil.App.ViewModels
         public DelegateCommand CopyWpToClipboardCommand      { get; }
         /// <summary>Generate PowerShell script with all WebParts as embedded JSON, show in preview</summary>
         public DelegateCommand ExportWpToPowerShellCommand   { get; }
+        /// <summary>Open the custom-properties editor stub for the selected WebPart</summary>
+        public DelegateCommand EditCustomPropertiesCommand    { get; }
 
         public PagesViewModel(ISharePointService spService)
         {
@@ -251,6 +253,12 @@ namespace SPUtil.App.ViewModels
                 () => ExecuteExportWpToPowerShell(),
                 () => WebParts != null && WebParts.Any())
                 .ObservesProperty(() => WebParts);
+				
+			EditCustomPropertiesCommand = new DelegateCommand(
+                () => ExecuteEditCustomProperties(),
+                () => SelectedWebPart != null)
+                .ObservesProperty(() => SelectedWebPart);
+				
         }
 
 		// ── Called by MainWindowViewModel after creating this VM ──────────────
@@ -1199,6 +1207,17 @@ namespace SPUtil.App.ViewModels
                 System.Diagnostics.Debug.WriteLine($"[ParseExportXml] {ex.Message}");
             }
             return result;
+        }
+
+        private void ExecuteEditCustomProperties()
+        {
+            if (SelectedWebPart == null) return;
+
+            var dialog = new SPUtil.Views.CustomPropertiesEditorDialog(SelectedWebPart)
+            {
+                Owner = Application.Current.MainWindow
+            };
+            dialog.ShowDialog();
         }
 
 
