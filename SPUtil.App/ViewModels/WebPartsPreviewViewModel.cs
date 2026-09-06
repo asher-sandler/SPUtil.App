@@ -57,7 +57,7 @@ namespace SPUtil.App.ViewModels
         public WebPartsPreviewViewModel(
             IEnumerable<SPWebPartData> webParts,
             string pageTitle,
-            Window ownerWindow,string pageUrl = "")
+            Window ownerWindow,string pageUrl = "",bool ShowWPCount = true)
         {
             // Build the formatted text block
             PreviewText = BuildPreviewText(webParts, pageTitle, pageUrl);
@@ -83,8 +83,14 @@ namespace SPUtil.App.ViewModels
                     Action  = () => ownerWindow?.Close()
                 }
             };
-
-            StatusMessage = $"Page: {pageTitle}  |  Web parts: {webParts.Count()}";
+            if (ShowWPCount)
+            {
+                StatusMessage = $"Page: {pageTitle}  |  Web parts: {webParts.Count()}";
+            }
+            else
+            {
+                StatusMessage = $"Page: {pageTitle}";
+            }
         }
 
         // ── Text builder ─────────────────────────────────────────────────────

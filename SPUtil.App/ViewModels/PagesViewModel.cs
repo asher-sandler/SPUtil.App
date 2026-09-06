@@ -1280,9 +1280,9 @@ namespace SPUtil.App.ViewModels
 
             string hostRoot     = "https://" + new Uri(_siteUrl).Host;
             string fullPagePath = SelectedPage != null ? $"{hostRoot}{SelectedPage.FullPath}" : "";
-
+            bool showWPCount = false;
             var vm = new WebPartsPreviewViewModel(
-                new[] { SelectedWebPart }, SelectedPage?.Name ?? "", win, fullPagePath);
+                new[] { SelectedWebPart }, SelectedPage?.Name ?? "", win, fullPagePath, showWPCount);
             win.DataContext = vm;
             win.ShowDialog();
         }

@@ -349,7 +349,7 @@
                         Command="{Binding CopyWpToClipboardCommand}"
                         Background="Transparent" BorderBrush="Transparent"
                         Cursor="Hand" Padding="5,4"
-                        ToolTip="Copy WP properties to clipboard">
+                        ToolTip="Display this WP properties">
                     <TextBlock Text="&#xE8D0;" FontFamily="Segoe MDL2 Assets"
                                FontSize="15" Foreground="#555"/>
                 </Button>
