@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -17,32 +17,22 @@ namespace SPUtil.Views
 
         private void Action_Click(object sender, RoutedEventArgs e)
         {
-            //MessageBox.Show("Triggered from: ExistsActionDialog.Action_Click");
-
             if (sender is Button btn && btn.Tag != null)
             {
                 SelectedAction = btn.Tag.ToString() ?? "Cancel";
 
                 if (SelectedAction == "Rename")
                 {
-                    MessageBox.Show("Starting Rename logic inside Action_Click");
-                    // Для работы Interaction добавьте ссылку на Microsoft.VisualBasic в проект
+                    // Requires a reference to Microsoft.VisualBasic for Interaction.InputBox.
                     string input = Microsoft.VisualBasic.Interaction.InputBox(
-                        "Enter new name for the target list:", 
-                        "Rename Target", 
+                        "Enter new name for the target list:",
+                        "Rename Target",
                         TxtListName.Text);
 
-                    if (string.IsNullOrWhiteSpace(input) || input == TxtListName.Text) 
+                    if (string.IsNullOrWhiteSpace(input) || input == TxtListName.Text)
                         return;
-                    // SelectedAction can also be "Rename" or "Skip" here — both currently
-                    // abort the same way as Cancel. "Rename" additionally discards the name
-                    // the user typed into ExistsActionDialog.NewName (never read anywhere).
-                    // Known gap, not implemented — see backlog.
 
                     NewName = input;
-#if DEBUG
-                    System.Diagnostics.Debugger.Break();
-#endif
                 }
 
                 this.DialogResult = SelectedAction != "Cancel";

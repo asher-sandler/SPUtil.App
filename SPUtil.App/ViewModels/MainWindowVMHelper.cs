@@ -84,7 +84,7 @@ namespace SPUtil.App.ViewModels
                 var existsDialog = new SPUtil.Views.ExistsActionDialog(targetListName);
                 if (existsDialog.ShowDialog() != true) return;
 
-                action = existsDialog.SelectedAction; // "Overwrite", "Append" или "Cancel"
+                action = existsDialog.SelectedAction; // "Overwrite", "Append", "Rename" или "Cancel"
 
                 if (action == "Overwrite")
                 {
@@ -102,17 +102,43 @@ namespace SPUtil.App.ViewModels
                 {
                     StatusMessage = "Will append to existing list.";
                 }
-				
-				// SelectedAction can also be "Rename" or "Skip" here — both currently
-				// abort the same way as Cancel. "Rename" additionally discards the name
-				// the user typed into ExistsActionDialog.NewName (never read anywhere).
-				// Known gap, not implemented — see backlog.
-				#if DEBUG
-				else if (action == "Rename")
-				{	
-					System.Diagnostics.Debugger.Break();
-				}	
-				#endif				
+                else if (action == "Rename")
+                {
+                    // Target name is taken — create a NEW list under the name the user
+                    // typed into ExistsActionDialog, instead of touching the existing
+                    // one at all. Check the new name too, so we never silently land on
+                    // yet another already-occupied list.
+                    string newName = existsDialog.NewName ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(newName))
+                    {
+                        MessageBox.Show("No new name was provided.", "Rename",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    bool newNameExists = await _spService.ListExistsAsync(targetUrl, newName);
+                    if (newNameExists)
+                    {
+                        MessageBox.Show(
+                            $"A list named '{newName}' already exists on the target site as well.\n" +
+                            "Please choose a different name and try again.",
+                            "Rename", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    targetListName = newName;
+
+                    infoWin.Show();
+                    infoWin.UpdateMessage($"Creating structure: {targetListName}...");
+                    bool created = await CreateListStructureAsync(info, targetUrl, targetListName, templateId);
+                    infoWin.Close();
+                    if (!created) return;
+
+                    // Target is now a brand-new, empty list under the new name —
+                    // plain Append is correct here (nothing to clear; ClearListItemsAsync
+                    // would be a no-op anyway).
+                    action = "Append";
+                }
                 else return;
             }
             else
@@ -259,7 +285,6 @@ namespace SPUtil.App.ViewModels
             if (withData)
             {
                 await ExecuteDocLibDataCopyAsync(info.URL, targetUrl, sourceTitle, targetLibName, action);
-                // TODO: await ExecuteDocLibDataCopyAsync(info.URL, targetUrl, sourceTitle, targetLibName, action);
             }
 
             RightSiteNodes = await _spService.GetSiteStructureAsync(targetUrl);

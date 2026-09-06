@@ -52,7 +52,9 @@ namespace SPUtil.Views
             "controlPath", "_dataPath", "_configPath",
             "CSS_Path", "CssPath", "JsPath",
             "loadFormByIdPageURL", "successPageUrl",
-            "initiatorMailTemplate", "approverMailTemplate"
+            "initiatorMailTemplate", "approverMailTemplate",
+			"CSS_AUX_Path","CSS_Style_Path","Css_File_Name",
+			"Css_Path","Css_File_Folder"
         };
 
         // Properties that do NOT match the path/file name heuristic but were

@@ -45,6 +45,20 @@ namespace SPUtil.Services
                 ));
 
                 await Task.Run(() => ctx.ExecuteQuery());
+                System.Diagnostics.Debug.WriteLine(
+                    $"[FIELD_DIAG] ══ RAW fields on '{listTitle}' @ {siteUrl} — count={list.Fields.Count} ══");
+               foreach (var rawField in list.Fields)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[FIELD_DIAG] {siteUrl} | {listTitle} | " +
+                        $"InternalName='{rawField.InternalName}' " +
+                        $"Title='{rawField.Title}' " +
+                        $"Type={rawField.FieldTypeKind} " +
+                        $"Hidden={rawField.Hidden} " +
+                        $"ReadOnly={rawField.ReadOnlyField}");
+                }
+                System.Diagnostics.Debug.WriteLine(
+                    $"[FIELD_DIAG] ══ end of raw fields for '{listTitle}' @ {siteUrl} ══");
 
                 foreach (var field in list.Fields)
                 {
@@ -72,7 +86,7 @@ namespace SPUtil.Services
                     string[] systemExclusions =
                     {
                 "ContentType", "Attachments", "FolderChildCount", "ItemChildCount","ParentLeafName","ParentVersionString",
-                "Edit", "LinkTitle", "Order", "GUID", "AppAuthor", "AppEditor", "DocIcon", "FileLeafRef","Title"
+                "Edit", "LinkTitle", "Order", "GUID", "AppAuthor", "AppEditor", "DocIcon", "FileLeafRef","Title","ComplianceAssetId"
             };
                     if (systemExclusions.Contains(field.InternalName)) continue;
 
@@ -280,12 +294,13 @@ namespace SPUtil.Services
 													   // В версии 15.0 используем СИНХРОННЫЙ метод
 					context.ExecuteQuery();
 					
-                    System.Diagnostics.Debug.WriteLine($"--- Field list for list {listId} ---");
-
-                    foreach (var field in fields)
+                    System.Diagnostics.Debug.WriteLine($"297: --- Field list for list {listId} ---");
+                     foreach (var field in fields)
                     {
                         // Выводим название и внутреннее имя каждого поля
-                        System.Diagnostics.Debug.WriteLine($"Field: {field.Title} | InternalName: {field.InternalName} | Type: {field.FieldTypeKind}");
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Field: {field.Title} | InternalName: {field.InternalName} | " +
+                            $"Type: {field.FieldTypeKind} | Hidden: {field.Hidden}");
                     }
 
                     System.Diagnostics.Debug.WriteLine($"--- Total fields: {fields.Count} ---");
@@ -318,7 +333,7 @@ namespace SPUtil.Services
 						// Список исключений (то, что не хотим видеть в таблице)
 						var blacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
 						{ 
-							"ContentTypeId", "Attachments", "Edit", "DocIcon", 
+							"ContentTypeId", "Attachments", "Edit", "DocIcon","ComplianceAssetId", 
 							"AppAuthor", "ItemChildCount", "FolderChildCount", "AppEditor", "vti_folderitemcount"
 						};
 

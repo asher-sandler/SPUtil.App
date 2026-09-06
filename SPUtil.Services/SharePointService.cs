@@ -1425,7 +1425,7 @@ namespace SPUtil.Services
 				await Task.Run(() => ctx.ExecuteQuery());
 				return list.Id;
 			}
-		}		
+		}
         /*
         public async Task CreateListFromSchemaAsync(string targetUrl, string internalListName, string newlistTitle, List<FieldInfo> sourceFields, List<SPViewData> sourceViews,int listType=100)
 		{
@@ -1617,17 +1617,51 @@ namespace SPUtil.Services
 		*/
         private async Task<List> CreateListAsync(ClientContext ctx, string internalName, string newlistTitle, int templateType)
         {
+            // The "create under internalName, then rename Title" trick below makes the
+            // list's URL/RootFolder match the SOURCE list's technical internal name,
+            // purely for a nicer/consistent URL — it does not affect functionality.
+            // But if a list titled `internalName` ALREADY exists on the target (most
+            // commonly: the very list that triggered the "Rename" flow in
+            // ProcessListCopyAsync, which is deliberately left untouched), creating
+            // under that title collides with it. Detect that up front (same
+            // GetByTitle+try/catch existence check already used in CreateDocLibAsync)
+            // and fall back to creating directly under newlistTitle — losing the
+            // URL/internalName match in that one case, but actually succeeding instead
+            // of failing with a generic "already exists" error that looked like it came
+            // from newlistTitle.
+            bool internalNameTaken = await Task.Run(() =>
+            {
+                try
+                {
+                    var existing = ctx.Web.Lists.GetByTitle(internalName);
+                    ctx.Load(existing);
+                    ctx.ExecuteQuery();
+                    return true;
+                }
+                catch { /* List not found */ return false; }
+            });
+
+            string titleToCreate = internalNameTaken ? newlistTitle : internalName;
+
+            if (internalNameTaken)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[SP_SERVICE] internalName '{internalName}' already exists on target — " +
+                    $"creating directly under '{newlistTitle}' instead (URL will not match internalName).");
+            }
+
             ListCreationInformation creationInfo = new ListCreationInformation
             {
-                Title = internalName,
+                Title = titleToCreate,
                 TemplateType = templateType
             };
 
             List newList = ctx.Web.Lists.Add(creationInfo);
 
             // --- STEP 2: Сразу меняем отображаемый заголовок на правильный ---
-            // Это не изменит URL (RootFolder), но в интерфейсе будет красиво
-            if (internalName != newlistTitle)
+            // Это не изменит URL (RootFolder), но в интерфейсе будет красиво.
+            // Skipped when we already created directly under newlistTitle above.
+            if (titleToCreate != newlistTitle)
             {
                 newList.Title = newlistTitle;
                 newList.Update();
@@ -1640,12 +1674,12 @@ namespace SPUtil.Services
             // Выполняем создание и переименование одним запросом
             await Task.Run(() => ctx.ExecuteQuery());
 
-            System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] List created. URL Name: '{internalName}', Display Title: '{newlistTitle}'");
-            
+            System.Diagnostics.Debug.WriteLine($"[SP_SERVICE] List created. URL Name: '{titleToCreate}', Display Title: '{newlistTitle}'");
+
             return newList;
         }
 
-		public async Task ClearListItemsAsync(string siteUrl, string listTitle)
+        public async Task ClearListItemsAsync(string siteUrl, string listTitle)
 		{
 			_log.Caller().Warning("ClearListItems: {Title} on {Site}", listTitle, siteUrl);
 			await Task.Run(async () =>
