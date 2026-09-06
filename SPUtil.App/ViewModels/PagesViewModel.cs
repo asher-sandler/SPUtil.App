@@ -1262,13 +1262,38 @@ namespace SPUtil.App.ViewModels
             await LoadWebPartsAsync(pagePath);
         }
 
+       private void ExecuteCopyWpToClipboard()
+        {
+            if (SelectedWebPart == null) return;
+
+            // Same window + ViewModel already used by "Show WebParts Preview" for the
+            // whole page (ShowWebPartsPreviewCommand) — just fed a single-item list,
+            // so the format, the "Copy all" button, and the Close button are identical
+            // to what the user already sees there, instead of copying silently.
+            var win = new SPUtil.App.Views.UniversalPreviewWindow
+            {
+                Title  = $"WebPart Properties — {SelectedWebPart.Title}",
+                Owner  = Application.Current.MainWindow,
+                Width  = 700,
+                Height = 550
+            };
+
+            string hostRoot     = "https://" + new Uri(_siteUrl).Host;
+            string fullPagePath = SelectedPage != null ? $"{hostRoot}{SelectedPage.FullPath}" : "";
+
+            var vm = new WebPartsPreviewViewModel(
+                new[] { SelectedWebPart }, SelectedPage?.Name ?? "", win, fullPagePath);
+            win.DataContext = vm;
+            win.ShowDialog();
+        }
 
 
         // ═══════════════════════════════════════════════════════════════════════
         //  Copy WebPart properties to clipboard
         //  Format: page name + WP title + all key:value properties
         // ═══════════════════════════════════════════════════════════════════════
-        private void ExecuteCopyWpToClipboard()
+        /*
+		private void ExecuteCopyWpToClipboard()
         {
             if (SelectedWebPart == null) return;
 
@@ -1307,7 +1332,7 @@ namespace SPUtil.App.ViewModels
                 StatusMessage = $"Clipboard error: {ex.Message}";
             }
         }
-
+		*/
         /// <summary>
         /// Extracts the subfolder path within Pages from a full server-relative page URL.
         /// /home/Agriculture/Pages/Dean/Candidate.aspx → "Dean"
@@ -1324,7 +1349,7 @@ namespace SPUtil.App.ViewModels
             int lastSlash = afterPages.LastIndexOf('/');
             return lastSlash <= 0 ? string.Empty : afterPages.Substring(0, lastSlash);
         }
-
+		
         // ═══════════════════════════════════════════════════════════════════════
         //  Export WebParts as PowerShell script
         //  Generates a .ps1 file that:
