@@ -837,111 +837,162 @@ namespace SPUtil.App.ViewModels
 			
 		}
 		*/
-		private async Task CompareList()
-		{
-			if (SelectedLeftNode == null || SelectedLeftNode.Type != SharePointObjectType.List)
-			{
-				System.Windows.MessageBox.Show("Select a list in the left panel.");
-				return;
-			}
-
-			string listTitle = SelectedLeftNode.Title;
-			string targetUrl = SPUsingUtils.NormalizeUrl(RightSiteUrl);
-
-			bool exists = await _spService.ListExistsAsync(targetUrl, listTitle);
-			if (!exists)
-			{
-				System.Windows.MessageBox.Show($"List '{listTitle}' not exists on destination site!", "Info");
-				return;
-			}
-
-			// Сразу готовим кнопки для окна
-			DialogButtons = new ObservableCollection<DialogButton>
-			{
-
-				new DialogButton 
-				{ 
-					Caption = "Copy", 
-					Action = async () => {
-						if (string.IsNullOrEmpty(PreviewText) || PreviewText.StartsWith("Comparing")) return;
-						
-						System.Windows.Clipboard.SetText(PreviewText);
-						string oldStatus = StatusMessage;
-						StatusMessage = "Copied to clipboard!";
-						
-						await Task.Delay(300);
-						if (StatusMessage == "Copied to clipboard!")
-							StatusMessage = "Ready";
-					}
-				},				
-				new DialogButton { 
-					Caption = "Close", 
-					IsCancel = true, 
-					Action = () => {
-
-							var winToClose = System.Windows.Application.Current.Windows
-								.OfType<SPUtil.App.Views.UniversalPreviewWindow>()
-								.FirstOrDefault(w => w.DataContext == this);
-
-							winToClose?.Close();
-						} 
-					}
-				
-			};
-
-			var win = new SPUtil.App.Views.UniversalPreviewWindow()
-			{
-				Title = $"Compare: {listTitle}",
-				Owner = System.Windows.Application.Current.MainWindow,
-				DataContext = this
-			};
-
-			// Запускаем сравнение сразу после загрузки окна
-			win.Loaded += async (s, e) =>
-			{
-				StatusMessage = "Fetching schemas...";
-				PreviewText = "Comparing... Please wait.";
-				
-				try 
-				{
-					// Получаем сырые XML схем с обоих сайтов
-					var leftSchemas = await _spService.GetListSchemaAsync(LeftSiteUrl, listTitle);
-					var rightSchemas = await _spService.GetListSchemaAsync(RightSiteUrl, listTitle);
-
-					// Выполняем сравнение в фоновом потоке
-					string report = await Task.Run(() => CompareTwoLists(leftSchemas, rightSchemas,LeftSiteUrl,RightSiteUrl, listTitle));
-					
-					PreviewText = report;
-					StatusMessage = "Compare complete.";
-				}
-				catch (Exception ex)
-				{
-				    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
-					PreviewText = "Error during compare: " + ex.Message;
-					StatusMessage = "Error";
-				}
-			};
-
-			win.ShowDialog();
-		}
-        private async Task<string> CompareTwoLists(List<string> leftFieldsXml, List<string> rightFieldsXml, string leftSiteUrl, string rightSiteUrl, string leftListTitle)
+       private async Task CompareList()
         {
-            
+            if (SelectedLeftNode == null || SelectedLeftNode.Type != SharePointObjectType.List)
+            {
+                System.Windows.MessageBox.Show("Select a list in the left panel.");
+                return;
+            }
+
+            string listTitle = SelectedLeftNode.Title;
+            string targetUrl = SPUsingUtils.NormalizeUrl(RightSiteUrl);
+
+            // Always ask which list to compare against — prefilled with the source
+            // list's name as the default, but the user must confirm (or change it)
+            // every time. Existence on the destination is checked inside the dialog,
+            // on "Compare" click, not here.
+            var pickDialog = new SPUtil.Views.CompareTargetListDialog(
+                listTitle, targetUrl,
+                name => _spService.ListExistsAsync(targetUrl, name))
+            {
+                Owner = System.Windows.Application.Current.MainWindow
+            };
+
+            if (pickDialog.ShowDialog() != true) return; // user cancelled
+            string targetListTitle = pickDialog.TargetListTitle;
+
+            // Сразу готовим кнопки для окна
+            DialogButtons = new ObservableCollection<DialogButton>
+            {
+
+                new DialogButton 
+                { 
+                    Caption = "Copy", 
+                    Action = async () => {
+                        if (string.IsNullOrEmpty(PreviewText) || PreviewText.StartsWith("Comparing")) return;
+                        
+                        System.Windows.Clipboard.SetText(PreviewText);
+                        string oldStatus = StatusMessage;
+                        StatusMessage = "Copied to clipboard!";
+                        
+                        await Task.Delay(300);
+                        if (StatusMessage == "Copied to clipboard!")
+                            StatusMessage = "Ready";
+                    }
+                },				
+                new DialogButton { 
+                    Caption = "Close", 
+                    IsCancel = true, 
+                    Action = () => {
+
+                            var winToClose = System.Windows.Application.Current.Windows
+                                .OfType<SPUtil.App.Views.UniversalPreviewWindow>()
+                                .FirstOrDefault(w => w.DataContext == this);
+
+                            winToClose?.Close();
+                        } 
+                    }
+                
+            };
+
+            var win = new SPUtil.App.Views.UniversalPreviewWindow()
+            {
+                Title = targetListTitle == listTitle
+                    ? $"Compare: {listTitle}"
+                    : $"Compare: {listTitle} ↔ {targetListTitle}",
+                Owner = System.Windows.Application.Current.MainWindow,
+                DataContext = this
+            };
+
+            // Запускаем сравнение сразу после загрузки окна
+            win.Loaded += async (s, e) =>
+            {
+                StatusMessage = "Fetching schemas...";
+                PreviewText = "Comparing... Please wait.";
+                
+                try 
+                {
+                    // Получаем сырые XML схем с обоих сайтов
+                    var leftSchemas = await _spService.GetListSchemaAsync(LeftSiteUrl, listTitle);
+                    var rightSchemas = await _spService.GetListSchemaAsync(RightSiteUrl, targetListTitle);
+
+                    // Выполняем сравнение в фоновом потоке
+                    string report = await Task.Run(() => CompareTwoLists(leftSchemas, rightSchemas, LeftSiteUrl, RightSiteUrl, listTitle, targetListTitle));
+                    
+                    PreviewText = report;
+                    StatusMessage = "Compare complete.";
+                }
+                catch (Exception ex)
+                {
+                    _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                    PreviewText = "Error during compare: " + ex.Message;
+                    StatusMessage = "Error";
+                }
+            };
+
+            win.ShowDialog();
+        }
+		
+		private async Task<string> CompareTwoLists(List<string> leftFieldsXml, List<string> rightFieldsXml, string leftSiteUrl, string rightSiteUrl, string leftListTitle, string rightListTitle)
+		{            
 			var sb = new System.Text.StringBuilder();
 			sb.AppendLine($"--- Comparison Report ---");
 			sb.AppendLine($"Source URL: {leftSiteUrl}");
 			sb.AppendLine($"Target URL: {rightSiteUrl}");
-			sb.AppendLine($"List: {leftListTitle}");
+			sb.AppendLine(leftListTitle == rightListTitle
+				? $"List: {leftListTitle}"
+				: $"List (source): {leftListTitle}{Environment.NewLine}List (target): {rightListTitle}");
 			sb.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ssK}");
 			sb.AppendLine();
 
 			var leftDict = ParseFieldsToDictionary(leftFieldsXml);
 			var rightDict = ParseFieldsToDictionary(rightFieldsXml);
 
-			// ... (Блоки MISSING и EXTRA оставляем без изменений) ...
+			bool hasDiffs = false;
+
+			// Fields present on the source but not on the target — candidates the user
+			// may want to add on the destination. Compact one-line-per-field format
+			// (InternalName, Type, DisplayName) rather than full raw XML: this section
+			// is about scanning a list to decide what's missing, not diffing schema
+			// details, so a wall of XML per field would only get in the way.
+			// DisplayName is included specifically because InternalName is often a
+			// hex-encoded placeholder for non-Latin (e.g. Hebrew) field names
+			// (e.g. "_x05ea_x05d5_..."), which is unreadable on its own.
+			var missingOnTarget = leftDict.Keys.Except(rightDict.Keys).OrderBy(k => k).ToList();
+			if (missingOnTarget.Any())
+			{
+				hasDiffs = true;
+				sb.AppendLine($"[ FIELDS MISSING ON TARGET ]  (candidates to add — {missingOnTarget.Count} field{(missingOnTarget.Count == 1 ? "" : "s")})");
+				foreach (var name in missingOnTarget)
+				{
+					string raw = leftDict[name];
+					string type = GetFieldType(raw);
+					string displayName = GetAttributeFromXml(raw, "DisplayName") ?? name;
+					sb.AppendLine($"- {name} ({type}) — DisplayName: \"{displayName}\"");
+				}
+				sb.AppendLine();
+			}
+
+			// Fields present on the target but not on the source — informational only.
+			// We never touch the source, so this list requires no decision from the
+			// user; kept for visibility (e.g. leftovers from an earlier copy/rename).
+			var extraOnTarget = rightDict.Keys.Except(leftDict.Keys).OrderBy(k => k).ToList();
+			if (extraOnTarget.Any())
+			{
+				hasDiffs = true;
+				sb.AppendLine($"[ EXTRA FIELDS ON TARGET (not present on source) ]  ({extraOnTarget.Count} field{(extraOnTarget.Count == 1 ? "" : "s")})");
+				foreach (var name in extraOnTarget)
+				{
+					string raw = rightDict[name];
+					string type = GetFieldType(raw);
+					string displayName = GetAttributeFromXml(raw, "DisplayName") ?? name;
+					sb.AppendLine($"- {name} ({type}) — DisplayName: \"{displayName}\"");
+				}
+				sb.AppendLine();
+			}
 
 			sb.AppendLine("[ SCHEMA DIFFERENCES ]");
-			bool hasDiffs = false;
 			var commonFields = leftDict.Keys.Intersect(rightDict.Keys).ToList();
 
 			foreach (var name in commonFields)
@@ -951,7 +1002,6 @@ namespace SPUtil.App.ViewModels
 				
 				string leftClean = _cloneService.CompareCleanFieldXml(leftRaw);
 				string rightClean = _cloneService.CompareCleanFieldXml(rightRaw);
-
 				// Если строки очищенного XML не равны
 				if (!string.Equals(leftClean, rightClean, StringComparison.OrdinalIgnoreCase))
 				{
@@ -1003,9 +1053,11 @@ namespace SPUtil.App.ViewModels
 				}
 			}
 
-			if (!hasDiffs) sb.AppendLine("All common fields have identical schemas (including Lookup names mapping).");
+			if (!hasDiffs) sb.AppendLine("Lists are identical: same fields, same schemas (including Lookup names mapping).");
 			return sb.ToString();
 		}
+
+
 		// Вспомогательный метод для извлечения атрибутов из сырого XML
 		private string? GetAttributeFromXml(string xml, string attrName)
 		{
