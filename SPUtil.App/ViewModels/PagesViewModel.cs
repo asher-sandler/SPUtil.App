@@ -102,6 +102,15 @@ namespace SPUtil.App.ViewModels
         // picked a library in the tree, so changing the target site afterwards had no
         // effect — the copy silently went to the previously selected site.
         private Func<string>? _targetSiteUrlProvider;
+        // Reaches the OTHER pane's PagesViewModel instance — evaluated live
+        // (like _targetSiteUrlProvider above) since the other pane's content
+        // can change as the user navigates it. Null if the other pane isn't
+        // currently showing a Pages library at all. Used so a successful
+        // Copy/Compare on this pane can refresh the other pane's WebParts
+        // grid if it happens to be displaying the exact page we just changed
+        // — otherwise the user has no visual confirmation the write worked
+        // without manually clicking Refresh over there.
+        private Func<PagesViewModel?>? _targetPagesViewModelProvider;
 
         private string _targetSiteUrl => _targetSiteUrlProvider?.Invoke() ?? string.Empty;		
 		
@@ -246,6 +255,23 @@ namespace SPUtil.App.ViewModels
 
 		// ── Called by MainWindowViewModel after creating this VM ──────────────
         public void SetTargetSiteUrlProvider(Func<string> provider) => _targetSiteUrlProvider = provider;
+        public void SetTargetPagesViewModelProvider(Func<PagesViewModel?> provider) => _targetPagesViewModelProvider = provider;
+
+        /// <summary>
+        /// Called on the OTHER pane's PagesViewModel (via _targetPagesViewModelProvider)
+        /// after a successful WebPart write elsewhere — reloads WebParts here ONLY if
+        /// this instance is currently displaying the exact page that changed, so the
+        /// user sees the result without having to click Refresh manually. No-op
+        /// otherwise (e.g. this pane is showing a different page, or none).
+        /// </summary>
+        public async Task RefreshWebPartsIfShowingAsync(string pageRelativeUrl)
+        {
+            if (SelectedPage != null &&
+                string.Equals(SelectedPage.FullPath, pageRelativeUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                await LoadWebPartsAsync(pageRelativeUrl);
+            }
+        }
 
 
 
@@ -842,6 +868,39 @@ namespace SPUtil.App.ViewModels
         }
 
 
+        /// <summary>
+        /// Finds the WebPart(s) on the target page whose Title matches, and
+        /// resolves which ONE to use — shared by Compare and Copy Properties
+        /// so both behave identically when the target has duplicate titles.
+        ///
+        /// - 0 matches  → (Found: false, Cancelled: false, WebPart: null) — caller shows "Not Found".
+        /// - 1 match    → returned immediately, no dialog (keeps the common case frictionless).
+        /// - 2+ matches → SelectWebPartDialog lets the user pick; Cancelled=true
+        ///                if they back out, so callers can distinguish "nothing
+        ///                on target at all" from "several candidates, user gave up"
+        ///                and stay silent in the latter case instead of showing
+        ///                a misleading "Not Found" message.
+        /// </summary>
+        private (bool Found, bool Cancelled, WebPartSnapshot? WebPart) ResolveTargetWebPart(
+            PageSnapshot targetSnapshot, string title)
+        {
+            var matches = targetSnapshot.WebParts
+                .Where(w => string.Equals(w.Title, title, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (matches.Count == 0) return (false, false, null);
+            if (matches.Count == 1) return (true, false, matches[0]);
+
+            var dialog = new SPUtil.Views.SelectWebPartDialog(matches, title)
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            return dialog.ShowDialog() == true
+                ? (true, false, dialog.SelectedWebPart)
+                : (true, true, null);
+        }
+
         // ═══════════════════════════════════════════════════════════════════════
         //  Compare WebPart — shows diff of one WP between source and target page
         // ═══════════════════════════════════════════════════════════════════════
@@ -893,15 +952,16 @@ namespace SPUtil.App.ViewModels
                 var targetSnapshot = await _spService.GetPageSnapshotAsync(
                     _targetSiteUrl, targetRelUrl);
 
-                // Find matching WebPart on target by Title
-                var targetWp = targetSnapshot.WebParts
-                    .OrderBy(w => Math.Abs(w.VisualPosition - SelectedWebPart.VisualPosition))
-                    .FirstOrDefault(w => string.Equals(w.Title, SelectedWebPart.Title,
-                        StringComparison.OrdinalIgnoreCase));
+                // Find matching WebPart on target by Title — SelectWebPartDialog
+                // if there are several with the same title (see ResolveTargetWebPart).
+                var (found, cancelled, targetWp) = ResolveTargetWebPart(
+                    targetSnapshot, SelectedWebPart.Title);
 
                 infoWin.Close();
 
-                if (targetWp == null)
+                if (cancelled) return; // user backed out of a multi-match choice — stay silent
+
+                if (!found || targetWp == null)
                 {
                     MessageBox.Show(
                         $"WebPart '{SelectedWebPart.Title}' not found on target page '{targetPageName}'.\n\n"
@@ -1043,13 +1103,18 @@ namespace SPUtil.App.ViewModels
                 var targetSnapshot = await _spService.GetPageSnapshotAsync(
                     _targetSiteUrl, targetRelUrl);
 
-                // Find best-matching WebPart on target
-                var targetWp = targetSnapshot.WebParts
-                    .OrderBy(w => Math.Abs(w.VisualPosition - SelectedWebPart.VisualPosition))
-                    .FirstOrDefault(w => string.Equals(w.Title, SelectedWebPart.Title,
-                        StringComparison.OrdinalIgnoreCase));
+                // Find matching WebPart on target — SelectWebPartDialog if there
+                // are several with the same title (see ResolveTargetWebPart).
+                var (found, cancelled, targetWp) = ResolveTargetWebPart(
+                    targetSnapshot, SelectedWebPart.Title);
 
-                if (targetWp == null)
+                if (cancelled)
+                {
+                    infoWin.Close();
+                    return; // user backed out of a multi-match choice — stay silent
+                }
+
+                if (!found || targetWp == null)
                 {
                     infoWin.Close();
                     MessageBox.Show(
@@ -1084,6 +1149,14 @@ namespace SPUtil.App.ViewModels
 
                 infoWin.Close();
                 StatusMessage = $"✔ Properties copied to '{targetWp.Title}' on '{targetPageName}'";
+
+                // Refresh the other pane's WebParts grid if it's showing this
+                // exact target page — otherwise the user has no visual
+                // confirmation the write took effect without a manual Refresh.
+                var targetVm = _targetPagesViewModelProvider?.Invoke();
+                if (targetVm != null)
+                    await targetVm.RefreshWebPartsIfShowingAsync(targetRelUrl);
+
                 MessageBox.Show(
                     $"Properties of '{SelectedWebPart.Title}' copied successfully\nto '{targetPageName}' on target site.",
                     "Done", MessageBoxButton.OK, MessageBoxImage.Information);

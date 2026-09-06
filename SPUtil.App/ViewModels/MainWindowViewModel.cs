@@ -740,6 +740,12 @@ namespace SPUtil.App.ViewModels
 						vm.SetTargetSiteUrlProvider(() => SPUtil.Infrastructure.SPUsingUtils.NormalizeUrl(
 							isLeftPane ? RightSiteUrl : LeftSiteUrl));
 
+						// Live lookup, not a captured value — the other pane's content
+						// can change (user navigates it to a different node/type)
+						// between now and when a copy/compare actually completes.
+						vm.SetTargetPagesViewModelProvider(() =>
+							(isLeftPane ? RightDetailsView : LeftDetailsView) as PagesViewModel);
+
 						newView = vm;
 						if (isLeftPane) LeftDetailsView = newView; else RightDetailsView = newView;
 
