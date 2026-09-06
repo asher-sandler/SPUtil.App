@@ -254,8 +254,8 @@ namespace SPUtil.App.ViewModels
                 () => WebParts != null && WebParts.Any())
                 .ObservesProperty(() => WebParts);
 				
-			EditCustomPropertiesCommand = new DelegateCommand(
-                () => ExecuteEditCustomProperties(),
+            EditCustomPropertiesCommand = new DelegateCommand(
+                async () => await ExecuteEditCustomPropertiesAsync(),
                 () => SelectedWebPart != null)
                 .ObservesProperty(() => SelectedWebPart);
 				
@@ -1209,16 +1209,59 @@ namespace SPUtil.App.ViewModels
             return result;
         }
 
-        private void ExecuteEditCustomProperties()
+        private async Task ExecuteEditCustomPropertiesAsync()
         {
-            if (SelectedWebPart == null) return;
+            if (SelectedWebPart == null || SelectedPage == null) return;
 
             var dialog = new SPUtil.Views.CustomPropertiesEditorDialog(SelectedWebPart)
             {
                 Owner = Application.Current.MainWindow
             };
-            dialog.ShowDialog();
+
+            if (dialog.ShowDialog() != true) return;
+            if (dialog.EditedProperties.Count == 0) return;
+
+            var storageKey = SelectedWebPart.StorageKey;
+            var pagePath   = SelectedPage.FullPath;
+
+            WebPartSavePropertiesResult result;
+            try
+            {
+                result = await _spService.SaveSingleWebPartPropertiesAsync(
+                    _siteUrl, pagePath, storageKey, dialog.EditedProperties);
+            }
+            catch (Exception ex)
+            {
+                _log.Caller().Error(ex, "ERROR: {ExType} — {Message}", ex.GetType().Name, ex.Message);
+                MessageBox.Show($"Failed to save properties: {ex.Message}",
+                    "Save Custom Properties", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            if (result.IsFullSuccess)
+            {
+                MessageBox.Show(
+                    $"Saved {result.Succeeded.Count} propert{(result.Succeeded.Count == 1 ? "y" : "ies")}.",
+                    "Save Custom Properties", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                string failedList = string.Join(Environment.NewLine,
+                    result.Failed.Select(f => $"  {f.Key}: {f.Value}"));
+
+                MessageBox.Show(
+                    $"Saved {result.Succeeded.Count} of {dialog.EditedProperties.Count} properties." +
+                    Environment.NewLine + Environment.NewLine +
+                    $"Not saved:{Environment.NewLine}{failedList}",
+                    "Save Custom Properties — Partial Result",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            // Reload so the grid/Properties panel reflect whatever actually made it
+            // to the server (including cases where some properties silently failed).
+            await LoadWebPartsAsync(pagePath);
         }
+
 
 
         // ═══════════════════════════════════════════════════════════════════════

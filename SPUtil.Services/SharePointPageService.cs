@@ -1134,6 +1134,124 @@ namespace SPUtil.Services
             });
         }
 
+		// ═══════════════════════════════════════════════════════════════════════
+		//  7a. SaveSingleWebPartPropertiesAsync
+		//      Saves a batch of property edits on ONE WebPart in a single
+		//      checkout/checkin cycle, and reports which properties were actually
+		//      confirmed written vs. which failed — unlike UpdateWebPartAsync/
+		//      UpdateAllWebPartsAsync (plain Task, failures only logged).
+		//
+		//      Same per-property try/catch + typed conversion as UpdateAllWebPartsAsync
+		//      (see the detailed comment above that method for why enum-backed custom
+		//      properties, e.g. textAlign/textDirection, can fail here even though the
+		//      client-side Convert.ChangeType step succeeds) — the difference is that
+		//      here every outcome is recorded into the returned result instead of only
+		//      going to the log.
+		// ═══════════════════════════════════════════════════════════════════════
+		public async Task<WebPartSavePropertiesResult> SaveSingleWebPartPropertiesAsync(
+			string siteUrl,
+			string pageRelativeUrl,
+			string storageKey,
+			Dictionary<string, string> propertiesToUpdate)
+		{
+			var result = new WebPartSavePropertiesResult();
+
+			if (propertiesToUpdate == null || propertiesToUpdate.Count == 0)
+				return result;
+
+			return await Task.Run(async () =>
+			{
+				using var ctx = await GetContextAsync(siteUrl);
+
+				var pageFile = ctx.Web.GetFileByServerRelativeUrl(pageRelativeUrl);
+				ctx.Load(pageFile);
+				await Task.Run(() => ctx.ExecuteQuery());
+
+				await SafeCheckOutAsync(ctx, pageFile);
+
+				bool checkedIn = false;
+				try
+				{
+					var wpm = pageFile.GetLimitedWebPartManager(PersonalizationScope.Shared);
+					ctx.Load(wpm.WebParts, wps => wps.Include(
+						d => d.Id,
+						d => d.WebPart.Title,
+						d => d.WebPart.Properties));
+					await Task.Run(() => ctx.ExecuteQuery());
+
+					var def = wpm.WebParts.FirstOrDefault(
+						d => string.Equals(d.Id.ToString("D"), storageKey, StringComparison.OrdinalIgnoreCase));
+
+					if (def == null)
+					{
+						foreach (var kv in propertiesToUpdate)
+							result.Failed[kv.Key] = $"StorageKey {storageKey} not found on this page.";
+
+						// Nothing was actually changed — undo the checkout in the finally block.
+						return result;
+					}
+
+					foreach (var kv in propertiesToUpdate)
+					{
+						try
+						{
+							// Same type-aware conversion as UpdateAllWebPartsAsync — see that
+							// method's comment for why this still isn't enough for real
+							// server-side enum properties.
+							object valueToWrite = kv.Value;
+							if (def.WebPart.Properties[kv.Key] is object currentValue)
+							{
+								Type targetType = currentValue.GetType();
+								valueToWrite = targetType.IsEnum
+									? Enum.Parse(targetType, kv.Value, ignoreCase: true)
+									: Convert.ChangeType(kv.Value, targetType);
+							}
+
+							def.WebPart.Properties[kv.Key] = valueToWrite;
+							def.SaveWebPartChanges();
+							ctx.ExecuteQuery();
+
+							result.Succeeded.Add(kv.Key);
+							_logPage.Caller().Information(
+								"SaveSingleWebPartProperties: wrote '{Prop}' = '{Value}' on {StorageKey}",
+								kv.Key, kv.Value, storageKey);
+						}
+						catch (Exception ex)
+						{
+							result.Failed[kv.Key] = ex.Message;
+							_logPage.Caller().Warning(
+								"SaveSingleWebPartProperties: '{Prop}' = '{Value}' on {StorageKey} failed: {Message}",
+								kv.Key, kv.Value, storageKey, ex.Message);
+						}
+					}
+
+					await CheckInAndPublishAsync(ctx, pageFile, "Edited custom WebPart properties");
+					checkedIn = true;
+
+					return result;
+				}
+				finally
+				{
+					if (!checkedIn)
+					{
+						try
+						{
+							pageFile.UndoCheckOut();
+							await Task.Run(() => ctx.ExecuteQuery());
+							_logPage.Caller().Warning(
+								"SaveSingleWebPartPropertiesAsync: operation failed — checkout discarded for {Page}",
+								pageRelativeUrl);
+						}
+						catch (Exception cleanupEx)
+						{
+							_logPage.Caller().Error(cleanupEx,
+								"SaveSingleWebPartPropertiesAsync: failed to undo checkout after error — page may remain checked out: {Page}",
+								pageRelativeUrl);
+						}
+					}
+				}
+			});
+		}
 
         // ═══════════════════════════════════════════════════════════════════════
         //  8. ReorderWebPartsAsync

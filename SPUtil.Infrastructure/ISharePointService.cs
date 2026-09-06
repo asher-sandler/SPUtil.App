@@ -192,6 +192,23 @@ namespace SPUtil.Services
 			string pageRelativeUrl,
 			string storageKey);
 
+
+		/// <summary>
+		/// Saves a batch of property edits on a SINGLE WebPart in one checkout/checkin
+		/// cycle (unlike calling UpdateWebPartPropertyAsync once per property, which
+		/// would open/close a separate checkout for each one). Returns which properties
+		/// were actually confirmed written and which failed, so the caller can tell the
+		/// user honestly — some properties (known enum-backed ones, e.g. textAlign,
+		/// textDirection) are expected to sometimes fail server-side even though the
+		/// client-side conversion succeeds; see the comment above UpdateAllWebPartsAsync
+		/// in SharePointPageService.cs for why.
+		/// </summary>
+		Task<WebPartSavePropertiesResult> SaveSingleWebPartPropertiesAsync(
+			string siteUrl,
+			string pageRelativeUrl,
+			string storageKey,
+			Dictionary<string, string> propertiesToUpdate);
+
 		// ── 7. Изменить одно свойство ────────────────────────────────────────────────
 
 		/// <summary>
